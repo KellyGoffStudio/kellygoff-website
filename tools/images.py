@@ -38,6 +38,8 @@ EXT = {'.jpg', '.jpeg', '.png', '.webp', '.tif', '.tiff'}
 
 def main():
     manifest = {}
+    only = [x for x in os.environ.get('KG_ONLY', '').split(',') if x]
+    if only and (DST / 'manifest.json').exists(): manifest = json.loads((DST / 'manifest.json').read_text())
     if not SRC.exists():
         print('no images/ folder yet'); return
     jobs = []
@@ -45,6 +47,7 @@ def main():
         jobs.append((d, d.name, False))
         if d.name.startswith('rd-'): jobs.append((d, 'rdo-' + d.name[3:], True))   # renderings: clean set for thumbnails, labeled set for pages
     for d, outname, label in jobs:
+        if only and d.name not in only: continue
         files = sorted(f for f in d.iterdir() if f.suffix.lower() in EXT)
         out = []
         for f in files:
