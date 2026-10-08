@@ -57,7 +57,7 @@ def main():
                 print('skip', f, e); continue
             if im.mode not in ('RGB', 'L'): im = im.convert('RGB')
             w, h = im.size
-            WS = [900, 1500, 2000] if d.name == 'home' else WIDTHS
+            WS = [1200, 2000, 2800] if d.name == 'home' else WIDTHS
             ws = [x for x in WS if x < w] + [w if w <= WS[-1] else WS[-1]]
             ws = sorted(set(ws))
             od = DST / outname; od.mkdir(parents=True, exist_ok=True)
