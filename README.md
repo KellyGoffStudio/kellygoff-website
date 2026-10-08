@@ -22,3 +22,6 @@ Needs Python 3.12+.
 ## Deploy
 Drag `dist/` into Netlify (or connect the folder to Cloudflare Pages). The contact form uses Netlify Forms; add your email in `data/site.json`.
 Point the domain at the host only when you are happy; the Squarespace site stays live until then.
+
+## Launch switch
+`data/site.json` has `"prelaunch": true`. While it is true, every page is marked noindex, robots.txt blocks crawlers, and a noindex header is sent. At launch, set it to `false` (or remove it), rebuild, and push.

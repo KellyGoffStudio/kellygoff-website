@@ -112,7 +112,7 @@ def layout(title, body, desc='', active=None, og=None, ld=None, noindex=False, h
     nav = ''.join(f'<li><a href="{link(p)}"{" aria-current=page" if p == active else ""}>{n}</a></li>' for n, p in NAV)
     desc = desc or site['description']
     canon = f'<link rel="canonical" href="{site["baseUrl"]}/{CUR}">' if MODE == 'prod' else ''
-    robots = '<meta name="robots" content="noindex">' if (MODE == 'preview' or noindex) else ''
+    robots = '<meta name="robots" content="noindex">' if (MODE == 'preview' or noindex or site.get('prelaunch')) else ''
     ogimg = f'<meta property="og:image" content="{site["baseUrl"]}/{og}">' if (og and MODE == 'prod') else ''
     ldj = f'<script type="application/ld+json">{json.dumps(ld, ensure_ascii=False)}</script>' if ld else ''
     preload = f'<link rel="preload" href="{asset("assets/fonts/BarlowCondensed-600.woff2")}" as="font" type="font/woff2" crossorigin>' if MODE == 'prod' else ''
@@ -382,14 +382,14 @@ def main():
         (OUT / '404.html').write_text(notfound_page(), encoding='utf8')
         urls = ''.join(f'<url><loc>{site["baseUrl"]}/{p}</loc></url>' for p in PAGES if p != 'contact/thanks/')
         (OUT / 'sitemap.xml').write_text(f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{urls}</urlset>')
-        (OUT / 'robots.txt').write_text(f'User-agent: *\nAllow: /\nSitemap: {site["baseUrl"]}/sitemap.xml\n')
+        (OUT / 'robots.txt').write_text('User-agent: *\nDisallow: /\n' if site.get('prelaunch') else f'User-agent: *\nAllow: /\nSitemap: {site["baseUrl"]}/sitemap.xml\n')
         red = ['/outdoors  /public-work/  301', '/indoors  /studio/  301', '/about  /about/  301', '/process  /fieldwork/  301', '/process/*  /fieldwork/:splat  301', '/research  /fieldwork/  301', '/research/*  /fieldwork/:splat  301', '/passage  /studio/crates/  301', '/cv  /resume/  301']
         old = {'sandbags': 'sandbags', 'waters': 'waters', 'reef': 'reef', 'drum': 'drum', 'coconuts': 'coconuts-2019', 'barrel': 'barrel', 'souvenir-1': 'souvenir-1',
                'beacon': None, 'two-views': 'two-views', 'crates': 'crates', 'dumpster': 'dumpster', 'muffler': 'muffler', 'containers': 'containers', 'accident': 'accident',
                'ghost': 'ghost', 'hole': 'hole', 'tree': 'tree', 'coconuts-1': 'coconuts-2016'}
         for o, n in old.items(): red.append(f'/{o}/  /{"public-work/beacon" if n is None else "studio/" + n}/  301')
         (OUT / '_redirects').write_text('\n'.join(red) + '\n')
-        (OUT / '_headers').write_text('/assets/*\n  Cache-Control: public, max-age=31536000, immutable\n/img/*\n  Cache-Control: public, max-age=31536000, immutable\n')
+        (OUT / '_headers').write_text('/assets/*\n  Cache-Control: public, max-age=31536000, immutable\n/img/*\n  Cache-Control: public, max-age=31536000, immutable\n' + ('/*\n  X-Robots-Tag: noindex, nofollow\n' if site.get('prelaunch') else ''))
     (OUT / 'files').mkdir(exist_ok=True)
     for f in (ROOT / 'src/files').glob('*.pdf'): shutil.copy(f, OUT / 'files' / f.name)
     print(f'{MODE}: {len(PAGES)} pages -> {OUT}')
