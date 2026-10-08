@@ -1,0 +1,526 @@
+{
+ "_help": "One entry per project. Leave a field empty (\"\") and it simply does not appear on the page. 'verify': true marks captions I could only read partially from the old site. 'featured' puts a public project on the home page (order = 'home'). Images live in images/<slug>/ and are picked up automatically, sorted by file name.",
+ "public": [
+  {
+   "slug": "continuous-line-xii-silence",
+   "title": "Continuous Line XII (silence)",
+   "year": "2026",
+   "series": "Continuous Line",
+   "material": "6 in. ID corrugated HDPE pipe, part stainless steel hardware",
+   "size": "13 × 14.5 × 8 ft",
+   "site": "Wheaton College, Norton, MA",
+   "status": "Permanent",
+   "tags": [
+    "continuous-line"
+   ],
+   "home": 0,
+   "featured": true,
+   "fieldwork": "",
+   "text": "A site-specific sculpture made with student collaborator Nick Allario ’29 and the first to use LineWorks, a custom tool that generates linear geometry from sound recordings. The form is a physical manifestation of Silence, a speech by Prof. Joel Relihan delivered at Wheaton’s Honors Convocation in May 2026. Suspended overhead in the atrium of Knapton Hall.",
+   "verify": "material, size, exact title/numbering (Heat is also X), Relihan credit OK to name? photos",
+   "uncropped": true
+  },
+  {
+   "slug": "continuous-line-xi",
+   "title": "Continuous Line XI (yellow)",
+   "year": "2026",
+   "series": "Continuous Line",
+   "material": "9 & 7 inch dia. HDPE corrugated pipe, paint",
+   "size": "240 ft of material, installation dimensions variable",
+   "site": "Wheaton College, Norton, MA",
+   "status": "Temporary",
+   "tags": [
+    "continuous-line",
+    "temporary"
+   ],
+   "home": 2,
+   "text": "Made with student collaborator Nick Allario ’29 from recyclable industrial drain pipe, which is pliable enough to be shaped intuitively while responding to the architecture and landscape of the site. The color ties the form to Wheaton’s institutional branding as well as to its geometry. One playful “trajectory” among countless others across a campus of pathfinding and trailblazing.",
+   "verify": "text paraphrased from /lineviii (confirm that page = this piece; title/numbering)"
+  },
+  {
+   "slug": "continuous-line-x-heat",
+   "title": "Continuous Line X (heat)",
+   "year": "2026",
+   "series": "Continuous Line",
+   "material": "Quartersawn white oak, weathering steel, stainless steel straps, heat",
+   "size": "84 × 48 × 52 in.",
+   "site": "Wheaton College, Norton, MA",
+   "status": "Loan",
+   "tags": [
+    "continuous-line",
+    "temporary"
+   ],
+   "home": 4
+  },
+  {
+   "slug": "arboreal-line",
+   "title": "Arboreal Line",
+   "year": "2023",
+   "series": "Continuous Line",
+   "material": "Aluminum and enamel",
+   "size": "18 × 7.75 × 4.5 ft",
+   "site": "Uptown Trees, Greeley, CO",
+   "status": "Permanent installation",
+   "tags": [
+    "continuous-line",
+    "permanent"
+   ],
+   "home": 3
+  },
+  {
+   "slug": "continuous-line-viii-bamboo",
+   "title": "Continuous Line VIII (bamboo)",
+   "year": "2022",
+   "series": "Continuous Line",
+   "material": "Bamboo and rope",
+   "size": "13 × 14.5 × 24.5 ft",
+   "site": "Geumgang Nature Art Biennale, Yeonmisan Art Park, Gongju, South Korea",
+   "status": "Permanent",
+   "tags": [
+    "continuous-line",
+    "temporary"
+   ],
+   "home": 7,
+   "thumb": 3
+  },
+  {
+   "slug": "continuous-line-vi-levity",
+   "title": "Continuous Line VI (levity)",
+   "year": "2022",
+   "series": "Continuous Line",
+   "material": "Painted steel",
+   "size": "5.5 × 5.5 × 11.5 ft",
+   "site": "Power Tech Charter School, Colorado Springs, CO",
+   "status": "Permanent (2023). Exhibited 2022–23 through Art on the Streets",
+   "tags": [
+    "continuous-line",
+    "permanent"
+   ],
+   "home": 5
+  },
+  {
+   "slug": "continuous-line-vii",
+   "title": "Continuous Line VII",
+   "year": "2022",
+   "series": "Continuous Line",
+   "material": "Painted steel",
+   "size": "5.5 × 5.5 × 11.5 ft",
+   "site": "El Paseo Sculpture Exhibition, Palm Desert, CA",
+   "status": "Loan, 2023–24",
+   "tags": [
+    "continuous-line",
+    "temporary"
+   ],
+   "home": 6
+  },
+  {
+   "slug": "continuous-line-v",
+   "title": "Continuous Line V",
+   "year": "2022",
+   "series": "Continuous Line",
+   "material": "",
+   "size": "5.5 × 5.5 × 11.5 ft",
+   "site": "Avenue Concept Downtown Sculpture Program, Providence, RI (2022–24); Town of Franklin Sculpture Park, Franklin, MA (2025–)",
+   "status": "Loan; available 2028",
+   "tags": [
+    "continuous-line",
+    "temporary"
+   ]
+  },
+  {
+   "slug": "continuous-line-ix-zig-zag",
+   "title": "Continuous Line IX (zig zag)",
+   "year": "2025",
+   "series": "Continuous Line",
+   "material": "Steel, paint",
+   "size": "7 × 4 × 3 ft",
+   "site": "Town of Franklin Sculpture Park, Franklin, MA",
+   "status": "Loan; available 2027",
+   "tags": [
+    "continuous-line",
+    "temporary"
+   ]
+  },
+  {
+   "slug": "continuous-line-i-tangerine",
+   "title": "Continuous Line I (tangerine)",
+   "year": "2020",
+   "series": "Continuous Line",
+   "material": "Recycled 2-inch steel pipe, paint",
+   "size": "12 × 10 × 7.5 ft (H)",
+   "site": "Art on the Trails, Beals Preserve, Southborough, MA",
+   "status": "No longer extant",
+   "tags": [
+    "continuous-line",
+    "temporary"
+   ],
+   "home": 8
+  },
+  {
+   "slug": "continuous-line-ii-aquamarine",
+   "title": "Continuous Line II (aquamarine)",
+   "year": "2020",
+   "series": "Continuous Line",
+   "material": "Recycled 2-inch steel pipe, paint",
+   "size": "5.5 × 5.5 × 9.5 ft (H)",
+   "site": "Art on the Trails, Beals Preserve, Southborough, MA",
+   "status": "Available",
+   "tags": [
+    "continuous-line",
+    "temporary"
+   ],
+   "home": 9
+  },
+  {
+   "slug": "limb-support",
+   "title": "Limb Support",
+   "year": "2021",
+   "series": "Place-based and collaborative",
+   "material": "Painted cedar poles supporting a dead cedar tree",
+   "size": "20 units, 6–12 ft (H)",
+   "site": "Art on the Trails, Beals Preserve, Southborough, MA",
+   "status": "Temporary",
+   "tags": [
+    "temporary"
+   ],
+   "home": 10
+  },
+  {
+   "slug": "log-pile",
+   "title": "Log Pile",
+   "year": "2021",
+   "series": "Place-based and collaborative",
+   "material": "Marine pilings and playground paint (pilings are 12–14 in. in diameter)",
+   "size": "30 × 30 × 3 ft overall",
+   "site": "Early Learning Center, Wheaton College, Norton, MA",
+   "status": "Permanent",
+   "tags": [
+    "temporary"
+   ]
+  },
+  {
+   "slug": "bamboo-iii",
+   "title": "Bamboo III (of V)",
+   "year": "2017",
+   "series": "Place-based and collaborative",
+   "material": "Bamboo, packaging twine",
+   "size": "Each structure uniquely determined by collaborators",
+   "site": "Royal Thimphu College, Thimphu, Bhutan",
+   "status": "Community project",
+   "tags": [
+    "temporary"
+   ]
+  },
+  {
+   "slug": "lawn-containers",
+   "title": "Lawn Containers",
+   "year": "2015",
+   "series": "Place-based and collaborative",
+   "material": "Aliphatic acrylic urethane rubber, foam, pigments",
+   "size": "20 @ 60 × 12 × 12 in.; 15 @ 30 × 12 × 12 in.; installation dimensions vary with play",
+   "site": "D Street Art Lab, Lawn on D, Boston, MA",
+   "status": "Temporary",
+   "tags": [
+    "temporary"
+   ],
+   "thumb": 5
+  },
+  {
+   "slug": "beacon",
+   "title": "Beacon",
+   "year": "2018",
+   "series": "Place-based and collaborative",
+   "material": "A modified guardhouse on a college campus, window frosting, programmed theater lighting",
+   "size": "",
+   "site": "Guard House, Lafayette College, Easton, PA",
+   "status": "Temporary",
+   "tags": [],
+   "verify": true,
+   "video": {
+    "vimeo": "449360927",
+    "label": "Beacon, 2018 (video)",
+    "at": 1
+   }
+  },
+  {
+   "slug": "bear",
+   "title": "Bear",
+   "year": "2014",
+   "series": "Place-based and collaborative",
+   "material": "Local birch",
+   "size": "36 × 36 × 108 in.",
+   "site": "Lake Clark National Park, Alaska",
+   "status": "Temporary",
+   "tags": [
+    "temporary"
+   ],
+   "pdf": false
+  }
+ ],
+ "studio": [
+  {
+   "slug": "barrel",
+   "title": "Barrel",
+   "year": "2019",
+   "material": "55 gallons of seawater, epoxy-coated oil barrel, forklift pallet",
+   "size": "39.9 × 42 × 42 in.",
+   "site": "",
+   "tags": [],
+   "featured": true,
+   "fieldwork": "curacao"
+  },
+  {
+   "slug": "drum",
+   "title": "Drum",
+   "year": "2019",
+   "material": "Ipê (overharvested Amazonian hardwood)",
+   "size": "33.5 × 22.5 in.",
+   "site": "",
+   "tags": [],
+   "featured": true,
+   "fieldwork": "ecuadorian-amazon"
+  },
+  {
+   "slug": "reef",
+   "title": "Reef",
+   "year": "2019",
+   "material": "Hydrocal",
+   "size": "Approx. 18 × 12 × 2 ft",
+   "site": "",
+   "tags": [],
+   "featured": true
+  },
+  {
+   "slug": "souvenir-1",
+   "title": "Souvenir 1",
+   "year": "2018",
+   "material": "Bronze, silver nitrate patina",
+   "size": "14 × 14 × 3 in.",
+   "site": "",
+   "tags": [],
+   "featured": true,
+   "fieldwork": "bhutan",
+   "text": "A miniature bronze replica of a patch of Himalayan mountaintop, made from a photogrammetry model of the Daga La (Thousand Lakes) trek in Bhutan.",
+   "verify": true
+  },
+  {
+   "slug": "crates",
+   "title": "Crates",
+   "year": "2014",
+   "material": "Alaskan timber, harvested and processed by hand at its origin and then shipped east in the form of crates",
+   "size": "Two largest crates, 24 × 24 × 72 in.; installation, 2 × 6 × 14 ft",
+   "site": "",
+   "tags": [],
+   "featured": true,
+   "fieldwork": "alaska",
+   "verify": true,
+   "video": {
+    "vimeo": "120989498",
+    "label": "Chulitna Artist in Residence, 2014 (video)"
+   },
+   "links": [],
+   "audio": {
+    "file": "passage-2014.mp3",
+    "label": "Passage, 2014 (5 min 39 sec)"
+   },
+   "text": "The crates traveled by boat, planes, and trucks and inherit the marks of transit each time they are exhibited. The two largest crates, which hold the remaining 12 crates, are the maximum dimensions shippable via standard UPS. The installation of empty crates contains a separate, embedded musical work, Passage, 2014, which plays on headphones. Passage was created in collaboration with the composer Ben Wasserman (5 min 39 sec)."
+  },
+  {
+   "slug": "waters",
+   "title": "Waters",
+   "year": "2021",
+   "material": "Water from all five oceans, glass vessel",
+   "size": "12 × 3 in.",
+   "site": "",
+   "tags": [],
+   "featured": true
+  },
+  {
+   "slug": "sandbags",
+   "title": "Sandbags",
+   "year": "2021",
+   "material": "Belgian linen, Carrara marble dust, crushed pearls",
+   "size": "16 × 6 in.",
+   "site": "",
+   "tags": [],
+   "featured": false
+  },
+  {
+   "slug": "coconuts-2019",
+   "title": "Coconuts (2019)",
+   "year": "2019",
+   "material": "Plastic, translucent pigment",
+   "size": "Each approx. 5 × 8 in.",
+   "site": "",
+   "tags": [],
+   "featured": true,
+   "fieldwork": "curacao"
+  },
+  {
+   "slug": "two-views",
+   "title": "Two Views",
+   "year": "2016",
+   "material": "Two-channel video installation, 10 min. loop. For back-to-back televisions or dual projection",
+   "size": "",
+   "site": "",
+   "tags": [],
+   "fieldwork": "curacao",
+   "verify": false,
+   "featured": true,
+   "text": "Created by facing two cameras at each other with 1920 km between them, bridging the shortest distance between the artist’s country of birth and country of residence. Left camera: southernmost point of the USA, Key West, FL (24.545570, -81.783306), heading 137.4° SE, downward pitch 8.8°. Right camera: northernmost point of Curaçao, Watamula (12.390646, -69.156179), heading 317.4° NW, downward pitch 8.8°. Exhibited as back-to-back projections. Continuous loop. Silent.",
+   "video": {
+    "vimeo": "193714493",
+    "label": "Two Views (video)"
+   },
+   "thumb_pos": "50% 23%"
+  },
+  {
+   "slug": "dumpster",
+   "title": "Dumpster",
+   "year": "2012",
+   "material": "Found dumpster, rust converter, enamel, epoxy resin, translucent pigments, mica powder, UV clear coat",
+   "size": "4.5 × 4.5 × 7 ft",
+   "site": "",
+   "tags": [],
+   "verify": true,
+   "featured": true
+  },
+  {
+   "slug": "muffler",
+   "title": "Muffler",
+   "year": "2012",
+   "material": "Muffler, burl-pattern hydrographic print, automotive clear coat",
+   "size": "38 × 16 in.",
+   "site": "",
+   "tags": []
+  },
+  {
+   "slug": "containers",
+   "title": "Containers",
+   "year": "2014",
+   "material": "Soft urethane foam and pigments",
+   "size": "Large containers 2 × 2 × 12 in.",
+   "site": "",
+   "tags": [],
+   "verify": true
+  },
+  {
+   "slug": "accident",
+   "title": "Accident",
+   "year": "2012",
+   "material": "A modified traffic barrel",
+   "size": "Installation dimensions vary",
+   "site": "",
+   "tags": []
+  },
+  {
+   "slug": "hole",
+   "title": "Hole",
+   "year": "2012",
+   "material": "A hole in a wall, embedded super-bright LEDs",
+   "size": "2 × 2 in.",
+   "site": "",
+   "tags": []
+  },
+  {
+   "slug": "tree",
+   "title": "Tree",
+   "year": "2013",
+   "material": "One sheet of drywall modified by hatchet",
+   "size": "96 × 18 in.",
+   "site": "",
+   "tags": []
+  },
+  {
+   "slug": "coconuts-2016",
+   "title": "Coconuts (2016)",
+   "year": "2016",
+   "material": "Plaster and enamel",
+   "size": "Each unit 5–9 in.; installation dimensions vary",
+   "site": "",
+   "tags": [],
+   "fieldwork": "curacao"
+  },
+  {
+   "slug": "pallet",
+   "title": "Pallet",
+   "year": "2005",
+   "material": "Black walnut, linseed oil",
+   "size": "4 × 42 × 42 in.",
+   "site": "",
+   "tags": [],
+   "verify": true
+  },
+  {
+   "slug": "drain",
+   "title": "Drain",
+   "year": "2008",
+   "material": "CVG Douglas fir",
+   "size": "30 × 30 × 4 in.",
+   "site": "",
+   "tags": [],
+   "verify": true
+  },
+  {
+   "slug": "cinderblock",
+   "title": "Cinderblock",
+   "year": "2001",
+   "material": "Plywood",
+   "size": "15.5 × 7.5 × 7.5 in.",
+   "site": "",
+   "tags": [],
+   "verify": true
+  },
+  {
+   "slug": "crooked-timber",
+   "title": "Crooked Timber",
+   "year": "2008",
+   "material": "Steel drywall stud",
+   "size": "2 × 4 × 8 ft",
+   "site": "",
+   "tags": [],
+   "verify": true
+  },
+  {
+   "slug": "two-bags",
+   "title": "Two Bags",
+   "year": "2012",
+   "material": "Concrete",
+   "size": "2 × 1.5 × 2 ft",
+   "site": "",
+   "tags": [],
+   "verify": true,
+   "text": "A copy cast with the contents of the other."
+  },
+  {
+   "slug": "lo-res-4x4",
+   "title": "Lo-res 4x4",
+   "year": "2007",
+   "material": "A modified 4 × 4 × 8",
+   "size": "5 × 5 × 92 in.",
+   "site": "",
+   "tags": [],
+   "verify": true
+  },
+  {
+   "slug": "fountain",
+   "title": "Fountain",
+   "year": "2008",
+   "material": "Logs, oil",
+   "size": "Installation, approx. 20 × 15 × 2 ft",
+   "site": "",
+   "tags": [],
+   "verify": true
+  },
+  {
+   "slug": "cubes",
+   "title": "Cubes",
+   "year": "2014",
+   "material": "Alaskan driftwood",
+   "size": "30 units at 5 in.",
+   "site": "",
+   "tags": [],
+   "verify": true
+  }
+ ]
+}

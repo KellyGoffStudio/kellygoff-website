@@ -1,0 +1,47 @@
+{
+ "name": "Kelly Goff",
+ "baseUrl": "https://www.kellygoff.net",
+ "tagline": "Sculpture for public places, shaped by site. Continuous-line forms in steel, aluminum, wood, pipe, and bamboo.",
+ "description": "Kelly Goff is a sculptor based in Norton, Massachusetts, making continuous-line public sculpture and place-driven studio work.",
+ "email": "",
+ "instagram": "https://www.instagram.com/kellygoffstudio/",
+ "location": "Norton, Massachusetts",
+ "copyright": "© 2008–2026 Kelly Goff",
+ "studioIntro": "Research and place-driven work made before and alongside the public practice: materials, trade, extraction, and travel.",
+ "fieldworkIntro": "Fieldwork, for me, starts with place. Whether developing public sculptures in cities or pursuing long-term conceptual projects, I’m driven to understand where I’m working.\n\nThis page collects the ways I do that through travel and residencies, research on site, drawing and rendering, and custom built tools like LineWorks, which turns what a place sounds like into form. Together they shape my vocabulary and my view of the world.",
+ "about": [
+  "I’m a sculptor whose practice is informed by travel and specific places. About half of my work is designed for public spaces, as featured in the video.",
+  "I’m ravenous about materials and technologies for making, whether ancient or emerging. I’m also a lover of process, particularly complex methods that require long-term planning and the development of new tools. I model in CAD and use custom-built design software like LineWorks (written with AI-assisted coding) to interpret site data, such as sound recordings, into buildable forms.",
+  "I also design and build. I was the general contractor for my own home, and that experience with structure, trades, and weather shapes how I engineer public work to last.",
+  "I grew up on the island of Curaçao in the Caribbean, studied science and art in college, and then sculpture in graduate school at RISD. I’m the Mary Heuser Endowed Professor in the Arts at Wheaton College, where I founded and direct Public Art at Wheaton. I live in Norton, Massachusetts, USA."
+ ],
+ "aboutVideoEmbed": "",
+ "howIWork": "",
+ "wheatonProgram": "Founding Director since 2018. Public Art at Wheaton issues an annual call for proposals, provides funding, and facilitates the fabrication and installation of public works on the Wheaton campus.",
+ "contactIntro": "Commissions, RFQs, and calls for artists, collaborations, teaching, and press.",
+ "aboutVideoId": "fuqBNfTYO4U",
+ "aboutVideoStart": 9,
+ "wheatonProgramImage": {
+  "caption": "Beyond the Rain, 2019, by Maia Hay ’20. Public Art at Wheaton.",
+  "alt": "Beyond the Rain, a row of rainbow-colored open frames in a grove on the Wheaton campus"
+ },
+ "continuousLineOrder": [
+  "arboreal-line",
+  "continuous-line-xi",
+  "continuous-line-xii-silence",
+  "continuous-line-viii-bamboo",
+  "continuous-line-x-heat",
+  "continuous-line-v",
+  "continuous-line-ix-zig-zag",
+  "continuous-line-vi-levity",
+  "continuous-line-vii",
+  "continuous-line-i-tangerine",
+  "continuous-line-ii-aquamarine"
+ ],
+ "showTileCaptions": false,
+ "publicSections": {
+  "continuous-line": "Continuous lines drawn in space, shaped by a site and built to last outdoors.",
+  "place-based": "Work made in response to a specific place, often with the people who use it.",
+  "renderings": "Rendered models placed in photographs of real and imagined places. This is how I draw for fun, and how I ideate and envision work for public spaces. None of these are built, and none use generative AI."
+ }
+}

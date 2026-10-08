@@ -1,0 +1,17 @@
+[
+ {
+  "slug": "silver-plaza",
+  "title": "Silver loop, plaza",
+  "text": "A rendered model of a sculpture placed in a photograph of an existing plaza. Not built."
+ },
+ {
+  "slug": "black-field",
+  "title": "Black loops, open field",
+  "text": "A rendered model of a sculpture placed in a photograph of an open field. Not built."
+ },
+ {
+  "slug": "crate-tower",
+  "title": "Crate tower, meadow",
+  "text": "A rendered model of a stacked-crate tower placed in a photograph of a meadow. Not built."
+ }
+]

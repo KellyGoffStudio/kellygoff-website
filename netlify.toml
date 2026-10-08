@@ -1,0 +1,3 @@
+# The site is built locally (python3 tools/build.py) and the finished files in dist/ are what gets published.
+[build]
+  publish = "dist"

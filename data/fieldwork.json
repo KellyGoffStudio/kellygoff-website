@@ -1,0 +1,131 @@
+[
+  {
+    "slug": "lineworks",
+    "title": "LineWorks Tool",
+    "date": "2026",
+    "place": "",
+    "related_public": [
+      "continuous-line-xii-silence"
+    ],
+    "related_studio": [],
+    "text": [
+      "Another way I come to understand a site is by building a tool to listen to it. LineWorks is a custom design tool I made for my continuous-line sculptures. It reads a site recording and measures how the sound changes over time: how loud it is, how bright or dull, how noisy or tonal, how much bass against treble, how quickly it shifts. Those measurements steer a single closed line through three dimensions.",
+      "I decide what to record, how the measurements become form, how smooth the line must be, and which result is worth building. The tool then checks the line against real stock: pipe diameter, minimum bend radius, where strands touch, total length, and weight. It exports drawings and the files a fabricator needs.",
+      "LineWorks does not generate images and contains no trained model. The same input and the same settings always give the same line. It is a way of drafting, closer to a CAD program than to a prompt. I built it with AI-assisted coding; the decisions about form, material, and fabrication are mine."
+    ],
+    "links": [
+      {
+        "label": "LineWorks V8 (play with the tool)",
+        "url": "https://kellygoffstudio.github.io/LineWorksV8/"
+      }
+    ],
+    "layout": "project"
+  },
+  {
+    "slug": "south-korea",
+    "title": "South Korea",
+    "date": "September 3, 2022",
+    "place": "Gongju, South Korea",
+    "related_public": [
+      "continuous-line-viii-bamboo"
+    ],
+    "related_studio": [],
+    "text": [
+      "I spent a month in Gongju, South Korea as the American participant in the 21st Geumgang Nature Art Biennale organized by the Korean Nature Artists’ Association, YATOO, in the Yeonmisan Mountain Art Park. I created a large bamboo sculpture that will stand for 2-4 years in the park among approximately 80 other site-specific, large-scale works.",
+      "I was able to hire a former student of mine, who lives in Seoul. Wheaton College produced [a little story](https://wheatoncollege.edu/news/professor-alumna-collaborate-on-public-art-in-south-korea/) about our experience."
+    ],
+    "links": [],
+    "thumb": 8
+  },
+  {
+    "slug": "northern-france",
+    "title": "Northern France",
+    "date": "July 19, 2019",
+    "place": "Braye-en-Laonnois, France",
+    "related_public": [],
+    "related_studio": [],
+    "text": [
+      "I am part of a research group that is exploring on-site 3D capturing and its possibilities in educational, archival, and artistic production. Our ongoing project began with a US Army-sanctioned visit to an extensive network of caves in Braye-en-Laonnois in Northern France in the summer of 2019. The caves were used extensively during World War I by French and American soldiers as shelter from combat on the Western Front. While killing time in their improvised residence, the soldiers carved their names and other artwork into the soft limestone walls and their etchings have remained locked away from the public and protected by volunteers.",
+      "To document the caves and etchings before they disappear, we captured high-resolution, 360° panoramic imagery using photogrammetry and a LIDAR scanner.",
+      "A beta sample of a zoomable, VR-ready “[walkthrough](https://ydpilgrimage.com/explore/index.html?fmc_015,-145,3,89)” environment was assembled by team member Keith Heyward with assistance from Wheaton students Myles Trevino and Jake Loberti."
+    ],
+    "links": []
+  },
+  {
+    "slug": "bhutan",
+    "title": "Bhutan",
+    "date": "July 4, 2017",
+    "place": "Thimphu, Bhutan",
+    "related_public": [
+      "bamboo-iii"
+    ],
+    "related_studio": [
+      "souvenir-1"
+    ],
+    "text": [
+      "I lived in Bhutan for five months as the Resident Director of a faculty-led study abroad program. I looked after a group of Wheaton College students based at the Royal Thimphu College, taught courses, organized expeditions led by Bhutanese guides, and facilitated two public art projects in country. Bhutan is utterly fascinating as a country that self-isolated for nearly all of its history. As an outsider and in my capacity as educator, I was in a perpetual mode of analysis. I marveled daily at the natural and cultural beauty and their palpable entanglement with rapidly arriving global industry and media. With incredible subject matter and my camera always at hand, my love of photography grew rapidly.",
+      "Spending time in such a special place led to a sort of desperate acknowledgement of the futility of capturing experience even as I made hundreds of photographs. With this awareness, I developed an interest in a kind of “extreme documentation” called photogrammetry. Photogrammetry briefly, is a way of generating super-accurate, three-dimensional models of objects or spaces by compositing hundreds of overlapping photographs using software. Work like Souvenir I, 2018, a miniature bronze replica of a patch of Himalayan mountaintop, is a result of this interest in accuracy and representation."
+    ],
+    "links": []
+  },
+  {
+    "slug": "nepal",
+    "title": "Nepal",
+    "date": "April 13, 2016",
+    "place": "Kathmandu Valley, Nepal",
+    "related_public": [],
+    "related_studio": [],
+    "text": [
+      "I spent eleven days in the Kathmandu Valley, primarily in the ancient city of Patan. My tour guide was the anthropologist Bruce Owens, who speaks fluent Newar and has studied festivals in Nepal for his entire career. Bruce is also a wonderful photographer and art lover, and gifted me access to his extensive cultural knowledge and network of collaborators.",
+      "The Nepali people had endured a catastrophic earthquake in 2015 that killed nearly 9000 people and leveled hundreds of ancient temples. So in addition to experiencing the profoundly rich visual culture of Patan—a sensorial accretion of pigment, aromas, and cacophony, I happened to be visiting at a time of rebuilding.",
+      "I met with a structural engineer consulting with the Kathmandu Valley Preservation Trust (KVPT), who explained in detail how and why the temples and structures are so vulnerable. I also met with young architects in Kathmandu who were building a school library using a novel system they had developed in which pressure-treated bamboo members are fitted into polyhedron steel joints like tinker toys."
+    ],
+    "links": []
+  },
+  {
+    "slug": "curacao",
+    "title": "Curaçao",
+    "date": "February 29, 2016",
+    "place": "Willemstad, Curaçao",
+    "related_public": [],
+    "related_studio": [],
+    "text": [
+      "Curaçao is my homeland. I was born in Willemstad and spent most of my childhood in neighborhoods positioned between the beautiful Caribbean Sea and an industrial shipping harbor, dry-dock, and oil refinery. My origins are visible throughout my work, from my affinity for the color aquamarine to my politics and thinking around global commerce, resource extraction, and fragile ecosystems.",
+      "I spent a month in Curaçao after many years away and as such, the trip became about rediscovering aspects of my heritage and identity. I photographed my abandoned family home and the harbor extensively. I also connected enthusiastically with new local arts organizations like Uniarte and worked with young artists for two days at a center for contemporary art the Instituto Buena Bista (IBB) in my old neighborhood."
+    ],
+    "links": []
+  },
+  {
+    "slug": "ecuadorian-amazon",
+    "title": "Ecuadorian Amazon",
+    "date": "August 4, 2015",
+    "place": "Shiripuno River and Yasuní, Ecuador",
+    "related_public": [],
+    "related_studio": [
+      "drum"
+    ],
+    "text": [
+      "I spent two weeks in the rainforest, primarily in the Waorani community Kewediono along the Shiripuno River, a tributary of the Amazon. From Quito, Ecuador, the travel required a flight to the oil town Coca (where I gathered supplies), a hired driver into the jungle, and a day-long, dugout canoe ride that ended in total darkness where a friend was thankfully waiting. I also visited the Tiputini Biodiversity Station in the adjoining Yusuní National forest.",
+      "The Yasuní is reputed to be the most biodiverse place on Earth. Unfortunately, the richest oil reserves in Ecuador are positioned below it and through ongoing political controversy, the region is open for active exploration and extraction. Coupled with an illegal logging industry, the petroleum industry is a threat to Waorani land and important habitat. Evidence of encroachment abounds as oil pipes snake through the jungle and stack fires burn at night in the canopy.",
+      "The sculpture drum, 2019 explores these issues several years after my initial trip to the Amazon."
+    ],
+    "links": []
+  },
+  {
+    "slug": "alaska",
+    "title": "Alaska",
+    "date": "August 6, 2014",
+    "place": "Lake Clark National Park, Alaska",
+    "related_public": [
+      "bear"
+    ],
+    "related_studio": [
+      "crates"
+    ],
+    "text": [
+      "I spent a month and a half in remote Alaska while making art at the Chulitna Lodge Artist Residency in Lake Clark National Forest, a 4+ million acre tract of wilderness. The residency is located 180 miles from the nearest road and functions completely off grid.",
+      "I discovered there a place of obvious dualities (like Curaçao) where the majestic environment is permeated with the presence of oil, from offshore rigs that fleck the landscape to the myriad of fuel types needed to power the residency and the tools I used, to the resources required to extract any sculpture I made on site. With this tension as context, I produced a project about shipping, crates, 2014."
+    ],
+    "links": []
+  }
+]
