@@ -21,7 +21,7 @@ cv = json.loads((ROOT / 'data/cv.json').read_text(encoding='utf8'))
 fw = json.loads((ROOT / 'data/fieldwork.json').read_text(encoding='utf8'))
 RD = json.loads((ROOT / 'data/renderings.json').read_text(encoding='utf8'))
 for _r in RD: _r.update({'year': '', 'status': 'Rendering, not built', 'uncropped': True, 'img_key': 'rdo-' + _r['slug'], 'back': 'public-work', 'series_label': 'Drawings & Renderings'})
-PUB, STU = proj['public'], proj['studio']
+PUB, STU = [p for p in proj['public'] if p.get('web', True)], proj['studio']  # "web": false hides a page on the site only
 manifest = {}
 mp = ROOT / 'processed/manifest.json'
 if mp.exists(): manifest = json.loads(mp.read_text())

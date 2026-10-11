@@ -115,6 +115,7 @@
   },
   {
    "slug": "continuous-line-v",
+   "web": false,
    "title": "Continuous Line V",
    "year": "2022",
    "series": "Continuous Line",
@@ -129,6 +130,7 @@
   },
   {
    "slug": "continuous-line-ix-zig-zag",
+   "web": false,
    "title": "Continuous Line IX (zig zag)",
    "year": "2025",
    "series": "Continuous Line",
