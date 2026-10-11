@@ -180,9 +180,13 @@ def _grid_key(p):
     oi = ol.index(p['slug']) if (p['series'] == 'Continuous Line' and p['slug'] in ol) else 999
     return (gi, oi, -int(p['year'][:4]), p['title'])
 PUB.sort(key=_grid_key)
+def AIL(h):
+    """Link the first mention of AI wording to the About page statement."""
+    return re.sub(r'(generative AI|AI-assisted coding)', lambda m: f'<a href="{link("about/")}#ai">{m.group(1)}</a>', h, count=1)
+
 def secd(k):
     t = site.get('publicSections', {}).get(k)
-    return f'<p class="sec-d">{E(t)}</p>' if t else ''
+    return f'<p class="sec-d">{AIL(E(t))}</p>' if t else ''
 
 def public_index():
     secs = ''
@@ -285,7 +289,7 @@ def fieldwork_page(f_, i):
     for s in f_.get('related_studio', []):
         p = next(x for x in STU if x['slug'] == s); rel += f'<div class="fact"><div class="k">Related work</div><div class="v"><a href="{link(f"studio/{s}/")}">{E(p["title"])}, {p["year"]}</a></div></div>'
     lk = ''.join(f'<div class="fact"><div class="k">Link</div><div class="v"><a href="{E(l["url"])}" rel="noopener">{E(l["label"])}</a></div></div>' for l in f_.get('links', []))
-    text = ''.join(f'<p>{re.sub(r"\[([^\]]+)\]\((https?://[^)]+)\)", lambda m: f"<a href={chr(34)}{m.group(2)}{chr(34)} rel=noopener>{m.group(1)}</a>", E(t))}</p>' for t in f_['text'])
+    text = ''.join(f'<p>{AIL(re.sub(r"\[([^\]]+)\]\((https?://[^)]+)\)", lambda m: f"<a href={chr(34)}{m.group(2)}{chr(34)} rel=noopener>{m.group(1)}</a>", E(t)))}</p>' for t in f_['text'])
     nxt = fw[i - 1] if i > 0 else None; prv = fw[i + 1] if i < len(fw) - 1 else None
     pager = (f'<nav class="pager" aria-label="More fieldwork"><span>{f"<a href={chr(34)}{link(f"fieldwork/{prv["slug"]}/")}{chr(34)}>← {E(prv["title"])}</a>" if prv else ""}</span>'
              f'<a href="{link("fieldwork/")}">All fieldwork</a><span>{f"<a href={chr(34)}{link(f"fieldwork/{nxt["slug"]}/")}{chr(34)}>{E(nxt["title"])} →</a>" if nxt else ""}</span></nav>')
@@ -328,9 +332,11 @@ def about_page():
     wfig2 = f'<figure class="smallfig" style="margin-top:0">{img_tag(wi, "(max-width:860px) 100vw, 40vw")}<figcaption>{E(site["wheatonProgramImage"]["caption"])}</figcaption></figure>'
     paras = ''.join(f'<p>{LW(t)}</p>' for t in site['about'])
     how = f'<div>{sec("How I work")}<div class="prose"><p>{E(site["howIWork"])}</p></div></div>' if site.get('howIWork') else ''
+    ai = site.get('aiStatement')
+    aiblk = (f'<div id="ai" style="margin-top:34px">{sec(ai["title"])}<div class="prose">' + ''.join(f'<p>{E(t)}</p>' for t in ai['text']) + '</div></div>') if ai else ''
     body = (f'<div class="wrap page-top"><h1>About</h1><div class="twocol" style="margin-top:30px;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr)"><div>{vid}</div><div class="prose">{paras}</div></div>'
             f'<div class="twocol" style="margin-top:56px;grid-template-columns:minmax(0,220px) minmax(0,1fr)"><div>{wfig2}</div>'
-            f'<div class="col-first">{how}{sec("Public Art at Wheaton")}<div class="prose"><p>{E(site["wheatonProgram"])}</p></div>'
+            f'<div class="col-first">{how}{sec("Public Art at Wheaton")}<div class="prose"><p>{E(site["wheatonProgram"])}</p></div>{aiblk}'
             f'<div class="btns" style="margin-top:26px"><a class="btn" href="{link("resume/")}">Resume →</a><a class="btn" href="{link("contact/")}">Contact →</a></div></div></div></div>')
     return layout('About', body, ' '.join(site['about'][:1]), active='about/')
 
