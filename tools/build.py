@@ -123,7 +123,7 @@ def layout(title, body, desc='', active=None, og=None, ld=None, noindex=False, h
 <meta property="og:title" content="{E(full_title)}"><meta property="og:description" content="{E(desc)}"><meta property="og:type" content="website"><meta property="og:site_name" content="{E(site['name'])}">{ogimg}
 <meta name="theme-color" content="#f2f2f3">
 {preload}
-<link rel="stylesheet" href="{asset('assets/css/site.css')}">{ldj}</head>
+<link rel="icon" href="{asset('favicon.ico')}" sizes="48x48"><link rel="icon" type="image/png" sizes="32x32" href="{asset('favicon-32.png')}"><link rel="apple-touch-icon" href="{asset('apple-touch-icon.png')}"><link rel="stylesheet" href="{asset('assets/css/site.css')}">{ldj}</head>
 <body><a class="skip" href="#main">Skip to content</a>
 <header class="site-head"><div class="wrap"><a class="brand" href="{link('')}">Kelly Goff</a>
 <button class="menu-btn" aria-expanded="false" aria-controls="nav">Menu</button>
@@ -372,7 +372,7 @@ def main():
     global CUR
     if OUT.exists(): shutil.rmtree(OUT)
     OUT.mkdir(parents=True)
-    shutil.copytree(ROOT / 'src/css', OUT / 'assets/css'); shutil.copytree(ROOT / 'src/js', OUT / 'assets/js'); shutil.copytree(ROOT / 'src/fonts', OUT / 'assets/fonts'); shutil.copytree(ROOT / 'src/media', OUT / 'assets/media')
+    [shutil.copy(f, OUT / f.name) for f in (ROOT / 'src/root').glob('*') if f.is_file()]; shutil.copytree(ROOT / 'src/css', OUT / 'assets/css'); shutil.copytree(ROOT / 'src/js', OUT / 'assets/js'); shutil.copytree(ROOT / 'src/fonts', OUT / 'assets/fonts'); shutil.copytree(ROOT / 'src/media', OUT / 'assets/media')
     page('', home)
     page('public-work/', public_index)
     pl = sorted(PUB, key=lambda p: (-int(p['year'][:4]), p['title']))
