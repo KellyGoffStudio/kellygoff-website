@@ -7,6 +7,7 @@
 /research/*  /fieldwork/:splat  301
 /passage  /studio/crates/  301
 /cv  /resume/  301
+/contact/thanks  /contact/  301
 /sandbags/  /studio/sandbags/  301
 /waters/  /studio/waters/  301
 /reef/  /studio/reef/  301

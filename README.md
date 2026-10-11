@@ -20,7 +20,7 @@ Everything on the site is generated from the files in `data/`. No database, no p
 Needs Python 3.12+.
 
 ## Deploy
-Drag `dist/` into Netlify (or connect the folder to Cloudflare Pages). The contact form uses Netlify Forms; add your email in `data/site.json`.
+Drag `dist/` into Netlify (or connect the folder to Cloudflare Pages). The Contact page shows the email from `data/site.json` (assembled by a little script so it isn't plain text in the page source).
 Point the domain at the host only when you are happy; the Squarespace site stays live until then.
 
 ## Launch switch

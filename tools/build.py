@@ -342,25 +342,13 @@ def about_page():
     return layout('About', body, ' '.join(site['about'][:1]), active='about/')
 
 def contact_page():
-    email = f'<div class="fact"><div class="k">Email</div><div class="v"><a href="mailto:{E(site["email"])}">{E(site["email"])}</a></div></div>' if site.get('email') else ''
-    form = (f'<form name="contact" method="POST" action="{link("contact/thanks/")}" data-netlify="true" netlify-honeypot="bot-field">'
-            f'<input type="hidden" name="form-name" value="contact"><p class="hp"><label>Leave this empty <input name="bot-field"></label></p>'
-            f'<div class="field"><label for="n">Name</label><input id="n" name="name" required autocomplete="name"></div>'
-            f'<div class="field"><label for="e">Email</label><input id="e" name="email" type="email" required autocomplete="email"></div>'
-            f'<div class="field"><label for="o">Organization / call</label><input id="o" name="organization"></div>'
-            f'<div class="field"><label for="m">Message</label><textarea id="m" name="message" required></textarea></div>'
-            f'<div style="margin-top:20px"><button class="btn solid" type="submit">Send</button></div></form>')
-    body = (f'<div class="wrap page-top"><h1>Contact</h1><div class="twocol" style="margin-top:30px;gap:80px"><div><p class="lead">{E(site["contactIntro"])}</p>'
+    u, _, d = site.get('email', '').partition('@')
+    email = (f'<div class="fact"><div class="k">Email</div><div class="v"><span class="em" data-u="{E(u)}" data-d="{E(d)}">{E(u)} [at] {E(d)}</span></div></div>' if u else '')
+    body = (f'<div class="wrap page-top"><h1>Contact</h1><div style="margin-top:30px;max-width:680px"><p class="lead">{E(site["contactIntro"])}</p>'
             f'<div style="margin-top:34px">{email}<div class="fact"><div class="k">Instagram</div><div class="v"><a href="{E(site["instagram"])}" rel="me noopener">@kellygoffstudio</a></div></div>'
             f'<div class="fact"><div class="k">Studio</div><div class="v">{E(site["location"])}</div></div>'
-            f'<div class="fact"><div class="k">Downloads</div><div class="v"><a href="{asset("files/Kelly-Goff-Public-Art-Project-List.pdf")}">Public-art project list (PDF)</a> · <a href="{asset("files/Kelly-Goff-Resume.pdf")}">Resume (PDF)</a></div></div></div></div>'
-            f'<div>{form}</div></div></div>')
+            f'<div class="fact"><div class="k">Downloads</div><div class="v"><a href="{asset("files/Kelly-Goff-Public-Art-Project-List.pdf")}">Public-art project list (PDF)</a> · <a href="{asset("files/Kelly-Goff-Resume.pdf")}">Resume (PDF)</a></div></div></div></div></div>')
     return layout('Contact', body, site['contactIntro'], active='contact/')
-
-def thanks_page():
-    body = (f'<div class="wrap page-top"><h1>Thank you</h1><p class="lead" style="margin-top:22px">Your message was sent. I’ll reply as soon as I can.</p>'
-            f'<div class="btns" style="margin-top:30px"><a class="btn solid" href="{link("")}">Back to the work</a></div></div>')
-    return layout('Thank you', body, noindex=True, active='contact/')
 
 def notfound_page():
     body = (f'<div class="wrap page-top"><h1>Page not found</h1><p class="lead" style="margin-top:22px">That page has moved or never existed.</p>'
@@ -383,14 +371,14 @@ def main():
     for p in sl: page(f'studio/{p["slug"]}/', lambda p=p: project_page(p, 'studio', 'Studio work', sl))
     page('fieldwork/', fieldwork_index)
     for i, f_ in enumerate(fw): page(f'fieldwork/{f_["slug"]}/', lambda f_=f_, i=i: fieldwork_page(f_, i))
-    page('resume/', cv_page); page('about/', about_page); page('contact/', contact_page); page('contact/thanks/', thanks_page)
+    page('resume/', cv_page); page('about/', about_page); page('contact/', contact_page)
     CUR = ''
     if MODE == 'prod':
         (OUT / '404.html').write_text(notfound_page(), encoding='utf8')
-        urls = ''.join(f'<url><loc>{site["baseUrl"]}/{p}</loc></url>' for p in PAGES if p != 'contact/thanks/')
+        urls = ''.join(f'<url><loc>{site["baseUrl"]}/{p}</loc></url>' for p in PAGES)
         (OUT / 'sitemap.xml').write_text(f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{urls}</urlset>')
         (OUT / 'robots.txt').write_text('User-agent: *\nDisallow: /\n' if site.get('prelaunch') else f'User-agent: *\nAllow: /\nSitemap: {site["baseUrl"]}/sitemap.xml\n')
-        red = ['/outdoors  /public-work/  301', '/indoors  /studio/  301', '/about  /about/  301', '/process  /fieldwork/  301', '/process/*  /fieldwork/:splat  301', '/research  /fieldwork/  301', '/research/*  /fieldwork/:splat  301', '/passage  /studio/crates/  301', '/cv  /resume/  301']
+        red = ['/outdoors  /public-work/  301', '/indoors  /studio/  301', '/about  /about/  301', '/process  /fieldwork/  301', '/process/*  /fieldwork/:splat  301', '/research  /fieldwork/  301', '/research/*  /fieldwork/:splat  301', '/passage  /studio/crates/  301', '/cv  /resume/  301', '/contact/thanks  /contact/  301']
         old = {'sandbags': 'sandbags', 'waters': 'waters', 'reef': 'reef', 'drum': 'drum', 'coconuts': 'coconuts-2019', 'barrel': 'barrel', 'souvenir-1': 'souvenir-1',
                'beacon': None, 'two-views': 'two-views', 'crates': 'crates', 'dumpster': 'dumpster', 'muffler': 'muffler', 'containers': 'containers', 'accident': 'accident',
                'ghost': 'ghost', 'hole': 'hole', 'tree': 'tree', 'coconuts-1': 'coconuts-2016'}

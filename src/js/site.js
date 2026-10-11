@@ -41,3 +41,18 @@
     v.innerHTML='';v.appendChild(f);
   });
 })();
+
+(function(){
+  // email: assembled here so the address isn't sitting in the page source for scrapers; plain text fallback without JS
+  document.querySelectorAll('.em').forEach(function(el){
+    var a=el.getAttribute('data-u')+'@'+el.getAttribute('data-d');
+    var l=document.createElement('a');l.href='mailto:'+a;l.textContent=a;
+    var b=document.createElement('button');b.type='button';b.className='copy';b.textContent='Copy';
+    b.addEventListener('click',function(){
+      var done=function(){b.textContent='Copied';setTimeout(function(){b.textContent='Copy';},1800);};
+      if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(a).then(done,function(){});}
+      else{var t=document.createElement('textarea');t.value=a;document.body.appendChild(t);t.select();try{document.execCommand('copy');done();}catch(e){}document.body.removeChild(t);}
+    });
+    el.textContent='';el.appendChild(l);el.appendChild(b);
+  });
+})();
