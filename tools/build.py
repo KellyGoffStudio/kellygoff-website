@@ -333,10 +333,10 @@ def about_page():
     paras = ''.join(f'<p>{LW(t)}</p>' for t in site['about'])
     how = f'<div>{sec("How I work")}<div class="prose"><p>{E(site["howIWork"])}</p></div></div>' if site.get('howIWork') else ''
     ai = site.get('aiStatement')
-    aiblk = (f'<div id="ai" style="margin-top:34px">{sec(ai["title"])}<div class="prose">' + ''.join(f'<p>{E(t)}</p>' for t in ai['text']) + '</div></div>') if ai else ''
-    body = (f'<div class="wrap page-top"><h1>About</h1><div class="twocol" style="margin-top:30px;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr)"><div>{vid}</div><div class="prose">{paras}</div></div>'
+    aiblk = (f'<div id="ai" style="margin-top:30px">{sec(ai["title"])}<div class="prose">' + ''.join(f'<p>{E(t)}</p>' for t in ai['text']) + '</div></div>') if ai else ''
+    body = (f'<div class="wrap page-top"><h1>About</h1><div class="twocol" style="margin-top:30px;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr)"><div>{vid}</div><div><div class="prose">{paras}</div>{aiblk}</div></div>'
             f'<div class="twocol" style="margin-top:56px;grid-template-columns:minmax(0,220px) minmax(0,1fr)"><div>{wfig2}</div>'
-            f'<div class="col-first">{how}{sec("Public Art at Wheaton")}<div class="prose"><p>{E(site["wheatonProgram"])}</p></div>{aiblk}'
+            f'<div class="col-first">{how}{sec("Public Art at Wheaton")}<div class="prose"><p>{E(site["wheatonProgram"])}</p></div>'
             f'<div class="btns" style="margin-top:26px"><a class="btn" href="{link("resume/")}">Resume →</a><a class="btn" href="{link("contact/")}">Contact →</a></div></div></div></div>')
     return layout('About', body, ' '.join(site['about'][:1]), active='about/')
 
