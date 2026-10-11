@@ -129,7 +129,7 @@ def layout(title, body, desc='', active=None, og=None, ld=None, noindex=False, h
 <button class="menu-btn" aria-expanded="false" aria-controls="nav">Menu</button>
 <ul class="nav" id="nav">{nav}</ul></div></header>
 <main id="main">{body}</main>
-<footer class="site-foot"><div class="wrap"><span>{E(site['copyright'])}</span><span>{E(site['location'])}</span>{foot_ig}</div></footer>
+<footer class="site-foot"><div class="wrap"><span>{E(site['copyright'])}</span>{foot_ig}</div></footer>
 <script src="{asset('assets/js/site.js')}" defer></script></body></html>'''
 
 def emit(path, content):
