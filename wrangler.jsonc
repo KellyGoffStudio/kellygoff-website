@@ -1,0 +1,9 @@
+{
+  // Cloudflare: publish the finished site in dist/ as static files (no build step, no server code).
+  "name": "kellygoff-website",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "404-page"
+  }
+}
