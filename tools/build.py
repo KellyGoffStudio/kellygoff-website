@@ -315,8 +315,8 @@ def cv_block(s):
 
 def cv_page():
     S = {s['title']: s for s in cv['sections']}
-    left = ['Public art', 'Solo and two-person exhibitions', 'Selected group exhibitions', 'Community public art facilitated', 'Awards, grants, and residencies']
-    right = ['Education', 'Teaching roles', 'Academic service at Wheaton College', 'Selected professional endeavors', 'Languages']
+    left = ['Public art', 'Solo and two-person exhibitions', 'Selected group exhibitions', 'Community public art facilitated', 'Awards, grants, and residencies', 'Teaching roles']
+    right = ['Education', 'Academic service at Wheaton College', 'Selected professional endeavors', 'Languages']
     body = (f'<div class="wrap page-top"><div class="row-head"><div><h1>Resume</h1><div class="kicker">Born {E(cv["born"].split(" / ")[-1])}, {E(cv["born"].split(" / ")[0])} · Lives and works in {E(site["location"])}</div></div>'
             f'<div class="btns"><a class="btn solid" href="{asset("files/Kelly-Goff-Resume.pdf")}">Resume (PDF) ↓</a><a class="btn" href="{asset("files/Kelly-Goff-Public-Art-Project-List.pdf")}">Public-art project list (PDF) ↓</a></div></div>'
             f'<div class="cv-grid"><div>{"".join(cv_block(S[t]) for t in left)}</div><div>{"".join(cv_block(S[t]) for t in right)}</div></div>'
