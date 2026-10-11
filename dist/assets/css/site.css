@@ -101,6 +101,8 @@ h2.sec .nt{order:3;font:500 11px var(--cond);letter-spacing:.14em;color:var(--na
 .prose p{font-size:15.5px;line-height:1.6;margin-top:16px}
 .prose p:first-child{margin-top:0}
 .twocol{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:56px}
+.twocol.tc-about{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr)}
+.twocol.tc-wh{grid-template-columns:minmax(0,200px) minmax(0,1fr);gap:28px}
 .cv-grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:64px}
 .cvrow{display:grid;grid-template-columns:104px 1fr;gap:12px;padding:5px 0;font-size:15px}
 .cvrow .y{font:600 13px var(--cond);letter-spacing:.1em;color:var(--navy);padding-top:2px}
@@ -139,7 +141,7 @@ dialog.lb::backdrop{background:rgba(29,31,32,.96)}
   .site-head .wrap{height:68px}
   .brand{font-size:22px}
   .grid,.home-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .proj,.twocol,.cv-grid{grid-template-columns:minmax(0,1fr);gap:36px}
+  .proj,.twocol,.twocol.tc-about,.twocol.tc-wh,.cv-grid{grid-template-columns:minmax(0,1fr);gap:36px}
   .facts{position:static}
   .lb-in{padding:60px 12px 16px}
 }
