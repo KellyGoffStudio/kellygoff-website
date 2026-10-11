@@ -66,7 +66,7 @@ def main():
                 if target.exists() and target.stat().st_mtime >= max(f.stat().st_mtime, Path(__file__).stat().st_mtime if label else 0): continue
                 th = round(h * tw / w)
                 r = im.resize((tw, th), Image.LANCZOS)
-                if label: r = overlay(r)
+                if label and '-photo' not in f.stem: r = overlay(r)
                 r.save(target, 'WEBP', quality=int(os.environ.get('KG_Q', '82')), method=6)
             out.append({'name': f.stem, 'w': w, 'h': h, 'widths': ws})
         if out:

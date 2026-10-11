@@ -1,6 +1,18 @@
 {
- "01.png": {"alt": "Rendering of a 40-foot tower of stacked crates in an open field", "caption": "Rendering"},
- "02.png": {"alt": "Rendering of a 40-foot tower of stacked crates with a wooded hill behind", "caption": "Rendering"},
- "03.png": {"alt": "Rendering of the crate tower seen from below against a blue sky", "caption": "Rendering, view from below"},
- "04.png": {"alt": "Photograph of a sample crate made from reclaimed pallet wood", "caption": "Photograph of a sample crate I built from reclaimed pallet wood (not a rendering)"}
+ "01.png": {
+  "alt": "Rendering of a 40-foot tower of stacked crates in an open field",
+  "caption": "Rendering"
+ },
+ "02.png": {
+  "alt": "Rendering of a 40-foot tower of stacked crates with a wooded hill behind",
+  "caption": "Rendering"
+ },
+ "03.png": {
+  "alt": "Rendering of the crate tower seen from below against a blue sky",
+  "caption": "Rendering, view from below"
+ },
+ "04-photo.png": {
+  "alt": "Photograph of a sample crate made from reclaimed pallet wood",
+  "caption": "Photograph of a sample crate I built from reclaimed pallet wood (not a rendering)"
+ }
 }
