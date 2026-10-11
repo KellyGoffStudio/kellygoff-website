@@ -13,5 +13,12 @@
   "slug": "crate-tower",
   "title": "Crate tower, meadow",
   "text": "A rendered model of a stacked-crate tower placed in a photograph of a meadow. Not built."
+ },
+ {
+  "slug": "tower",
+  "title": "Tower",
+  "material": "Reclaimed pallet wood",
+  "size": "40 × 2 × 2 ft",
+  "text": "A rendered model of a tower of stacked crates, 40 feet tall and 2 × 2 feet in plan, built from reclaimed pallet wood. The renderings place it in photographs of existing sites. The photograph is a sample crate I built. Not built at full scale."
  }
 ]
