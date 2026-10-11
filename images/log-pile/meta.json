@@ -6,5 +6,13 @@
  "06.jpg": {
   "alt": "Design rendering close-up of a piling where the green coating meets the natural wood along a shallow groove",
   "caption": "Design rendering, detail of the paint line groove"
+ },
+ "07.png": {
+  "alt": "Plan view drawing of Log Pile with piling lengths marked",
+  "caption": "Plan view"
+ },
+ "08.png": {
+  "alt": "Elevation drawing of Log Pile with piling heights marked",
+  "caption": "Elevation view"
  }
 }
