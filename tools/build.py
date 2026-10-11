@@ -227,8 +227,8 @@ def project_page(p, folder, label, lst):
                  f'{img_tag(im, "(max-width:860px) 100vw, 60vw", eager=(i == 0))}</button>{fl}{cap}</figure>')
     v = p.get('video')
     if v:
-        figl.insert(v.get('at', len(figl)), f'<figure><div class="video vm"><iframe src="https://player.vimeo.com/video/{E(v["vimeo"])}?dnt=1" title="{E(v["label"])}" loading="lazy" '
-                 f'allow="fullscreen; picture-in-picture" allowfullscreen></iframe></div></figure>')
+        figl.insert(v.get('at', len(figl)), f'<figure><div class="video vm"><iframe src="https://player.vimeo.com/video/{E(v["vimeo"])}?dnt=1{"&autoplay=1&muted=1&loop=1&autopause=0" if v.get("autoplay") else ""}" title="{E(v["label"])}" loading="lazy" '
+                 f'allow="{"autoplay; " if v.get("autoplay") else ""}fullscreen; picture-in-picture" allowfullscreen></iframe></div></figure>')
     figs = ''.join(figl)
     note = f'<p class="note">{LW(p.get("text") or p.get("summary") or "")}</p>' if (p.get('text') or p.get('summary')) else ''
     lk = ''.join(f'<div class="fact"><div class="k">Link</div><div class="v"><a href="{E(l["url"])}" rel="noopener">{E(l["label"])}</a></div></div>' for l in p.get('links', []))
