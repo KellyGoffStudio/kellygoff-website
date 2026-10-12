@@ -10,7 +10,7 @@
     "related_studio": [],
     "text": [
       "Another way I come to understand a site is by listening to it. LineWorks is a custom design tool I made for my continuous-line sculptures. It reads a site recording and measures how the sound changes over time: how loud it is, how bright or dull, how noisy or tonal, how much bass against treble, how quickly it shifts. Those measurements steer a single closed line through three dimensions.",
-      "I decide what to record, how the measurements become form, how smooth the line must be, and which result is worth building. The tool then checks the line against real stock: pipe diameter, minimum bend radius, where strands touch, total length, and weight. It exports drawings and the files a fabricator needs.",
+      "I decide what to record, how the measurements become form, how smooth the line must be, and which result is worth building. The tool then checks the line against real stock: pipe diameter, minimum bend radius, where strands touch, total length, and weight. It exports drawings and the files I need for fabrication.",
       "LineWorks does not generate images and contains no trained model. The same input and the same settings always give the same line. It is a way of drafting, closer to a CAD program than to a prompt. I built it with AI-assisted coding; the decisions about form, material, and fabrication are mine."
     ],
     "links": [
