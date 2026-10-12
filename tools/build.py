@@ -263,7 +263,7 @@ def studio_index():
     ts = ''.join(tile(p, 'studio') for p in feat)
     more = ''
     if rest:
-        more = sec('Selected early works', '', f'{min(yrs)} – {max(yrs)}' if yrs else '') + f'<div class="grid">{"".join(tile(p, "studio") for p in rest)}</div>'
+        more = sec('Selected earlier works', '', f'{min(yrs)} – {max(yrs)}' if yrs else '') + f'<div class="grid">{"".join(tile(p, "studio") for p in rest)}</div>'
     body = (f'<div class="wrap page-top"><h1>Studio work</h1>'
             f'<p class="lead" style="margin-top:22px">{E(site["studioIntro"])}</p><div class="grid" style="margin-top:40px">{ts}</div>{more}</div>')
     return layout('Studio work', body, 'Studio work by Kelly Goff: research and place-driven sculpture, video and installation.', active='studio/')
