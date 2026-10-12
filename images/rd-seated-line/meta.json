@@ -1,10 +1,10 @@
 {
  "01.jpg": {
-  "alt": "Rendering of a silver looping sculpture in a plaza",
-  "caption": "Rendering, silver version"
- },
- "02.jpg": {
   "alt": "Rendering of a red looping sculpture on a harbor quay",
   "caption": "Rendering, red version"
+ },
+ "02.jpg": {
+  "alt": "Rendering of a silver looping sculpture in a plaza",
+  "caption": "Rendering, silver version"
  }
 }
