@@ -2,7 +2,8 @@
  {
   "slug": "seated-line",
   "title": "Seated Line",
-  "text": "Two versions of a rendered model of a sculpture, placed in photographs of existing sites. Not built."
+  "text": "Two versions of a rendered model of a sculpture, placed in photographs of existing sites. Not built.",
+  "thumb": 2
  },
  {
   "slug": "black-field",
@@ -15,5 +16,11 @@
   "material": "Reclaimed pallet wood",
   "size": "40 × 2 × 2 ft",
   "text": "A rendered model of a tower of stacked crates, 40 feet tall and 2 × 2 feet in plan, built from reclaimed pallet wood. The photograph is a sample crate I built. Not built at full scale."
+ },
+ {
+  "slug": "timber-loops",
+  "title": "Timber Loops",
+  "material": "Timber",
+  "text": "Rendered models of a looping timber sculpture, placed in photographs of existing sites. Not built."
  }
 ]

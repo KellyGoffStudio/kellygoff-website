@@ -198,7 +198,7 @@ def public_index():
         secs += (f'<div>{sec(gname, f"{i + 1:02d}", note)}</div>{secd(gid)}<div class="grid" id="grid-{gid}">{ts}</div>')
     rt = ''
     for r_ in RD:
-        im = images_for('rd-' + r_['slug'], r_['title'], r_['title'])[0]
+        im = images_for('rd-' + r_['slug'], r_['title'], r_['title'])[r_.get('thumb', 1) - 1]
         rt += (f'<a class="tile" title="{E(r_["title"])}" href="{link(f"public-work/renderings/{r_["slug"]}/")}"><div class="im">{img_tag(im, "(max-width:860px) 50vw, 33vw")}</div></a>')
     if RD: secs += f'<div>{sec("Drawings & Renderings", "03", "Unbuilt")}</div>{secd("renderings")}<div class="grid" id="grid-renderings">{rt}</div>'
     body = (f'<div class="wrap page-top"><div class="row-head"><div><h1>Public work</h1></div>'
