@@ -15,6 +15,9 @@ MODE = 'preview' if '--preview' in sys.argv else 'prod'
 OUT = ROOT / ('dist-preview' if MODE == 'preview' else 'dist')
 E = html.escape
 
+import hashlib
+def _v(rel):
+    return hashlib.md5((ROOT / 'src' / rel).read_bytes()).hexdigest()[:8]
 site = json.loads((ROOT / 'data/site.json').read_text(encoding='utf8'))
 proj = json.loads((ROOT / 'data/projects.json').read_text(encoding='utf8'))
 cv = json.loads((ROOT / 'data/cv.json').read_text(encoding='utf8'))
@@ -123,14 +126,14 @@ def layout(title, body, desc='', active=None, og=None, ld=None, noindex=False, h
 <meta property="og:title" content="{E(full_title)}"><meta property="og:description" content="{E(desc)}"><meta property="og:type" content="website"><meta property="og:site_name" content="{E(site['name'])}">{ogimg}
 <meta name="theme-color" content="#f2f2f3">
 {preload}
-<link rel="icon" href="{asset('favicon.ico')}" sizes="48x48"><link rel="icon" type="image/png" sizes="32x32" href="{asset('favicon-32.png')}"><link rel="apple-touch-icon" href="{asset('apple-touch-icon.png')}"><link rel="stylesheet" href="{asset('assets/css/site.css')}">{ldj}</head>
+<link rel="icon" href="{asset('favicon.ico')}" sizes="48x48"><link rel="icon" type="image/png" sizes="32x32" href="{asset('favicon-32.png')}"><link rel="apple-touch-icon" href="{asset('apple-touch-icon.png')}"><link rel="stylesheet" href="{asset('assets/css/site.css')}?v={_v('css/site.css')}">{ldj}</head>
 <body><a class="skip" href="#main">Skip to content</a>
 <header class="site-head"><div class="wrap"><a class="brand" href="{link('')}">Kelly Goff</a>
 <button class="menu-btn" aria-expanded="false" aria-controls="nav">Menu</button>
 <ul class="nav" id="nav">{nav}</ul></div></header>
 <main id="main">{body}</main>
 <footer class="site-foot"><div class="wrap"><span>{E(site['copyright'])}</span>{foot_ig}</div></footer>
-<script src="{asset('assets/js/site.js')}" defer></script></body></html>'''
+<script src="{asset('assets/js/site.js')}?v={_v('js/site.js')}" defer></script></body></html>'''
 
 def emit(path, content):
     f = OUT / path / 'index.html' if path else OUT / 'index.html'
