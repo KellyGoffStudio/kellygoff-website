@@ -23,5 +23,13 @@
   "material": "Timber",
   "text": "Rendered models of a looping timber sculpture, placed in photographs of existing sites. Not built.",
   "thumb": 3
+ },
+ {
+  "slug": "tall-circuit",
+  "title": "Tall Circuit",
+  "material": "Painted aluminum",
+  "size": "21 × 12 × 10 ft",
+  "thumb": 2,
+  "text": "Rendered models of a sculpture in painted aluminum, placed in photographs of existing sites. Not built."
  }
 ]
