@@ -10,7 +10,7 @@
 :root{
   --paper:#f2f2f3; --panel:#e8e8e9; --ink:#1d1f20; --rule:#b8bcc0; --navy:#3d5c7c; --navy-soft:#72889f; --muted:#5b6166;
   --cond:'Barlow Condensed','Arial Narrow',sans-serif; --body:'Barlow',system-ui,-apple-system,sans-serif;
-  --gut:clamp(18px,4vw,56px); --max:1392px;
+  --gut:clamp(18px,4vw,56px); --max:1840px;
   color-scheme:light;
 }
 *{box-sizing:border-box;margin:0;padding:0}
