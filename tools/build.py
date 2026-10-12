@@ -173,7 +173,8 @@ def tile(p, folder, extra='', status=False, sizes='(max-width:860px) 50vw, 33vw'
 def home():
     im = images_for('home', 'Continuous Line XI (Yellow), Wheaton College', 'Continuous Line XI (Yellow) by Kelly Goff, Wheaton College, Norton, MA', nph=1)[0]
     body = f'<div class="wrap hero-wrap"><div class="hero">{img_tag(im, "100vw", eager=True)}</div></div>'
-    return layout('Home', body, site['description'], home=True)
+    person = {'@context': 'https://schema.org', '@type': 'Person', 'name': site['name'], 'url': site['baseUrl'] + '/', 'sameAs': [site['instagram']]}
+    return layout('Home', body, site['description'], home=True, og=im['src'] if not im['ph'] else None, ld=person)
 
 GROUPS = [('Continuous Line', 'continuous-line', '2020 – present', 'Line works'), ('Place-based and collaborative', 'place-based', '2014 – 2021', 'Place-based / collaborative')]
 SERIES_LABEL = {g[0]: g[3] for g in GROUPS}
@@ -251,9 +252,9 @@ def project_page(p, folder, label, lst):
             f'</aside></div>{pager}</div>'
             f'<dialog class="lb" id="lb" aria-label="Image viewer"><div class="lb-in"><div class="stage"><img alt=""></div><div class="lb-cap"></div></div>'
             f'<button class="x" type="button">Close</button><button class="pv" type="button" aria-label="Previous image">←</button><button class="nx" type="button" aria-label="Next image">→</button></dialog>')
-    ld = {'@context': 'https://schema.org', '@type': 'VisualArtwork', 'name': p['title'], 'creator': {'@type': 'Person', 'name': 'Kelly Goff'},
+    ld = {'@context': 'https://schema.org', '@type': 'VisualArtwork', 'name': p['title'], 'creator': {'@type': 'Person', 'name': 'Kelly Goff', 'url': site['baseUrl'] + '/'},
           'dateCreated': p['year'], 'artMedium': p.get('material', ''), 'url': f'{site["baseUrl"]}/{CUR}'}
-    desc = f'{p["title"]}, {p["year"]}. ' if p['year'] else f'{p["title"]}. Rendering, not built. ' + ' '.join(x + '.' for x in [p.get('material', '').rstrip('.'), p.get('site', '').rstrip('.')] if x)
+    desc = f'{p["title"]}, {p["year"]}. ' + ' '.join(x + '.' for x in [p.get('material', '').rstrip('.'), p.get('site', '').rstrip('.')] if x) if p['year'] else f'{p["title"]}. Rendering, not built. ' + ' '.join(x + '.' for x in [p.get('material', '').rstrip('.'), p.get('site', '').rstrip('.')] if x)
     og = ims[0]['src'] if not ims[0]['ph'] else None
     return layout(p['title'], body, desc, active=f'{p.get("back", folder)}/', og=og, ld=ld if p['year'] else None)
 
