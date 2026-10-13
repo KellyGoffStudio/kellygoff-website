@@ -2205,9 +2205,8 @@ function buildTakeoff() {
   else if (prof === 'corrugated') { const id = num('matSize'); const s = addStock('corr', `${id}" ID corrugated pipe (${id + 1}" OD)`, id + 1, id, st.weightLbFt); A.dense.forEach((d, i) => MM.push({ ptsFt: d.pts, closed: d.closed, group: i, kind: 'metal', stock: s.key })); }
   else if (prof === 'square') { A.dense.forEach((d, i) => MM.push({ ptsFt: d.pts, closed: d.closed, group: i, kind: 'wood', od: Math.max(st.w, st.h), w: st.w, h: st.h })); }
   else if (prof === 'strand') {
-    const tube = $('strandStockType').value !== 'sched40', sp = tube ? TUBING_0125[$('strandTubingSize').value] : NPS_SCHED_40[$('strandSched40Size').value];
-    const s = addStock('strand', `${sp.od}" OD × ${((sp.od - sp.id) / 2).toFixed(3)}" wall ${tube ? 'tubing' : 'Sched 40 pipe'}`, sp.od, sp.id, sp.w);
-    A.members.forEach((m, i) => MM.push({ ptsFt: m.pts, closed: m.closed, group: i, kind: 'metal', stock: s.key }));
+    const tube = $('strandStockType').value !== 'sched40';
+    A.members.forEach((m, i) => { const s = addStock('strand_' + m.skey, `${m.od}" OD × ${((m.od - m.id) / 2).toFixed(3)}" wall ${tube ? 'tubing' : 'Sched 40 pipe'}`, m.od, m.id, m.w); MM.push({ ptsFt: m.pts, closed: m.closed, group: i, kind: 'metal', stock: s.key }); });
   } else if (prof === 'truss') {
     const tube = $('trussStockType').value !== 'sched40', sp = tube ? TUBING_0125[$('trussTubingSize').value] : NPS_SCHED_40[$('trussSched40Size').value];
     const s = addStock('truss', `${sp.od}" OD × ${((sp.od - sp.id) / 2).toFixed(3)}" wall stainless ${tube ? 'tubing' : 'pipe'}`, sp.od, sp.id, sp.w);
@@ -2545,6 +2544,56 @@ const TUBING_0125 = {
   '1.5': { od: 1.500, id: 1.250, w: 1.84 }, '2.0': { od: 2.000, id: 1.750, w: 2.50 }, '2.5': { od: 2.500, id: 2.250, w: 3.17 }, '3.0': { od: 3.000, id: 2.750, w: 3.84 }
 };
 
+// Mixed-diameter strands sit on one ring so the bundle's outline is a circle: every strand is flush to the same outer circle, the core is left hollow, and no two pipes overlap.
+function strandSizes() {
+  const tube = $('strandStockType').value !== 'sched40', T = tube ? TUBING_0125 : NPS_SCHED_40, dflt = tube ? $('strandTubingSize').value : $('strandSched40Size').value;
+  const txt = $('strandSizes').value.trim(), bad = []; let list = [];
+  if (!txt) { const n = Math.max(1, parseInt($('strandCount').value) || 1); for (let i = 0; i < n; i++) list.push(dflt); }
+  else txt.split(/[\s,;]+/).filter(Boolean).forEach(tok => { const f = parseFloat(tok.replace(/["”″]/g, '')), k = Object.keys(T).find(x => Math.abs(parseFloat(x) - f) < 1e-6); if (k) list.push(k); else bad.push(tok); });
+  if (!list.length) list = [dflt];
+  return { list: list.slice(0, 24), T, tube, bad };
+}
+const _strandCache = new Map();
+function strandLayout(keys, T, arrange) {
+  const ck = keys.join(',') + '|' + arrange + '|' + Object.keys(T)[0]; if (_strandCache.has(ck)) return _strandCache.get(ck);
+  const n = keys.length, od = keys.map(k => T[k].od), r = od.map(o => o / 2 * 1.01), r0 = od.map(o => o / 2), TAUc = Math.PI * 2;
+  let out;
+  if (n === 1) out = { E: r0[0], a: [0], th: [0], order: [0] };
+  else {
+    const minAng = (ai, aj, ri, rj) => { const c = (ai * ai + aj * aj - (ri + rj) * (ri + rj)) / (2 * ai * aj); return c >= 1 ? 0 : c <= -1 ? 7 : Math.acos(c); };
+    const place = (E, ord) => {
+      const a = ord.map(i => E - r[i]); if (a.some(v => v <= 1e-6)) return null;
+      const th = [0];
+      for (let k = 1; k < n; k++) { let t = 0; for (let j = 0; j < k; j++) t = Math.max(t, th[j] + minAng(a[j], a[k], r[ord[j]], r[ord[k]])); th.push(t); }
+      for (let j = 0; j < n; j++) for (let k = j + 1; k < n; k++) { const d = th[k] - th[j], cd = Math.min(d, TAUc - d); if (cd < minAng(a[j], a[k], r[ord[j]], r[ord[k]]) - 1e-9) return null; }
+      return { a, th };
+    };
+    const solve = (ord) => { let lo = Math.max(...r) + 1e-3, hi = 2 * r.reduce((x, y) => x + y, 0) + 1; if (!place(hi, ord)) return null; for (let it = 0; it < 34; it++) { const mid = (lo + hi) / 2; if (place(mid, ord)) hi = mid; else lo = mid; } return { E: hi, ord }; };
+    const ident = keys.map((_, i) => i), same = od.every(o => o === od[0]);
+    let best = null;
+    if (same || arrange === 'listed') best = solve(ident);
+    else {
+      const cands = [ident, ident.slice().sort((x, y) => od[y] - od[x])];
+      { const srt = ident.slice().sort((x, y) => od[y] - od[x]), il = []; let i = 0, j = n - 1; while (i <= j) { il.push(srt[i++]); if (i <= j) il.push(srt[j--]); } cands.push(il); }
+      if (n <= 7) { const rest = ident.slice(1), perm = (arr, cur) => { if (!arr.length) { cands.push([0, ...cur]); return; } arr.forEach((v, i) => perm(arr.filter((_, k) => k !== i), cur.concat(v))); }; perm(rest, []); }
+      else { let sd = 12345; const rnd = () => (sd = (sd * 1664525 + 1013904223) % 4294967296) / 4294967296; for (let t = 0; t < 260; t++) { const a = ident.slice(); for (let i = n - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } cands.push(a); } }
+      cands.forEach(o => { const sres = solve(o); if (sres && (!best || sres.E < best.E - 1e-9)) best = sres; });
+    }
+    const pl = place(best.E * 1.0004, best.ord);                                   // a hair of room so nothing is exactly at the limit
+    const th = pl.th, Eo = best.E * 1.0004;
+    out = { E: Math.max(...pl.a.map((a, i) => a + r0[best.ord[i]])), a: pl.a, th, order: best.ord };
+    out.th = th.map(t => t - 0); out.Eo = Eo;
+  }
+  const pos = out.order;
+  out.keys = pos.map(i => keys[i]); out.sp = out.keys.map(k => T[k]); out.r = out.sp.map(q => q.od / 2); out.n = n;
+  _strandCache.set(ck, out); if (_strandCache.size > 60) _strandCache.delete(_strandCache.keys().next().value);
+  return out;
+}
+function strandLabel(keys, T, tube) {
+  const od0 = T[keys[0]].od; if (keys.every(k => T[k].od === od0)) return `${keys.length} × ${od0}" OD STRANDS`;
+  const cnt = {}; keys.forEach(k => cnt[k] = (cnt[k] || 0) + 1);
+  return `${keys.length} STRANDS · ` + Object.keys(cnt).sort((x, y) => parseFloat(y) - parseFloat(x)).map(k => `${+parseFloat(k).toFixed(3)}"${cnt[k] > 1 ? ' ×' + cnt[k] : ''}`).join(' · ');
+}
 const $ = (id) => document.getElementById(id);
 const num = (id) => parseFloat($(id).value);
 const chk = (id) => $(id).checked;
@@ -2682,6 +2731,9 @@ function buildPanel() {
       <div id="g_mobius">${C_('isMobius', 'True Möbius half-twist', false)}</div></div>
     <div id="g_strand">
       ${R('strandCount', 'Strands', 1, 30, 1, 4, v => v)}
+      <div class="ctl" id="c_strandSizes"><label class="lbl" for="strandSizes"><span>Mixed sizes (nominal, in the stock chosen)</span></label><input type="text" id="strandSizes" value="" placeholder="e.g. 6, 2, 5, 3, 4, 2" spellcheck="false" autocomplete="off"><div class="hint">Leave empty for equal strands. Otherwise this list sets the count and the sizes. Repeats are fine.</div></div>
+      ${S_('strandArrange', 'Order around the ring', [['auto', 'Auto: roundest and tightest'], ['listed', 'As listed']], 'auto')}
+      <div class="info" id="strandInfo">—</div>
       ${S_('strandStockType', 'Strand stock', [['sched40', 'Sched 40 pipe'], ['tubing', '0.125" wall tubing']], 'sched40')}
       <div id="g_strandS40">${S_('strandSched40Size', 'Pipe size', sizeOpts(NPS_SCHED_40, 'Sched 40').filter(o => +o[0] <= 6), '2.0')}</div>
       <div id="g_strandTub">${S_('strandTubingSize', 'Tubing size', sizeOpts(TUBING_0125, 'tube'), '1.25')}</div>
@@ -2787,6 +2839,7 @@ function updateVisibility() {
   $('detail').disabled = chk('lenOn'); $('pathLen').disabled = !chk('lenOn'); $('c_detail').style.opacity = chk('lenOn') ? .5 : 1; $('c_pathLen').style.opacity = chk('lenOn') ? 1 : .6; $('lenGrow').disabled = !chk('lenOn');
   show('g_plane', planeOn); show('g_found', chk('foundOn') && !chk('postsOn')); show('g_susp', !planeOn); show('g_posts', chk('postsOn')); show('g_plates', chk('plateOn')); show('c_planeFt', !chk('postsOn'));
   $('exportRibs').disabled = prof !== 'truss';
+  { const hl = $('strandSizes').value.trim() !== ''; $('strandCount').disabled = hl; $('c_strandCount').style.opacity = hl ? .5 : 1; }
   { const vt = $('viewTitle'); if (/^(Perspective|Orthographic) View$/.test(vt.textContent) || !vt.textContent) vt.textContent = (typeof isOrtho !== 'undefined' && isOrtho) ? 'Orthographic View' : 'Perspective View'; }
 }
 function refreshLabels() {
@@ -2808,11 +2861,11 @@ function getStock() {
     const id = num('matSize');
     Object.assign(st, { outerExtentIn: (id + 1) / 2, minInsideIn: id * bf, weightLbFt: 2.5 * (id / 6), weightNote: 'hdpe', label: `${id}" CORRUGATED` });
   } else if (profile === 'strand') {
-    const stock = $('strandStockType').value, n = parseInt($('strandCount').value);
-    const sp = stock === 'sched40' ? NPS_SCHED_40[$('strandSched40Size').value] : TUBING_0125[$('strandTubingSize').value];
-    const bR = n === 1 ? 0 : ((sp.od / 2) * 1.15) / Math.sin(Math.PI / Math.max(n, 3));
-    Object.assign(st, { outerExtentIn: bR + sp.od / 2, minInsideIn: sp.id * bf, weightLbFt: sp.w * n, weightNote: stock === 'sched40' ? 'pipe' : 'steel',
-      label: `${n} × ${sp.od}" OD STRANDS`, strandOD: sp.od, strandID: sp.id, strandBundleR: bR / 1, contactOdIn: 2 * (n >= 3 ? bR * Math.cos(Math.PI / n) : 0) + sp.od });
+    const SZ = strandSizes(), LY = strandLayout(SZ.list, SZ.T, $('strandArrange').value), n = LY.n, maxI = LY.sp.reduce((bi, q, i, arr) => q.od > arr[bi].od ? i : bi, 0), mx = LY.sp[maxI];
+    const rm = LY.r.reduce((x, y) => x + y, 0) / n;
+    Object.assign(st, { outerExtentIn: LY.E, minInsideIn: Math.max(...LY.sp.map(q => q.id)) * bf, weightLbFt: LY.sp.reduce((x, q) => x + q.w, 0), weightNote: SZ.tube ? 'steel' : 'pipe',
+      label: strandLabel(LY.keys, SZ.T, SZ.tube), strandOD: mx.od, strandID: mx.id, strandBundleR: LY.E - mx.od / 2, strandLayout: LY, strandBad: SZ.bad, strandTube: SZ.tube,
+      contactOdIn: n >= 3 ? 2 * (LY.E - rm) * Math.cos(Math.PI / n) + 2 * rm : 2 * LY.E });
   } else {
     const stock = $('trussStockType').value, n = parseInt($('trussCount').value), od = num('trussOD');
     const wood = chk('woodOn'), ns = wood ? Math.max(1, Math.min(n - 1, Math.round(n * num('steelShare') / 100))) : n;
@@ -3182,6 +3235,7 @@ function vertexU(geo, i) {
 const AMBER = new THREE.Color(0xf59e0b), CLEAR = new THREE.Color(0xd9480f);
 function applyColor(mesh, geo, bend, flags) {
   const stain = flags && flags.stain, mode = $('colorMode').value, base = new THREE.Color(stain ? 0xd2d5d9 : $('matColor').value), rough = stain ? 0.42 : num('matRoughness'), metal = stain ? 0.45 : num('matMetalness'), wire = chk('enableWireframe');
+  if (flags && flags.shade !== undefined && !stain) { const hsl = {}; base.getHSL(hsl); if (!(hsl.l > 0.93 && hsl.s < 0.15)) base.setHSL(hsl.h, hsl.s, Math.max(0.1, Math.min(0.9, hsl.l + flags.shade * 0.15))); }   // a color other than white: each size gets its own shade, the largest darkest
   const marks = (chk('showKinks') && bend && bend.minFt > 0) || (chk('showClear') && bend && bend.hasLow);
   if (mode === 'solid' && !marks) { mesh.material = new THREE.MeshStandardMaterial({ color: base, roughness: rough, metalness: metal, wireframe: wire }); return; }
   const pos = geo.attributes.position, n = pos.count; geo.computeBoundingBox();
@@ -3297,21 +3351,33 @@ function buildPiece(piece, idx, X) {
     const df = (i) => 1 + (X.flare - 1) * Math.pow(Math.min(1, spaced[i].distanceTo(X.centroid) / X.maxDist), 2.5);
     const manual = num('rotZ') * 0;
     if (st.profile === 'strand') {
-      const n = parseInt($('strandCount').value), layout = $('strandLayoutMode').value, sep = num('strandSeparation');
-      const sR = st.strandOD / 24, bR = n === 1 ? 0 : (sR * 1.15) / Math.sin(Math.PI / Math.max(n, 3));
-      const helix = layout === 'helical' ? Math.sqrt(1 + Math.pow(bR * 6 * Math.PI / Math.max(length, 1), 2)) : 1;
+      const LY = st.strandLayout, n = LY.n, layout = $('strandLayoutMode').value, sep = num('strandSeparation');
+      const helix = layout === 'helical' ? Math.sqrt(1 + Math.pow((LY.E / 12) * 6 * Math.PI / Math.max(length, 1), 2)) : 1;
+      const dfS = Float64Array.from({ length: cnt }, (_, i) => df(i)), dfAt = (u) => { const t = Math.max(0, Math.min(1, u)) * (cnt - 1), i0 = Math.min(cnt - 2, Math.floor(t)); return dfS[i0] + (dfS[i0 + 1] - dfS[i0]) * (t - i0); };
+      const ods = LY.sp.map(q => q.od), oLo = Math.min(...ods), oHi = Math.max(...ods);
       for (let s = 0; s < n; s++) {
-        const base = (s / n) * TAU, pts = [];
+        const pts = [], rIn = LY.r[s], sR = rIn / 12, aIn = n === 1 ? 0 : LY.a[s];
         for (let i = 0; i < cnt; i++) {
-          const u = i / (cnt - 1), ang = base + (layout === 'helical' ? u * Math.PI * 6 : 0) + manual;
-          const rOff = n === 1 ? 0 : bR * (1 + (df(i) - 1) * sep);
+          const u = i / (cnt - 1), ang = LY.th[s] + (layout === 'helical' ? u * Math.PI * 6 : 0) + manual, sc = dfS[i];
+          const Es = LY.E * sc * (1 + sep * (sc - 1)), rOff = n === 1 ? 0 : (Es - rIn * sc) / 12;      // every strand stays flush to the same outer circle as the bundle spreads
           pts.push(spaced[i].clone().addScaledVector(frames.normals[i], Math.cos(ang) * rOff).addScaledVector(frames.binormals[i], Math.sin(ang) * rOff));
         }
         const sub = new THREE.CatmullRomCurve3(pts, closed, 'centripetal', 0.25);
-        const geo = new THREE.TubeGeometry(sub, Math.max(100, Math.ceil(cnt * (q < 1 ? 0.6 : 1))), sR, q < 1 ? 10 : 16, closed);
-        geo.userData = { kind: 'tube', vps: (q < 1 ? 10 : 16) + 1 };
-        const m = new THREE.Mesh(geo); applyColor(m, geo, bend); currentMeshGroup.add(m);
-        X.A.members.push({ pts: sampleMember(sub, length, closed), closed, od: st.strandOD, id: st.strandID, group: idx, L: length, kind: 'strand' });
+        const segs = Math.max(100, Math.ceil(cnt * (q < 1 ? 0.6 : 1))), radial = q < 1 ? 10 : 16;
+        const geo = new THREE.TubeGeometry(sub, segs, sR, radial, closed);
+        geo.userData = { kind: 'tube', vps: radial + 1 };
+        if (X.flare > 1) {                                       // each strand grows with the bundle
+          const pos = geo.attributes.position, vps = radial + 1;
+          for (let k = 0; k <= segs; k++) {
+            const ctr = sub.getPointAt(closed && k === segs ? 0 : k / segs), f = dfAt(k / segs);
+            for (let j = 0; j < vps; j++) { const vi = k * vps + j; pos.setXYZ(vi, ctr.x + (pos.getX(vi) - ctr.x) * f, ctr.y + (pos.getY(vi) - ctr.y) * f, ctr.z + (pos.getZ(vi) - ctr.z) * f); }
+          }
+          geo.computeVertexNormals();
+        }
+        const shade = oHi > oLo ? 1 - 2 * (LY.sp[s].od - oLo) / (oHi - oLo) : undefined;
+        const m = new THREE.Mesh(geo); applyColor(m, geo, bend, { shade }); currentMeshGroup.add(m);
+        const samp = sampleMember(sub, length, closed), Ns = samp.length;
+        X.A.members.push({ pts: samp, closed, od: LY.sp[s].od, id: LY.sp[s].id, w: LY.sp[s].w, skey: LY.keys[s], group: idx, L: length, kind: 'strand', df: X.flare > 1 ? samp.map((_, i) => dfAt(i / (closed ? Ns : Math.max(1, Ns - 1)))) : undefined });
       }
       X.A.baseW += length * st.weightLbFt * helix;
     } else {
@@ -3506,6 +3572,7 @@ function updateReadouts(c, A) {
   $('tbLegs').textContent = c._liftTxt ? c._liftTxt : !pl.active ? '—' : angs.length ? angs.slice(0, 4).map(a => a.toFixed(0) + '°').join(' / ') + (angs.length > 4 ? ' …' : '') : 'none — all above grade';
 
   { const fi = $('flareInfo'), d = num('distalOd'); if (fi) fi.textContent = d > st.odIn + 1e-6 ? `${st.odIn.toFixed(3)}" OD at the center, flaring to ${d.toFixed(3)}" OD at the farthest points (×${(d / st.odIn).toFixed(2)}).` : (d > 0 ? `Far-end OD is not larger than the ${st.odIn.toFixed(3)}" pipe, so there is no flare.` : 'Grows the profile as the path moves away from the center, out to this outside diameter at the farthest points.'); }
+  { const si = $('strandInfo'); if (si) { const LY = st.strandLayout; si.textContent = st.profile !== 'strand' || !LY ? '—' : `${LY.n} strand${LY.n === 1 ? '' : 's'}, ${(2 * LY.E).toFixed(2)}" across at the center${new Set(LY.sp.map(q => q.od)).size > 1 ? ', every strand flush to one outer circle' : ''}.${st.strandBad && st.strandBad.length ? ' Skipped (not a size in this stock): ' + st.strandBad.join(', ') + '.' : ''}`; } }
   applyTitleOverrides();
   { const ci = $('contactInfo');
     if (!c.contactsEligible) ci.textContent = state.csvPoints ? 'Imported points: no touch analysis.' : 'Touch points are not available for this profile.';
@@ -3705,10 +3772,10 @@ async function exportStep() {
     A.members.forEach(m => {
       const P = m.pts.map(map), N = P.length, L = m.L * 12;
       if (m.mat === 'wood') m.pieces.forEach(pc => { const pts = []; for (let i = pc.a; i <= pc.b; i++) pts.push(P[i % N]); if (pts.length >= 4) members.push({ pts, closed: false, od: m.od, id: 0, group: m.group, L, sta: pts.map((_, k) => ((pc.a + k) / N) * L), cyc: m.closed, wood: true }); });
-      else members.push({ pts: P, closed: m.closed, od: m.od, id: m.id, group: m.group, L });
+      else members.push({ pts: P, closed: m.closed, od: m.od, id: m.id, group: m.group, L, df: m.df || undefined });
     });
     if (prof === 'truss') rings = A.ribs.map(r => ({ ctr: map(r.ctr), tan: [r.tan[0], -r.tan[2], r.tan[1]], w: r.w * 12, Ro: r.Ro * 12, Ri: r.Ri * 12, sta: r.station * 12, group: r.group }));
-    { const nw = members.filter(m => m.wood).length; desc = `${members.length - nw} hollow members (${A.members[0].od.toFixed(3)}" OD)` + (nw ? `, ${nw} solid oak pieces` : '') + (rings.length ? `, ${rings.length} rib rings` : ''); }
+    { const nw = members.filter(m => m.wood).length; desc = (prof === 'strand' && new Set(A.members.map(m => m.od)).size > 1) ? `${members.length - nw} hollow strands (${c.st.label.replace(/^\d+ STRANDS · /, '').toLowerCase()})` + (A.dense.some(d => d.df) ? ` flaring to ${num('distalOd').toFixed(2)}" OD overall` : '') : `${members.length - nw} hollow members (${A.members[0].od.toFixed(3)}" OD)` + (nw ? `, ${nw} solid oak pieces` : '') + (rings.length ? `, ${rings.length} rib rings` : ''); }
   } else {
     const od = c.st.outerExtentIn * 2, id = prof === 'round_smooth' ? NPS_SCHED_40[$('npsSize').value].id : num('matSize');
     members = A.dense.map(d => ({ pts: d.pts.map(map), closed: d.closed, od, id, group: 0, L: d.ds * 12 * d.pts.length, df: d.df || undefined }));
@@ -3984,6 +4051,7 @@ function collectConfig() {
 }
 function applyConfig(cfg) {
   state.tbManual = Object.assign({}, cfg._tb || {});
+  if (cfg.strandSizes === undefined) $('strandSizes').value = '';
   if (cfg.views) { state.views = cfg.views; refreshViewChips(); }
   Object.keys(cfg).forEach(id => {
     const el = $(id); if (!el || el.type === 'file' || id.startsWith('_')) return;
@@ -4024,6 +4092,7 @@ function wire() {
     if (el.id === 'audioScrubber' || LOCAL_IDS.includes(el.id)) return;
     el.addEventListener('input', () => { if (el.id === 'trussCount') state.fillManual = true; if (el.id === 'trussOD') trussAutoFill(); const v = $(el.id + 'Val'); if (v && FMT[el.id]) v.textContent = FMT[el.id](el.value); if (el.id === 'shift') drawStrip(); rebuild(); });
   });
+  $('strandSizes').addEventListener('input', () => { updateVisibility(); rebuild(); });
   document.querySelectorAll('#panel select, #panel input[type=checkbox], #panel input[type=number], #panel input[type=color]').forEach(el => {
     if (LOCAL_IDS.includes(el.id)) return;
     el.addEventListener(el.type === 'color' || el.type === 'number' ? 'input' : 'change', () => {
