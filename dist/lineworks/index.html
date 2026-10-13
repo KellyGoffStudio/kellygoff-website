@@ -2453,49 +2453,8 @@ function footingSummary() {
   return `${s.length} footing${s.length > 1 ? 's' : ''}: ${f.plate}" plate, ${f.pier}" pier × ${f.pierH}', ${f.nb} × ${f.bd}" bolts. Concrete about ${vol.toFixed(1)} cu yd (${(vol * 1.1).toFixed(1)} with 10% waste).`;
 }
 
-// ---------------------------------------------------------------------
-// Proposal sheets: A-1 (render + statement), A-2 (views, in app_main), A-3 (details) and the view frames as PNG.
-// Letter portrait, 612 x 792 pt, same layout as the Kelly Goff Studio proposal sheets.
-// ---------------------------------------------------------------------
 const PS = { INK: '#1d1f20', NAVY: '#3d5c7c', RULE: '#b8bcc0', PAPER: '#f2f2f3' };
 const psEsc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-function psWrap(t, n) { const w = String(t).split(/\s+/), lines = []; let cur = ''; w.forEach(x => { if ((cur + ' ' + x).trim().length > n) { lines.push(cur.trim()); cur = x; } else cur += ' ' + x; }); if (cur.trim()) lines.push(cur.trim()); return lines; }
-function psCss() {
-  const { INK, NAVY } = PS;
-  return `${FONT_SVG_CSS}
-    text{font-family:'Barlow Condensed','Arial Narrow',sans-serif;fill:${INK}} .lab{font-weight:500;font-size:6.5px;letter-spacing:.14em;fill:${NAVY}} .val{font-weight:500;font-size:9px} .ttl{font-weight:700;font-size:12px}
-    .sm{font-size:7px;letter-spacing:.1em;fill:${NAVY}} .sm2{font-family:'Barlow',sans-serif;font-size:6.5px;fill:#4b5156} .body{font-family:'Barlow',sans-serif;font-size:8px;fill:#2a2d2f} .dim{font-size:7px;font-weight:500;fill:${NAVY}}
-    .hd{font-weight:700;font-size:9px;letter-spacing:.2em} .sec{font-weight:700;font-size:9px;letter-spacing:.18em} .big{font-weight:700;font-size:15px;letter-spacing:.03em} .big2{font-weight:700;font-size:13px} .num{font-weight:700;font-size:8px;fill:${NAVY}} .row{font-size:7px;letter-spacing:.06em}`;
-}
-function psFields() {
-  const c = state.last, A = state.lastA, st = c.st, touches = c.contacts ? c.contacts.filter(k => k.overlap >= 0.25 / 12).length : 0;
-  const site = $('siteName').value, proj = $('projName').value;
-  const dims = $('tbDims').textContent, mat = st.label;
-  let statement = ($('pStatement').value || '').trim();
-  if (!statement) statement = `${proj} is a continuous line drawn from the sound of the place. Its form is generated directly from a recording made on site: loudness, tone and texture decide where the line rises, turns and crosses. Formed from ${mat.toLowerCase()}, the sculpture is ${dims.replace(/ W × /, ' wide × ').replace(/ D × /, ' deep × ').replace(/ H$/, ' high')} and meets itself in ${touches} place${touches === 1 ? '' : 's'}, which brace the form.`;
-  return { c, A, st, touches, site, proj, dims, mat, statement, concept: ($('pConcept').value || 'Monumental sculpture'), issued: ($('pIssued').value || 'Selection panel review'), date: $('tbDate').textContent };
-}
-function psDims(t) { const n = [...String(t).matchAll(/(\d+)'-(\d+)"/g)].map(m => Math.round(+m[1] + m[2] / 12)); return n.length >= 3 ? `${n[2]}'H × ${n[0]}'W × ${n[1]}'D` : t; }
-function psFrame(F, sheetNo, title, scaleLabel, headRight, body) { return svgFinish(psFrameRaw(F, sheetNo, title, scaleLabel, headRight, body)); }
-function psFrameRaw(F, sheetNo, title, scaleLabel, headRight, body) {
-  const { INK, NAVY, RULE, PAPER } = PS, T = { x: 267, y: 657, w: 307, h: 97 };
-  const tb = `<rect x="${T.x}" y="${T.y}" width="${T.w}" height="${T.h}" fill="${PAPER}" stroke="${INK}" stroke-width="0.9"/>
-    <line x1="${T.x}" y1="${T.y + 40}" x2="${T.x + T.w}" y2="${T.y + 40}" stroke="${RULE}"/><line x1="${T.x}" y1="${T.y + 70}" x2="${T.x + T.w}" y2="${T.y + 70}" stroke="${RULE}"/>
-    ${[0.25, 0.5, 0.75].map(f => `<line x1="${T.x + T.w * f}" y1="${T.y + 40}" x2="${T.x + T.w * f}" y2="${T.y + 70}" stroke="${RULE}"/>`).join('')}
-    <line x1="${T.x + T.w * 0.78}" y1="${T.y + 70}" x2="${T.x + T.w * 0.78}" y2="${T.y + T.h}" stroke="${RULE}"/>
-    <text x="${T.x + 8}" y="${T.y + 11}" class="lab">${sheetNo === 'A-1' ? 'PROJECT' : 'SHEET TITLE'}</text><text x="${T.x + 8}" y="${T.y + 26}" class="ttl">${psEsc(title)}</text>
-    <text x="${T.x + 8}" y="${T.y + 36}" class="sm2">${psEsc((sheetNo === 'A-1' ? F.site : F.proj + ' — ' + F.site).toUpperCase())}</text>
-    <text x="${T.x + 8}" y="${T.y + 50}" class="lab">DATE</text><text x="${T.x + 8}" y="${T.y + 64}" class="val">${psEsc(F.date)}</text>
-    <text x="${T.x + T.w * 0.25 + 8}" y="${T.y + 50}" class="lab">SCALE</text><text x="${T.x + T.w * 0.25 + 8}" y="${T.y + 64}" class="val">${psEsc(scaleLabel)}</text>
-    <text x="${T.x + T.w * 0.5 + 8}" y="${T.y + 50}" class="lab">OVERALL DIMS</text><text x="${T.x + T.w * 0.5 + 8}" y="${T.y + 64}" class="val">${psEsc(psDims(F.dims))}</text>
-    <text x="${T.x + T.w * 0.75 + 8}" y="${T.y + 50}" class="lab">MATERIAL</text><text x="${T.x + T.w * 0.75 + 8}" y="${T.y + 64}" class="val">${psEsc(F.mat.length > 18 ? F.mat.slice(0, 18) : F.mat)}</text>
-    <text x="${T.x + 8}" y="${T.y + 82}" class="sm2">© ${new Date().getFullYear()} Kelly Goff Studio. Concept and drawings remain</text><text x="${T.x + 8}" y="${T.y + 91}" class="sm2">the property of the artist.</text>
-    <text x="${T.x + T.w * 0.78 + 8}" y="${T.y + 80}" class="lab">SHEET</text><text x="${T.x + T.w * 0.78 + 8}" y="${T.y + 94}" class="ttl">${sheetNo}</text>`;
-  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="612pt" height="792pt" viewBox="0 0 612 792"><style>${psCss()}</style>
-  <rect width="612" height="792" fill="${PAPER}"/><rect x="19" y="19" width="574" height="754" fill="none" stroke="${INK}" stroke-width="0.8"/>
-  <text x="38" y="46" class="hd">KELLY GOFF STUDIO</text><text x="574" y="46" text-anchor="end" class="sm">${psEsc(headRight)}</text><line x1="38" y1="54" x2="574" y2="54" stroke="${RULE}" stroke-width="0.6"/>
-  ${body}${tb}</svg>`;
-}
 const psSecHead = (x, y, w, t) => `<text x="${x}" y="${y}" class="sec">${psEsc(t)}</text><line x1="${x + t.length * 7 + 8}" y1="${y - 3}" x2="${x + w}" y2="${y - 3}" stroke="${PS.RULE}" stroke-width="0.6"/>`;
 const psBox = (b, label) => `<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="${PS.PAPER}" stroke="${PS.RULE}" stroke-width="0.6" stroke-dasharray="2 2"/>${label ? `<text x="${b.x + 6}" y="${b.y + b.h - 6}" class="sm2">${label}</text>` : ''}`;
 
@@ -2527,7 +2486,6 @@ function svgInline(svg) {
 }
 function psOutlined() { const e = document.getElementById('textMode'); return !!e && e.value === 'outlined'; }
 function svgFinish(svg) { const s = svgInline(svg); return psOutlined() ? svgOutline(s) : s; }
-function makeSheetSVG(o) { return psClean(() => svgFinish(makeSheetSVGraw(o))); }
 function makeTakeoffSVG() { return svgFinish(makeTakeoffSVGraw()); }
 // Outlined text: every <text> becomes a path using the embedded Barlow fonts, so Illustrator needs no fonts installed.
 const _otCache = {};
@@ -2552,164 +2510,13 @@ function svgOutline(svg) {
 }
 
 // ---- clean renders: no kink (amber) or clearance warnings on any sheet image ----
-function psClean(fn) {
-  const ids = ['showKinks', 'showClear'].map($).filter(e => e && e.checked);
-  if (ids.length) { ids.forEach(e => { e.checked = false; }); buildScene(true); }
-  try { return fn(); } finally { if (ids.length) { ids.forEach(e => { e.checked = true; }); buildScene(true); } }
-}
 // ---- offscreen rendering ----
-function psRender(opts) {            // {w,h,cam,bg,clipGrade,keepRefs,keepSlab,keepGrid,opaque}
-  const r = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
-  r.setPixelRatio(1); r.setSize(opts.w, opts.h, false);
-  r.setClearColor(0xf2f2f3, opts.opaque ? 1 : 0);
-  const yw = currentMeshGroup.position.y;
-  const clipped = [];
-  if (opts.clipGrade) { r.localClippingEnabled = true; const pl = [new THREE.Plane(new THREE.Vector3(0, 1, 0), -yw)];
-    currentMeshGroup.traverse(n => { if (n.material) (Array.isArray(n.material) ? n.material : [n.material]).forEach(m => { clipped.push([m, m.clippingPlanes]); m.clippingPlanes = pl; }); }); }
-  const toHide = [[gridHelper, opts.keepGrid], [slab, opts.keepSlab], [vertRef, false], [extraGroup, false], [refGroup, opts.keepRefs], [marker, false], [footGroup, false]].filter(a => a[0]);
-  const saved = toHide.map(([o]) => o.visible); toHide.forEach(([o, keep]) => { if (!keep) o.visible = false; });
-  const bg = scene.background; scene.background = opts.bg || null;
-  r.render(scene, opts.cam);
-  const url = r.domElement.toDataURL('image/png');
-  clipped.forEach(([m, c]) => { m.clippingPlanes = c; });
-  scene.background = bg; toHide.forEach(([o], i) => { o.visible = saved[i]; });
-  r.dispose(); if (r.forceContextLoss) r.forceContextLoss();
-  return url;
-}
-function psRenderOrtho(kind, b, ox, oy, k, ctx) {     // pixels match the SVG: box b (pt), drawing origin (ox, oy), k pt per ft
-  const { bb, od, yTop, ground } = ctx, yw = currentMeshGroup.position.y, S = 3, w = Math.round(b.w * S), h = Math.round(b.h * S);
-  const fw = b.w / k, fh = b.h / k, cam = new THREE.OrthographicCamera(-fw / 2, fw / 2, fh / 2, -fh / 2, 0.1, 2000);
-  const yT = yTop - (b.y - oy) / k, cy = yT - fh / 2 + yw;
-  if (kind === 'front') { const uL = (b.x - ox) / k + bb.mn[0] - od / 2, cu = uL + fw / 2; cam.position.set(cu, cy, 600); cam.lookAt(cu, cy, 0); }
-  else if (kind === 'side') { const zL = bb.mx[2] + od / 2 - (b.x - ox) / k, zc = zL - fw / 2; cam.position.set(600, cy, zc); cam.lookAt(0, cy, zc); }
-  else { const uL = (b.x - ox) / k + bb.mn[0] - od / 2, cu = uL + fw / 2, zT = (b.y - oy) / k + bb.mn[2] - od / 2, zc = zT + fh / 2; cam.up.set(0, 0, -1); cam.position.set(cu, 600, zc); cam.lookAt(cu, 0, zc); }
-  cam.updateMatrixWorld(); cam.updateProjectionMatrix();
-  return psRender({ w, h, cam, clipGrade: ground });
-}
-function psFigure(x, base, k) {             // 5'-10" standing figure, feet at (x, base), k pt per ft
-  const f = (v) => v.toFixed(1), r = 0.38 * k, fill = 'fill="#4b5156" fill-opacity=".85"';
-  return `<g ${fill}><circle cx="${f(x)}" cy="${f(base - 5.45 * k)}" r="${f(r)}"/><rect x="${f(x - 0.5 * k)}" y="${f(base - 5.0 * k)}" width="${f(1.0 * k)}" height="${f(1.85 * k)}" rx="${f(0.18 * k)}"/>
-    <rect x="${f(x - 0.78 * k)}" y="${f(base - 4.9 * k)}" width="${f(0.24 * k)}" height="${f(1.8 * k)}" rx="${f(0.1 * k)}"/><rect x="${f(x + 0.54 * k)}" y="${f(base - 4.9 * k)}" width="${f(0.24 * k)}" height="${f(1.8 * k)}" rx="${f(0.1 * k)}"/>
-    <rect x="${f(x - 0.46 * k)}" y="${f(base - 3.2 * k)}" width="${f(0.4 * k)}" height="${f(3.2 * k)}"/><rect x="${f(x + 0.06 * k)}" y="${f(base - 3.2 * k)}" width="${f(0.4 * k)}" height="${f(3.2 * k)}"/></g>`;
-}
-function psHero(w, h) {
-  const asp = w / h, cam = new THREE.PerspectiveCamera(photoTex ? num('photoFov') : (camera.fov || 40), asp, 0.1, 2000);
-  cam.position.copy(camera.position); cam.quaternion.copy(camera.quaternion); cam.up.copy(camera.up); cam.updateMatrixWorld();
-  if (camera.isOrthographicCamera) { cam.fov = 40; cam.lookAt(controls.target); }
-  let bg = null; if (photoTex) { fitPhoto(asp); bg = photoTex; }
-  const url = psRender({ w: Math.round(w * 3), h: Math.round(h * 3), cam, bg, opaque: !photoTex, keepSlab: chk('planeOn') && !photoTex, keepGrid: photoTex ? chk('photoGrid') : false, keepRefs: true, clipGrade: chk('planeOn') });
-  if (photoTex) fitPhoto();
-  return url;
-}
 
 // ---- A-1 ----
-function makeA1() {
-  const F = psFields(), hero = { x: 39, y: 68, w: 534, h: 460 };
-  const img = psClean(() => psHero(hero.w, hero.h));
-  let b = `<image xlink:href="${img}" x="${hero.x}" y="${hero.y}" width="${hero.w}" height="${hero.h}" preserveAspectRatio="xMidYMid slice"/><rect x="${hero.x}" y="${hero.y}" width="${hero.w}" height="${hero.h}" fill="none" stroke="${PS.RULE}" stroke-width="0.6"/>`;
-  b += `<text x="39" y="545" class="lab">CONCEPT</text><line x1="39" y1="549" x2="120" y2="549" stroke="${PS.RULE}" stroke-width="0.6"/>`;
-  psWrap(F.concept.toUpperCase(), 13).forEach((l, i) => { b += `<text x="39" y="${566 + i * 15}" class="big2">${psEsc(l)}</text>`; });
-  b += psSecHead(150, 545, 424, 'PROJECT STATEMENT'.split('').join('').replace(/^/, '')) ;
-  const paras = F.statement.split(/\n+/); let y = 563;
-  paras.forEach(p => { psWrap(p, 92).forEach(l => { b += `<text x="150" y="${y}" class="body">${psEsc(l)}</text>`; y += 11.5; }); y += 5; });
-  b += `<text x="39" y="728" class="lab">ISSUED FOR</text><text x="39" y="742" class="val">${psEsc(F.issued.toUpperCase())}</text><text x="150" y="728" class="lab">SITE</text><text x="150" y="742" class="val">${psEsc(F.site.toUpperCase())}</text>`;
-  return psFrame(F, 'A-1', F.proj.toUpperCase(), 'NTS', 'PROPOSAL RENDERING — NOT FOR CONSTRUCTION', b);
-}
 
 // ---- A-3 ----
-function psSectionDrawing(f, b) {          // typical footing, cut through the pier axis. inches -> pt
-  const { INK, NAVY } = PS, up = 20, total = up + f.depth + f.pierH * 12, wid = Math.max(f.pier, f.plate) + 36;
-  const k = Math.min((b.w - 60) / wid, (b.h - 84) / total), cx = b.x + b.w / 2 + 6, y0 = b.y + 40 + 0, X = (v) => cx + v * k, Y = (v) => y0 + v * k;   // v in inches from centre / grade (down +)
-  const yp = f.depth, t = f.plateT, yb = f.depth + f.pierH * 12, rp = f.plate / 2, rr = f.pier / 2, od = Math.max(f.odm, f.span), g = f.gH, rb = f.plate * 0.43;
-  let s = `<defs><pattern id="hc" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="#9a9ea2" stroke-width=".6"/></pattern><pattern id="hs" width="5" height="5" patternUnits="userSpaceOnUse"><circle cx="1.2" cy="1.2" r=".5" fill="#9a9ea2"/><circle cx="3.7" cy="3.7" r=".5" fill="#9a9ea2"/></pattern></defs>`;
-  s += `<rect x="${b.x + 8}" y="${Y(0)}" width="${b.w - 16}" height="${(yb + 6) * k}" fill="url(#hs)" stroke="none"/>`;
-  s += `<rect x="${X(-rr)}" y="${Y(yp)}" width="${rr * 2 * k}" height="${f.pierH * 12 * k}" fill="#f2f2f3" stroke="${INK}" stroke-width="0.9"/><rect x="${X(-rr)}" y="${Y(yp)}" width="${rr * 2 * k}" height="${f.pierH * 12 * k}" fill="url(#hc)"/>`;
-  s += `<rect x="${X(-rp)}" y="${Y(yp - t)}" width="${rp * 2 * k}" height="${Math.max(2.4, t * k)}" fill="${INK}"/>`;
-  [-1, 1].forEach(sg => { s += `<polygon points="${X(sg * od / 2)},${Y(yp - t)} ${X(sg * rp * 0.92)},${Y(yp - t)} ${X(sg * od / 2)},${Y(yp - t - g)}" fill="#e6e7e8" stroke="${INK}" stroke-width=".8"/>`; });
-  s += `<rect x="${X(-od / 2)}" y="${Y(-up)}" width="${od * k}" height="${(up + yp - t) * k}" fill="#f2f2f3" stroke="${INK}" stroke-width=".9"/>`;
-  [-1, 1].forEach(sg => { const x = X(sg * rb), r = f.bd / 2 * k; s += `<line x1="${x}" y1="${Y(yp - t - f.bd * 1.2)}" x2="${x}" y2="${Y(yp + f.boltLen)}" stroke="${INK}" stroke-width="${Math.max(0.8, r * 2)}" stroke-dasharray="3 1.5" opacity=".75"/><rect x="${x - r * 1.9}" y="${Y(yp - t - f.bd * 0.9)}" width="${r * 3.8}" height="${f.bd * 0.9 * k}" fill="${INK}"/>`; });
-  s += `<line x1="${b.x + 8}" y1="${Y(0)}" x2="${b.x + b.w - 8}" y2="${Y(0)}" stroke="${INK}" stroke-width="1.2"/><text x="${b.x + 10}" y="${Y(0) - 3}" class="sm">FINISH GRADE</text>`;
-  const dv = (x, y1, y2, txt) => `<g stroke="${NAVY}" stroke-width=".6"><line x1="${x}" y1="${y1}" x2="${x}" y2="${y2}"/><line x1="${x - 3}" y1="${y1}" x2="${x + 3}" y2="${y1}"/><line x1="${x - 3}" y1="${y2}" x2="${x + 3}" y2="${y2}"/></g><text transform="translate(${x - 3},${(y1 + y2) / 2}) rotate(-90)" text-anchor="middle" class="dim">${txt}</text>`;
-  const dh = (y, x1, x2, txt) => `<g stroke="${NAVY}" stroke-width=".6"><line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}"/><line x1="${x1}" y1="${y - 3}" x2="${x1}" y2="${y + 3}"/><line x1="${x2}" y1="${y - 3}" x2="${x2}" y2="${y + 3}"/></g><text x="${(x1 + x2) / 2}" y="${y - 3}" text-anchor="middle" class="dim">${txt}</text>`;
-  s += dv(b.x + 16, Y(0), Y(yp), `${f.depth}"`) + dv(b.x + 16, Y(yp), Y(yb), ftIn(f.pierH)) + dh(Y(yb) + 10, X(-rr), X(rr), `PIER Ø${f.pier}"`);
-  s += `<text x="${X(rr) + 4}" y="${Y(yp + f.boltLen / 2)}" class="dim">${f.nb} × Ø${f.bd}" ANCHOR</text><text x="${X(rr) + 4}" y="${Y(yp + f.boltLen / 2) + 8}" class="dim">BOLTS, ${f.boltLen}" EMBED</text>`;
-  { const tl = [`PLATE Ø${f.plate}" × ${f.plateT}"`, `${f.ng} GUSSETS ${f.gT}" × ${Math.round(g)}" HIGH`], tx = X(rr) + 4; tl.forEach((l, i) => { s += `<text x="${tx}" y="${Y(yp) - 4 + i * 8 - 8}" class="dim">${psEsc(l)}</text>`; }); }
-  return s;
-}
-function psMemberSection(F, b) {
-  const { INK, NAVY } = PS, st = F.st, prof = $('profileType').value, cx = b.x + b.w / 2, cy = b.y + 78;
-  let s = '', ext, lines = [];
-  const circ = (x, y, r, fill, sw) => `<circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="${r.toFixed(2)}" fill="${fill}" stroke="${INK}" stroke-width="${sw || 0.9}"/>`;
-  if (prof === 'square') {
-    ext = Math.max(st.w, st.h); const k = 110 / ext;
-    s += `<rect x="${cx - st.w * k / 2}" y="${cy - st.h * k / 2}" width="${st.w * k}" height="${st.h * k}" fill="#e6e7e8" stroke="${INK}" stroke-width=".9"/>`; lines = [`${st.w}" × ${st.h}" SOLID WOOD`];
-  } else if (prof === 'strand' || prof === 'truss') {
-    const n = prof === 'strand' ? parseInt($('strandCount').value) : st.memCount, od = prof === 'strand' ? st.strandOD : st.memOD, id = prof === 'strand' ? st.strandID : st.memID,
-      R = prof === 'strand' ? st.strandBundleR : st.ringOD / 2 + od / 2; ext = 2 * (R + od / 2); const k = Math.min(120 / ext, 6);
-    if (prof === 'truss') s += circ(cx, cy, st.ringOD / 2 * k, 'none', 0.8).replace('stroke-width="0.8"', 'stroke-width="0.8" stroke-dasharray="3 2"');
-    const ns = st.steelCount || n, isSteel = new Array(n).fill(!(st.woodCount > 0));
-    if (st.woodCount > 0) for (let q = 0; q < ns; q++) isSteel[Math.min(n - 1, Math.floor((q + 0.5) * n / ns))] = true;
-    for (let m = 0; m < n; m++) { const a = m / n * Math.PI * 2 - Math.PI / 2, x = cx + Math.cos(a) * R * k, y = cy + Math.sin(a) * R * k;
-      s += circ(x, y, od / 2 * k, isSteel[m] ? '#d9dbdd' : '#d7c3a0'); if (isSteel[m] && id > 0) s += circ(x, y, id / 2 * k, '#f2f2f3', 0.5); }
-    lines = prof === 'strand' ? [`${n} × ${od}" OD STRANDS`, `BUNDLE Ø${(ext).toFixed(1)}"`] : [`${st.steelCount} STAINLESS + ${st.woodCount} OAK × ${od}" OD`, `RIB RING Ø${st.ringOD}" · BUNDLE Ø${ext.toFixed(1)}"`];
-  } else {
-    const od = st.odIn, id = prof === 'round_smooth' ? NPS_SCHED_40[$('npsSize').value].id : num('matSize'); ext = od; const k = 110 / ext;
-    s += circ(cx, cy, od / 2 * k, '#e6e7e8') + circ(cx, cy, id / 2 * k, '#f2f2f3', 0.7);
-    lines = [`${st.label}`, `OD ${od.toFixed(3)}" · ID ${id.toFixed(3)}"`];
-  }
-  s += `<g stroke="${NAVY}" stroke-width=".5" fill="none"><line x1="${cx - 70}" y1="${cy + 80}" x2="${cx + 70}" y2="${cy + 80}"/></g>`;
-  lines.forEach((l, i) => { s += `<text x="${cx}" y="${cy + 94 + i * 9}" text-anchor="middle" class="dim">${psEsc(l)}</text>`; });
-  s += `<text x="${cx}" y="${cy + 94 + lines.length * 9 + 4}" text-anchor="middle" class="sm2">SECTION AT 1:1 OF DRAWN SIZE, NOT TO PLAN SCALE</text>`;
-  return s;
-}
-function psTouchDetail(F, b) {
-  const { INK, NAVY } = PS, od = 26, cx = b.x + 110, cy = b.y + b.h / 2 + 8, ov = Math.max(2, Math.min(od * 0.5, num('touchOverlap') * 2.2));
-  let s = `<rect x="${cx - 100}" y="${cy - od / 2}" width="200" height="${od}" fill="#e6e7e8" stroke="${INK}" stroke-width=".9"/>`;
-  s += `<path d="M ${cx - od / 2} ${cy - od / 2 - 70} L ${cx - od / 2} ${cy - od / 2 + ov} Q ${cx} ${cy - od / 2 + ov + od * 0.18} ${cx + od / 2} ${cy - od / 2 + ov} L ${cx + od / 2} ${cy - od / 2 - 70} Z" fill="#d9dbdd" stroke="${INK}" stroke-width=".9"/>`;
-  s += `<path d="M ${cx - od / 2} ${cy - od / 2 + ov} Q ${cx} ${cy - od / 2 + ov + od * 0.18} ${cx + od / 2} ${cy - od / 2 + ov}" fill="none" stroke="${INK}" stroke-width="1.8"/>`;
-  s += `<g stroke="${NAVY}" stroke-width=".6"><line x1="${cx + od / 2 + 12}" y1="${cy - od / 2}" x2="${cx + od / 2 + 12}" y2="${cy - od / 2 + ov}"/><line x1="${cx + od / 2 + 7}" y1="${cy - od / 2}" x2="${cx + od / 2 + 17}" y2="${cy - od / 2}"/></g><text x="${cx + od / 2 + 20}" y="${cy - od / 2 - 5}" class="dim">OVERLAP ${num('touchOverlap')}"</text>`;
-  s += `<text x="${cx - 96}" y="${cy + od / 2 + 12}" class="dim">CONTINUOUS MEMBER (RUNS THROUGH UNHARMED)</text><text x="${cx - od / 2 - 4}" y="${cy - od / 2 - 74}" class="dim">NOTCHED MEMBER, SADDLE CUT</text>`;
-  s += `<text x="${cx - 96}" y="${cy + od / 2 + 22}" class="sm2">WELD ALL AROUND AT THE SADDLE, GRIND FLUSH, THEN FINISH.</text>`;
-  return s;
-}
-function makeA3() {
-  const F = psFields(), { c, A, st } = F, { INK, NAVY, RULE } = PS, f = (state.footings || [])[0];
-  const b1 = { x: 39, y: 82, w: 179, h: 268 }, b2 = { x: 230, y: 82, w: 178, h: 268 }, b3 = { x: 39, y: 382, w: 369, h: 250 };
-  let s = `<text x="38" y="70" class="hd" style="display:none"></text>`;
-  s += psSecHead(39, 76, 179, '1 — SUB-GRADE FOOTING') + psSecHead(230, 76, 178, '2 — MEMBER SECTION') + psSecHead(39, 376, 369, '3 — TOUCH POINTS & BENDS');
-  s += psBox(b1) + psBox(b2) + psBox(b3);
-  s += f ? psSectionDrawing(f, b1) : `<text x="${b1.x + b1.w / 2}" y="${b1.y + b1.h / 2}" text-anchor="middle" class="sm2">TURN ON THE GROUND PLANE AND FOOTINGS</text>`;
-  s += psMemberSection(F, b2) + psTouchDetail(F, b3);
-  // bends table inside frame 3
-  const minR = A.minR > 9999 ? '—' : (A.minR * 12).toFixed(1) + '"', tx = b3.x + 232, rows = [['PATH LENGTH', ftIn(A.length)], ['TIGHTEST BEND (CL)', minR + ' R'], ['TOUCH POINTS', String(F.touches)], ['TOUCH OVERLAP', num('touchOverlap') + '"'], ['ROLLER COMFORT', num('bendFactor') + '× ' + (st.profile === 'square' ? 'WIDTH' : 'ID')], ['EST. WEIGHT', $('tbWeight').textContent.replace(/\s*·.*$/, '')]];
-  rows.forEach((r, i) => { const y = b3.y + 40 + i * 24; s += `<text x="${tx}" y="${y}" class="lab">${r[0]}</text><text x="${tx}" y="${y + 11}" class="val">${psEsc(r[1])}</text><line x1="${tx}" y1="${y + 15}" x2="${b3.x + b3.w - 10}" y2="${y + 15}" stroke="${RULE}" stroke-width=".4"/>`; });
-  // callouts
-  const cx0 = 434, cw = 139; let y = 76;
-  s += psSecHead(cx0, y, cw, 'TECHNICAL CALLOUTS'.slice(0, 18)); y += 14;
-  const call = [];
-  if (f) call.push(`Base plates sit ${f.depth}" below final grade on engineer-designed concrete piers, ${f.pier}" diameter × ${ftIn(f.pierH)}. ${f.ng} gussets of ${f.gT}" plate carry the post into the ${f.plate}" plate. ${f.nb} × ${f.bd}" anchor bolts with ${f.boltLen}" embedment. Topsoil covers all hardware.`);
-  call.push(`${st.label}. ${st.woodCount > 0 ? 'Oak members are round, the same diameter as the tubing, in 4\', 6\' and 8\' lengths with 1/2" between butt ends. ' : ''}Members that cross are notched so one runs through unharmed.`);
-  call.push(`Bends are rolled to the radii on the takeoff sheet; the tightest centerline radius is ${minR}. ${F.touches} touch point${F.touches === 1 ? '' : 's'} overlap ${num('touchOverlap')}" and are welded and finished flush.`);
-  call.forEach((t, i) => { s += `<text x="${cx0}" y="${y + 6}" class="num">${i + 1}</text>`; psWrap(t, 36).forEach(l => { s += `<text x="${cx0 + 12}" y="${y + 6}" class="body" style="font-size:7px">${psEsc(l)}</text>`; y += 9; }); y += 7; });
-  y += 12; s += psSecHead(cx0, y, cw, 'MATERIALS & FINISHES'.slice(0, 20)); y += 12;
-  [['PRIMARY', st.label], ['BASEPLATE', $('mBase').value], ['FASTENERS', $('mFast').value], ['FINISH', $('mFinish').value]].forEach(r => { s += `<text x="${cx0}" y="${y}" class="lab">${r[0]}</text><text x="${cx0 + cw}" y="${y}" text-anchor="end" class="row">${psEsc(String(r[1]).toUpperCase().slice(0, 26))}</text><line x1="${cx0}" y1="${y + 4}" x2="${cx0 + cw}" y2="${y + 4}" stroke="${RULE}" stroke-width=".4"/>`; y += 13; });
-  y += 6; s += psSecHead(cx0, y, cw, 'GENERAL NOTES'); y += 12;
-  psWrap(`Issued for panel review only. Structural calculations and wind-load analysis by the engineer of record to precede fabrication. Footing sizes shown are concept. Dimensions nominal; verify in field.${f ? ' ' + footingSummary().split('. ').slice(-1)[0] : ''}`, 38).forEach(l => { s += `<text x="${cx0}" y="${y}" class="body" style="font-size:7px">${psEsc(l)}</text>`; y += 9; });
-  s += `<text x="39" y="705" class="lab">MAINTENANCE</text>`;
-  psWrap('Annual visual check of ground-level entries and exposed welds. Wash with low-pressure water and non-abrasive detergent.', 52).forEach((l, i) => { s += `<text x="39" y="${714 + i * 8}" class="sm2">${psEsc(l)}</text>`; });
-  return psFrame(F, 'A-3', 'DETAILS & FABRICATION NOTES', 'AS NOTED', 'ENGINEER OF RECORD TO CONFIRM', s);
-}
 
 // ---- exports ----
-function psDataUrlToBlob(u) { const [h, d] = u.split(','), mime = /:(.*?);/.exec(h)[1], bin = atob(d), a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); return new Blob([a], { type: mime }); }
-function exportA1() { if (!needForm()) return; saveBlob(new Blob([makeA1()], { type: 'image/svg+xml' }), slug() + '_sheet_A-1.svg'); setStatus('Sheet A-1 saved: render, concept and project statement.'); }
-function exportA3() { if (!needForm()) return; saveBlob(new Blob([makeA3()], { type: 'image/svg+xml' }), slug() + '_sheet_A-3.svg'); setStatus('Sheet A-3 saved: footing section, member section, touch point and bend details.'); }
-function exportFrames() {
-  if (!needForm()) return;
-  const frames = []; psClean(() => { makeSheetSVG({ shaded: true, frames }); frames.push({ name: 'hero', url: psHero(534, 460) }); });
-  frames.forEach((fr, i) => setTimeout(() => saveBlob(psDataUrlToBlob(fr.url), `${slug()}_frame_${fr.name}.png`), i * 350));
-  setStatus('Frame images saved: hero, front, side and plan, sized to the proposal sheet frames.');
-}
 
 // =====================================================================
 // LINEWORKS V9 — application (UI, three.js scene, exports). Units: feet, y up.
@@ -2823,12 +2630,20 @@ function buildPanel() {
       </div>
     </div>
     <div id="g_susp">${N_('hangH', 'Bottom of form above floor (ft)', 0, 0, 60, 0.5)}
-      ${C_('postsOn', 'Lift on posts', false, 'Raises the whole form and stands it on vertical posts under its lowest points. The posts reach the floor and run up to the centerline of the line, so trim them where they meet the pipe.')}
-      <div id="g_posts">
-        <div class="row2">${N_('postN', 'Posts', 4, 1, 12, 1)}${N_('postClear', 'Clear height under pipe (ft)', 2, 0, 20, 0.25)}</div>
-        <div class="row2">${N_('postOd', 'Post dia (in, 0 = pipe OD)', 0, 0, 24, 0.125)}<div></div></div>
-        <div class="info" id="postInfo">—</div>
+    </div>
+    ${C_('postsOn', 'Lift on posts', false, 'Raises the whole form and stands it on vertical posts. Works with the ground plane: grade stays at the floor, and the posts run from base plates up to the centerline of the line, so trim them where they meet the pipe. Posts go where the line is low and close to level.')}
+    <div id="g_posts">
+      <div class="row2">${N_('postN', 'Posts', 4, 1, 12, 1)}${N_('postClear', 'Clear height under pipe (ft)', 2, 0, 20, 0.25)}</div>
+      <div class="row2">${N_('postOd', 'Post dia (in, 0 = pipe OD)', 0, 0, 24, 0.125)}<div></div></div>
+      ${C_('plateOn', 'Base plates and bolts', true, 'A round plate and anchor bolts at the foot of each post, sitting on grade. No piers. Concept geometry; the engineer of record sizes the real thing.')}
+      <div id="g_plates">
+        <div class="row2">${N_('plateDia', 'Plate dia (in, 0 = auto)', 0, 0, 60, 0.5)}${N_('plateT', 'Plate thickness (in)', 1, 0.25, 4, 0.125)}</div>
+        <div class="row2">${N_('plateBolts', 'Bolts per plate', 4, 3, 12, 1)}${N_('plateBoltDia', 'Bolt dia (in)', 1, 0.5, 3, 0.125)}</div>
+        <div class="row2">${N_('gusN', 'Gussets per post', 4, 0, 12, 1)}${N_('gusT', 'Gusset thickness (in)', 0.5, 0.25, 2, 0.125)}</div>
+        <div class="row2">${N_('gusH', 'Gusset height (in, 0 = auto)', 0, 0, 48, 0.5)}<div></div></div>
       </div>
+      <div class="info" id="postInfo">—</div>
+    </div>
     </div>
     ${C_('showVertRef', 'Vertical reference scale', true)}
     <div class="sub">Presenting</div>
@@ -2901,7 +2716,7 @@ function buildPanel() {
       <button class="btn" id="exportCsv" title="Centerline points, feet">CSV · points</button>
       <button class="btn" id="btnPrint" title="Print the view">Print</button>
     </div>
-    <div class="sub">Proposal sheets</div>
+    <div style="display:none">
     <label class="lbl" for="pConcept"><span>Concept title (A-1)</span></label><input type="text" id="pConcept" value="Monumental sculpture" spellcheck="false">
     <label class="lbl" for="pIssued"><span>Issued for</span></label><input type="text" id="pIssued" value="Selection panel review" spellcheck="false">
     <label class="lbl" for="pStatement"><span>Project statement (blank = draft from the model)</span></label><textarea id="pStatement" rows="4" spellcheck="true" placeholder="Describe the site, the idea, and how the form comes from the site's sound."></textarea>
@@ -2909,14 +2724,7 @@ function buildPanel() {
     <label class="lbl" for="mFinish"><span>Finish</span></label><input type="text" id="mFinish" value="To be specified" spellcheck="false">
     ${S_('textMode', 'Sheet text', [['live', 'Live text (editable, needs Barlow installed)'], ['outlined', 'Outlined (no fonts needed, not editable)']], 'live')}
     ${S_('a2Style', 'A-2 views', [['line', 'Line drawing (vector)'], ['shaded', 'Shaded render (image)']], 'line')}
-    <div class="btngrid" style="margin-top:6px">
-      <button class="btn solid" id="exportA1" title="Hero render, concept title and project statement">SVG · A-1</button>
-      <button class="btn solid" id="exportSvg" title="Plan, front and side at scale with a 5'-10&quot; figure">SVG · A-2</button>
-      <button class="btn solid" id="exportA3" title="Footing section, member section, touch point detail, callouts and materials">SVG · A-3</button>
-      <button class="btn" id="exportFrames" title="Hero, front, side and plan as PNG, sized to the proposal sheet frames">PNG · frames</button>
     </div>
-    <button class="btn wide" id="heroPhoto" title="Same as Site photo under Site constraints. The hero render on A-1 uses it as the background." style="margin-top:6px">Hero background photo…</button>
-    <div class="hint">Orbit the 3D view to frame the hero, then export A-1. Anything below the ground plane is cut away.</div>
     <div class="sub">3D models</div>
     <div class="btngrid">
       <button class="btn solid" id="exportStep" title="Hollow pipe solids for Fusion 360 and SolidWorks, inches, Z up. Members that cross are cut so one runs through and the other is notched. Takes a minute or two.">STEP</button>
@@ -2959,7 +2767,7 @@ function updateVisibility() {
   show('g_trussS40', $('trussStockType').value === 'sched40'); show('g_trussTub', $('trussStockType').value === 'tubing');
   show('g_seed', $('trussDistribution').value === 'irregular'); show('g_wood', chk('woodOn'));
   $('detail').disabled = chk('lenOn'); $('pathLen').disabled = !chk('lenOn'); $('c_detail').style.opacity = chk('lenOn') ? .5 : 1; $('c_pathLen').style.opacity = chk('lenOn') ? 1 : .6; $('lenGrow').disabled = !chk('lenOn');
-  show('g_plane', planeOn); show('g_found', chk('foundOn')); show('g_susp', !planeOn); show('g_posts', chk('postsOn'));
+  show('g_plane', planeOn); show('g_found', chk('foundOn') && !chk('postsOn')); show('g_susp', !planeOn); show('g_posts', chk('postsOn')); show('g_plates', chk('plateOn')); show('c_planeFt', !chk('postsOn'));
   $('exportRibs').disabled = prof !== 'truss';
   { const vt = $('viewTitle'); if (/^(Perspective|Orthographic) View$/.test(vt.textContent) || !vt.textContent) vt.textContent = (typeof isOrtho !== 'undefined' && isOrtho) ? 'Orthographic View' : 'Perspective View'; }
 }
@@ -3020,6 +2828,11 @@ function gatherParams() {
     rx: num('rotX'), ry: num('rotY'), rz: num('rotZ')
   };
 }
+function plateSpec(od) {
+  const bd = Math.max(0.5, num('plateBoltDia')), D = num('plateDia') > 0 ? num('plateDia') : Math.ceil(od + 9 * bd), n = Math.max(3, Math.round(num('plateBolts')));
+  const gH = num('gusH') > 0 ? num('gusH') : Math.min(18, Math.max(8, 2.5 * od));
+  return { D, t: num('plateT'), n, bd, bcR: od / 2 + 2.5 * bd, ng: Math.max(0, Math.round(num('gusN'))), gT: num('gusT'), gH, gR: D / 2 * 0.9 };   
+}
 function postSpec(c) {
   const prof = $('profileType').value, pipeOd = c.st.outerExtentIn * 2;
   const pipeId = prof === 'round_smooth' ? NPS_SCHED_40[$('npsSize').value].id : prof === 'corrugated' ? num('matSize') : 0;
@@ -3037,7 +2850,7 @@ function computeAll() {
   const [W, D, H] = base;
   const dimsC = [Math.max(1, W - odFt), Math.max(0.5, H - odFt), Math.max(1, D - odFt)];
   const pipeLimitFt = state.csvPoints ? 0 : st.minCenterIn / 12, limitFt = state.csvPoints ? 0 : num('smooth') / 100 * Math.max(W, D);
-  const planeOn = chk('planeOn'), planeFt = planeOn ? num('planeFt') : 0, frac = 0, postsOn = chk('postsOn') && !planeOn;
+  const planeOn = chk('planeOn'), postsOn = chk('postsOn'), planeFt = planeOn && !postsOn ? num('planeFt') : 0, frac = 0;   // with posts, grade stays at the floor and the form is lifted
   const o = { dimsC, mode: 'suspended', hangH: planeOn ? 0 : num('hangH'), limitFt, N: 480 };
   if (state.csvPoints) { o.noFit = true; o.unitFn = (sig, fair) => csvUnit(P, fair); }
   let solved, lenInfo = null;
@@ -3078,14 +2891,18 @@ function computeAll() {
   const dy0 = dyBase, orient = (pts) => rot(pts).map(p => [p[0], p[1] + dy0, p[2]]);   // rigid: the form itself never changes
   const f = Object.assign({}, f0, { pieces: f0.pieces.map(pc => Object.assign({}, pc, { pts: orient(pc.pts) })), lap: orient(f0.lap) });
   let yc = 0, planeH = 0;                                       // the form is identical with or without the plane; grade just slices it
-  if (planeOn) { let mn = 1e9, mx = -1e9; f.lap.forEach(p => { mn = Math.min(mn, p[1]); mx = Math.max(mx, p[1]); }); planeH = mx - mn; yc = mn + planeFt; }
+  if (planeOn) { let mn = 1e9, mx = -1e9; f.lap.forEach(p => { mn = Math.min(mn, p[1]); mx = Math.max(mx, p[1]); }); planeH = mx - mn; yc = postsOn ? 0 : mn + planeFt; }
   const sh = (pts) => yc ? pts.map(p => [p[0], p[1] - yc, p[2]]) : pts;
   const form = Object.assign({}, f, { pieces: f.pieces.map(pc => Object.assign({}, pc, { pts: sh(pc.pts) })), lap: sh(f.lap) });
   { const tp = (p) => sh([orient([p])[0]])[0]; contacts = contacts.map(k => Object.assign({}, k, { mid: tp(k.mid), pa: tp(k.pa), pb: tp(k.pb) })); }
   let posts = [];
   if (postsOn) {                                                // posts go under the lowest, best-spread points of the line
     const L = form.lap, n = Math.max(1, Math.round(num('postN'))); let mn = 1e9, mx = -1e9; L.forEach(p => { mn = Math.min(mn, p[1]); mx = Math.max(mx, p[1]); });
-    const cand = L.filter(p => p[1] - mn <= Math.max(0.35 * (mx - mn), 0.5)), ch = [cand.reduce((a, b) => b[1] < a[1] ? b : a)];
+    const nL = L.length, slope = (i) => { const a = L[(i - 1 + nL) % nL], b = L[(i + 1) % nL], l = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]) || 1; return Math.abs(b[1] - a[1]) / l; };
+    const band = Math.max(0.35 * (mx - mn), 0.5); let cand = [];
+    for (const maxSlope of [0.25, 0.4, 0.6, 9]) { cand = L.filter((p, i) => p[1] - mn <= band && slope(i) <= maxSlope); if (cand.length >= n) break; }   // low and close to level, so a post meets the pipe squarely
+    if (!cand.length) cand = L.slice();
+    const ch = [cand.reduce((a, b) => b[1] < a[1] ? b : a)];
     while (ch.length < Math.min(n, cand.length)) { let best = null, bd = -1; cand.forEach(p => { const d = Math.min(...ch.map(q => Math.hypot(p[0] - q[0], p[2] - q[2]))); if (d > bd) { bd = d; best = p; } }); ch.push(best); }
     posts = ch.map(p => ({ x: p[0], z: p[2], yTop: p[1] }));
   }
@@ -3577,9 +3394,24 @@ function buildScene(draft) {
   const X = { c, qMul: draft ? 0.35 : 1, flare: num('distalFlare'), centroid, maxDist, limit: c.pipeLimitFt, A: { length: 0, lenAbove: 0, minR: 99999, tightFt: 0, lowFt: 0, dense: [], members: [], ribs: [], baseW: 0, extraW: 0 } };
   form.pieces.forEach((pc, i) => buildPiece(pc, i, X));
   if (c.postsOn && c.posts.length) {
-    const ps = postSpec(c), pm = new THREE.MeshStandardMaterial({ color: $('matColor').value, roughness: 0.45, metalness: 0.25 });
-    c.posts.forEach(p => { const m = new THREE.Mesh(new THREE.CylinderGeometry(ps.od / 24, ps.od / 24, p.yTop, 32), pm); m.position.set(p.x, p.yTop / 2, p.z); currentMeshGroup.add(m); });
-    const pi = $('postInfo'); if (pi) pi.textContent = `${c.posts.length} post${c.posts.length === 1 ? '' : 's'}, ${ps.od.toFixed(3)}" OD, ${c.posts.map(p => ftIn(p.yTop)).join(' / ')} to the centerline.`;
+    const ps = postSpec(c), pm = new THREE.MeshStandardMaterial({ color: 0xb0b4b8, roughness: 0.55, metalness: 0.2 });
+    const pl = chk('plateOn') ? plateSpec(ps.od) : null, tF = pl ? pl.t / 12 : 0, bm = new THREE.MeshStandardMaterial({ color: 0x8e9398, roughness: 0.4, metalness: 0.6 });
+    c.posts.forEach(p => {
+      const h = p.yTop - tF, m = new THREE.Mesh(new THREE.CylinderGeometry(ps.od / 24, ps.od / 24, h, 32), pm); m.position.set(p.x, tF + h / 2, p.z); currentMeshGroup.add(m);
+      if (!pl) return;
+      const pt = new THREE.Mesh(new THREE.CylinderGeometry(pl.D / 24, pl.D / 24, tF, 48), pm); pt.position.set(p.x, tF / 2, p.z); currentMeshGroup.add(pt);
+      for (let g = 0; g < pl.ng; g++) {                         // gussets sit between the bolts and are welded to the plate and the post
+        const a = (g + 0.5) / pl.ng * Math.PI * 2, r0 = ps.od / 24, sh = new THREE.Shape(); sh.moveTo(r0, 0); sh.lineTo(pl.gR / 12, 0); sh.lineTo(r0, pl.gH / 12); sh.closePath();
+        const geo = new THREE.ExtrudeGeometry(sh, { depth: pl.gT / 12, bevelEnabled: false }); geo.translate(0, 0, -pl.gT / 24);
+        const gm = new THREE.Mesh(geo, pm); gm.position.set(p.x, tF, p.z); gm.rotation.y = -a; currentMeshGroup.add(gm);
+      }
+      for (let k = 0; k < pl.n; k++) {
+        const a = k / pl.n * Math.PI * 2, bx = p.x + Math.cos(a) * pl.bcR / 12, bz = p.z + Math.sin(a) * pl.bcR / 12, r = pl.bd / 24, top = tF + 2.5 / 12, bot = -12 / 12;
+        const sh = new THREE.Mesh(new THREE.CylinderGeometry(r, r, top - bot, 16), bm); sh.position.set(bx, (top + bot) / 2, bz); currentMeshGroup.add(sh);
+        const nut = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.8, r * 1.8, pl.bd * 0.9 / 12, 6), bm); nut.position.set(bx, tF + pl.bd * 0.45 / 12, bz); currentMeshGroup.add(nut);
+      }
+    });
+    const pi = $('postInfo'); if (pi) pi.textContent = `${c.posts.length} post${c.posts.length === 1 ? '' : 's'}, ${ps.od.toFixed(3)}" OD, ${c.posts.map(p => ftIn(p.yTop)).join(' / ')} to the centerline.` + (pl ? ` Plates ${pl.D}" dia × ${pl.t}", ${pl.n} × ${pl.bd}" bolts and ${pl.ng} gusset${pl.ng === 1 ? "" : "s"} each.` : '');
   } else { const pi = $('postInfo'); if (pi) pi.textContent = '—'; }
   if (chk('showContacts') && c.contacts) { const mo = num('maxOverlapPct') / 100 * c.cOdFt;
     c.contacts.filter(k => k.gap <= 0.5 * c.cOdFt).forEach(k => {
@@ -3813,13 +3645,31 @@ async function exportStep() {
     let parts = res.parts, cutNote = '';
     if (c.postsOn && c.posts.length) {
       const ps = postSpec(c);
+      const pl = chk('plateOn') ? plateSpec(ps.od) : null, tI = pl ? pl.t : 0;
       c.posts.forEach((p, k) => {
-        const X0 = p.x * 12, Y0 = -p.z * 12, h = p.yTop * 12;
-        let sh = R.makeCylinder(ps.od / 2, h, [X0, Y0, 0], [0, 0, 1]);
-        if (ps.id > 0) sh = sh.cut(R.makeCylinder(ps.id / 2, h + 2, [X0, Y0, -1], [0, 0, 1]));
-        parts.push({ shape: sh, name: 'post_' + String(k + 1).padStart(2, '0') });
+        const X0 = p.x * 12, Y0 = -p.z * 12, h = p.yTop * 12 - tI, nm = String(k + 1).padStart(2, '0');
+        let sh = R.makeCylinder(ps.od / 2, h, [X0, Y0, tI], [0, 0, 1]);
+        if (ps.id > 0) sh = sh.cut(R.makeCylinder(ps.id / 2, h + 2, [X0, Y0, tI - 1], [0, 0, 1]));
+        parts.push({ shape: sh, name: 'post_' + nm, color: '#b0b4b8' });
+        if (!pl) return;
+        let plate = R.makeCylinder(pl.D / 2, tI, [X0, Y0, 0], [0, 0, 1]);
+        const bolts = [];
+        for (let b = 0; b < pl.n; b++) {
+          const a = b / pl.n * Math.PI * 2, bx = X0 + Math.cos(a) * pl.bcR, by = Y0 - Math.sin(a) * pl.bcR;   // Y flips with the file's axes, matching the viewport
+          plate = plate.cut(R.makeCylinder(pl.bd / 2 + 0.0625, tI + 2, [bx, by, -1], [0, 0, 1]));
+          bolts.push(R.makeCylinder(pl.bd / 2, 12 + tI + 2.5, [bx, by, -12], [0, 0, 1]));
+          bolts.push(R.makeCylinder(pl.bd * 0.9, pl.bd * 0.9, [bx, by, tI], [0, 0, 1]));
+        }
+        parts.push({ shape: plate, name: 'plate_' + nm, color: '#b0b4b8' });
+        for (let g = 0; g < pl.ng; g++) {
+          const a = (g + 0.5) / pl.ng * Math.PI * 2, u = [Math.cos(a), -Math.sin(a)], tn = [Math.sin(a), Math.cos(a)], r0 = ps.od / 2, hw = pl.gT / 2;
+          const P3 = (rad, z) => [X0 + u[0] * rad - tn[0] * hw, Y0 + u[1] * rad - tn[1] * hw, z];
+          const w = R.assembleWire([[P3(r0, tI), P3(pl.gR, tI)], [P3(pl.gR, tI), P3(r0, tI + pl.gH)], [P3(r0, tI + pl.gH), P3(r0, tI)]].map(([A, B]) => R.makeLine(A, B)));
+          parts.push({ shape: R.basicFaceExtrusion(R.makeFace(w), new R.Vector([tn[0] * pl.gT, tn[1] * pl.gT, 0])), name: 'gusset_' + nm + '_' + (g + 1), color: '#b0b4b8' });
+        }
+        bolts.forEach((bs, b) => parts.push({ shape: bs, name: (b % 2 ? 'nut_' : 'bolt_') + nm + '_' + (Math.floor(b / 2) + 1), color: '#8e9398' }));
       });
-      desc += `, ${c.posts.length} posts (${ps.od.toFixed(3)}" OD)`;
+      desc += `, ${c.posts.length} posts (${ps.od.toFixed(3)}" OD)` + (pl ? ' with base plates and bolts' : '');
     }
     if (c.plane.active && !chk('exportBelow')) {
       setStatus('Cutting at grade…'); await new Promise(r => setTimeout(r, 0));
@@ -3829,7 +3679,7 @@ async function exportStep() {
     }
     if (!parts.length) { setStatus('Nothing above the plane to export. Lower the plane.'); return; }
     setStatus('Writing the STEP file…'); await new Promise(r => setTimeout(r, 0));
-    const blob = R.exportSTEP(parts.map(p => ({ shape: p.shape, name: p.name, color: '#ffffff' })), { unit: 'in', modelUnit: 'in' });
+    const blob = R.exportSTEP(parts.map(p => ({ shape: p.shape, name: p.name, color: p.color || '#ffffff' })), { unit: 'in', modelUnit: 'in' });
     saveBlob(blob, slug() + '_hollow.step');
     setStatus(`STEP saved: ${parts.length} solids, ${desc}. ${res.crossings} crossing${res.crossings === 1 ? '' : 's'} found, ${res.notched} piece${res.notched === 1 ? '' : 's'} notched.${cutNote} Inches, Z up. ${((performance.now() - t0) / 1000).toFixed(0)} s.${warns.length ? ' ' + warns.join(' ') : ''}${prof === 'corrugated' ? ' Corrugation is modelled as a smooth tube.' : ''}`);
   } catch (e) { console.error(e); setStatus('STEP export failed: ' + (e.message || e)); }
@@ -4045,88 +3895,6 @@ function exportRibs() {
   saveBlob(new Blob([rows.join('\n')], { type: 'text/csv' }), slug() + '_rib_cut_list.csv'); setStatus('Rib list saved.');
 }
 
-function makeSheetSVGraw(opts = {}) {
-  const c = state.last, A = state.lastA, od = c.odFt, ground = c.plane.active;
-  const pcs = exportPieces(); const all = [].concat(...pcs.map(p => p.pts));
-  const vis = ground ? all.filter(p => p[1] >= -0.001) : all, bb = bbox(vis), bAll = bbox(all);
-  const Wf = bb.size[0] + od, Df = bb.size[2] + od, yTop = bb.mx[1] + od / 2, yBot = ground ? Math.min(0, bAll.mn[1]) : 0, Hf = yTop - yBot;
-  const xMid = (bb.mn[0] + bb.mx[0]) / 2, zMid = (bb.mn[2] + bb.mx[2]) / 2;
-  const boxes = { front: { x: 38, y: 84, w: 536, h: 306 }, side: { x: 38, y: 424, w: 262, h: 222 }, plan: { x: 312, y: 424, w: 262, h: 222 } };
-  const pad = 30, cands = [1, 0.75, 0.5, 0.375, 0.25, 0.1875, 0.125, 0.09375, 0.0625];
-  let sc = null;
-  for (const s of cands) {
-    const k = s * 72;
-    if (Wf * k <= boxes.front.w - pad * 2 && Hf * k <= boxes.front.h - pad * 2 && Df * k <= boxes.side.w - pad * 2 && Hf * k <= boxes.side.h - pad * 2 && Wf * k <= boxes.plan.w - pad * 2 && Df * k <= boxes.plan.h - pad * 2) { sc = s; break; }
-  }
-  const nts = sc === null; if (nts) sc = Math.min((boxes.front.w - pad * 2) / Wf, (boxes.front.h - pad * 2) / Hf, (boxes.side.w - pad * 2) / Df, (boxes.plan.h - pad * 2) / Df, (boxes.plan.w - pad * 2) / Wf) / 72;
-  const k = sc * 72, fracs = { 1: '1"', 0.75: '3/4"', 0.5: '1/2"', 0.375: '3/8"', 0.25: '1/4"', 0.1875: '3/16"', 0.125: '1/8"', 0.09375: '3/32"', 0.0625: '1/16"' };
-  const scaleLabel = nts ? 'NTS' : `${fracs[sc]} = 1'-0"`;
-  const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
-  const thick = Math.max(1.2, od * k);
-  const INK = '#1d1f20', NAVY = '#3d5c7c', RULE = '#b8bcc0';
-  const shaded = opts.shaded === undefined ? ($('a2Style') && $('a2Style').value === 'shaded') : opts.shaded;
-  const view = (b, mapFn, ext, kind) => {
-    const [w, h] = ext, ox = b.x + (b.w - w * k) / 2, oy = b.y + (b.h - h * k) / 2;
-    let s = `<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="#f2f2f3" stroke="${RULE}" stroke-width="0.6" stroke-dasharray="2 2"/>`;
-    if (shaded && kind) { const url = psRenderOrtho(kind, b, ox, oy, k, { bb, od, yTop, ground }); s += `<image xlink:href="${url}" x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}"/>`; if (opts.frames) opts.frames.push({ name: kind, url }); }
-    else pcs.forEach(pc => {
-      const step = Math.max(1, Math.ceil(pc.pts.length / 1400)); const P = [];
-      for (let i = 0; i < pc.pts.length; i += step) P.push(pc.pts[i]); if (pc.closed) P.push(pc.pts[0]);
-      const path = P.map((p, i) => { const [a, bb2] = mapFn(p); return (i ? 'L' : 'M') + (ox + a * k).toFixed(1) + ' ' + (oy + bb2 * k).toFixed(1); }).join(' ');
-      s += `<path d="${path}" fill="none" stroke="${INK}" stroke-width="${(thick + 1.4).toFixed(2)}" stroke-linecap="round" stroke-linejoin="round"/>`;
-      s += `<path d="${path}" fill="none" stroke="#e8e8e9" stroke-width="${thick.toFixed(2)}" stroke-linecap="round" stroke-linejoin="round"/>`;
-      s += `<path d="${path}" fill="none" stroke="${NAVY}" stroke-width="0.5" stroke-dasharray="3 2"/>`;
-    });
-    return { svg: s, ox, oy, w, h };
-  };
-  const gy = (yv) => yTop - yv;                                         // elevation y (down is positive)
-  const front = view(boxes.front, p => [p[0] - bb.mn[0] + od / 2, gy(p[1] + 0)], [Wf, Hf], 'front');
-  const side = view(boxes.side, p => [-(p[2] - bb.mx[2]) + od / 2, gy(p[1])], [Df, Hf], 'side');
-  const plan = view(boxes.plan, p => [p[0] - bb.mn[0] + od / 2, p[2] - bb.mn[2] + od / 2], [Wf, Df], 'plan');
-  let svg = front.svg + side.svg + plan.svg;
-  const grade = (v) => { const y = v.oy + gy(0) * k; return `<line x1="${v.ox - 14}" y1="${y}" x2="${v.ox + v.w * k + 14}" y2="${y}" stroke="${INK}" stroke-width="1.1"/>` + Array.from({ length: Math.floor((v.w * k + 28) / 8) }, (_, i) => `<line x1="${v.ox - 14 + i * 8 + 6}" y1="${y}" x2="${v.ox - 14 + i * 8}" y2="${y + 6}" stroke="${INK}" stroke-width="0.5"/>`).join('') + `<text x="${v.ox + v.w * k + 16}" y="${y + 3}" class="sm">${ground ? 'GRADE' : 'FLOOR'}</text>`; };
-  svg += grade(front) + grade(side);
-  { const fig = (v, b) => psFigure(Math.min(v.ox + v.w * k + 0.9 * k + 36, b.x + b.w - 0.8 * k - 12), v.oy + gy(0) * k, k); svg += fig(front, boxes.front) + fig(side, boxes.side); }
-  const dimH = (v, txt, below) => { const y = below, x1 = v.ox, x2 = v.ox + v.w * k; return `<g stroke="${NAVY}" stroke-width="0.6"><line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}"/><line x1="${x1}" y1="${y - 4}" x2="${x1}" y2="${y + 4}"/><line x1="${x2}" y1="${y - 4}" x2="${x2}" y2="${y + 4}"/></g><text x="${(x1 + x2) / 2}" y="${y + 11}" text-anchor="middle" class="dim">${esc(txt)}</text>`; };
-  const dimV = (v, txt, xr, aboveOnly) => { const x = xr, y1 = v.oy, y2 = aboveOnly ? v.oy + gy(0) * k : v.oy + v.h * k; return `<g stroke="${NAVY}" stroke-width="0.6"><line x1="${x}" y1="${y1}" x2="${x}" y2="${y2}"/><line x1="${x - 4}" y1="${y1}" x2="${x + 4}" y2="${y1}"/><line x1="${x - 4}" y1="${y2}" x2="${x + 4}" y2="${y2}"/></g><text transform="translate(${x + 11},${(y1 + y2) / 2}) rotate(-90)" text-anchor="middle" class="dim">${esc(txt)}</text>`; };
-  svg += dimH(front, ftIn(Wf), boxes.front.y + boxes.front.h - 10) + dimV(front, ftIn(yTop), boxes.front.x + boxes.front.w - 26, ground);
-  svg += dimH(side, ftIn(Df), boxes.side.y + boxes.side.h - 8) + dimH(plan, ftIn(Wf), boxes.plan.y + boxes.plan.h - 8) + dimV(plan, ftIn(Df), boxes.plan.x + boxes.plan.w - 20);
-  svg += `<g transform="translate(${boxes.plan.x + 22},${boxes.plan.y + 28})" stroke="${INK}" fill="none" stroke-width="0.8"><circle r="10"/><path d="M0 -16 L-4 -6 L0 -9 L4 -6 Z" fill="${INK}"/></g><text x="${boxes.plan.x + 22}" y="${boxes.plan.y + 54}" text-anchor="middle" class="sm">N</text>`;
-  // scale bar
-  const segCands = [1, 2, 4, 5, 10, 20]; let seg = segCands.find(s => s * k * 3 >= 44) || 20;
-  let bar = ''; for (let i = 0; i < 3; i++) bar += `<rect x="${44 + i * seg * k}" y="676" width="${seg * k}" height="5" fill="${i % 2 ? '#f2f2f3' : INK}" stroke="${INK}" stroke-width="0.7"/>`;
-  bar += [0, 1, 2, 3].map(i => `<text x="${44 + i * seg * k}" y="694" class="sm" text-anchor="middle">${i * seg}'</text>`).join('');
-  const T = { x: 267, y: 657, w: 307, h: 97 }, mat = c.st.label;
-  const tb = `<rect x="${T.x}" y="${T.y}" width="${T.w}" height="${T.h}" fill="#f2f2f3" stroke="${INK}" stroke-width="0.9"/>
-    <line x1="${T.x}" y1="${T.y + 40}" x2="${T.x + T.w}" y2="${T.y + 40}" stroke="${RULE}"/><line x1="${T.x}" y1="${T.y + 70}" x2="${T.x + T.w}" y2="${T.y + 70}" stroke="${RULE}"/>
-    ${[0.25, 0.5, 0.75].map(f => `<line x1="${T.x + T.w * f}" y1="${T.y + 40}" x2="${T.x + T.w * f}" y2="${T.y + 70}" stroke="${RULE}"/>`).join('')}
-    <line x1="${T.x + T.w * 0.78}" y1="${T.y + 70}" x2="${T.x + T.w * 0.78}" y2="${T.y + T.h}" stroke="${RULE}"/>
-    <text x="${T.x + 8}" y="${T.y + 11}" class="lab">SHEET TITLE</text><text x="${T.x + 8}" y="${T.y + 26}" class="ttl">PLAN, ELEVATIONS &amp; SCALE</text>
-    <text x="${T.x + 8}" y="${T.y + 36}" class="sm2">${esc(($('projName').value + ' — ' + $('siteName').value).toUpperCase())}</text>
-    <text x="${T.x + 8}" y="${T.y + 50}" class="lab">DATE</text><text x="${T.x + 8}" y="${T.y + 64}" class="val">${$('tbDate').textContent}</text>
-    <text x="${T.x + T.w * 0.25 + 8}" y="${T.y + 50}" class="lab">SCALE</text><text x="${T.x + T.w * 0.25 + 8}" y="${T.y + 64}" class="val">${esc(scaleLabel)}</text>
-    <text x="${T.x + T.w * 0.5 + 8}" y="${T.y + 50}" class="lab">OVERALL DIMS</text><text x="${T.x + T.w * 0.5 + 8}" y="${T.y + 64}" class="val">${esc(`${Math.round(yTop)}'H × ${Math.round(Wf)}'W × ${Math.round(Df)}'D`)}</text>
-    <text x="${T.x + T.w * 0.75 + 8}" y="${T.y + 50}" class="lab">MATERIAL</text><text x="${T.x + T.w * 0.75 + 8}" y="${T.y + 64}" class="val">${esc(mat.length > 18 ? mat.slice(0, 18) : mat)}</text>
-    <text x="${T.x + 8}" y="${T.y + 82}" class="sm2">© ${new Date().getFullYear()} Kelly Goff Studio. Concept and drawings remain</text><text x="${T.x + 8}" y="${T.y + 91}" class="sm2">the property of the artist.</text>
-    <text x="${T.x + T.w * 0.78 + 8}" y="${T.y + 80}" class="lab">SHEET</text><text x="${T.x + T.w * 0.78 + 8}" y="${T.y + 94}" class="ttl">A-2</text>`;
-  const note = `Figure shown at 5'-10". Not to scale where marked NTS. Projected from the LineWorks model. Path length ${ftIn(A.length)}; tightest bend ${A.minR > 9999 ? '—' : (A.minR * 12).toFixed(1) + '" radius'}; ${$('tbWeight').textContent.toLowerCase()}.`;
-  const wrapNote = (t, n) => { const w = t.split(' '), lines = []; let cur = ''; w.forEach(x => { if ((cur + ' ' + x).length > n) { lines.push(cur); cur = x; } else cur += ' ' + x; }); lines.push(cur); return lines; };
-  const noteSvg = wrapNote(note, 52).map((l, i) => `<text x="44" y="${712 + i * 9}" class="sm2">${esc(l.trim())}</text>`).join('');
-  const css = `${FONT_SVG_CSS}
-    text{font-family:'Barlow Condensed','Arial Narrow',sans-serif;fill:${INK}} .lab{font-weight:500;font-size:6.5px;letter-spacing:.14em;fill:${NAVY}} .val{font-weight:500;font-size:9px} .ttl{font-weight:700;font-size:12px}
-    .sm{font-size:7px;letter-spacing:.1em;fill:${NAVY}} .sm2{font-family:'Barlow',sans-serif;font-size:6.5px;fill:#4b5156} .dim{font-size:8px;font-weight:500;fill:${NAVY}} .hd{font-weight:700;font-size:9px;letter-spacing:.2em} .sec{font-weight:700;font-size:9px;letter-spacing:.18em}`;
-  const secHead = (b, t, right) => `<text x="${b.x}" y="${b.y - 6}" class="sec">${t}</text><line x1="${b.x + t.length * 7.4 + 8}" y1="${b.y - 9}" x2="${b.x + b.w - (right ? 90 : 0)}" y2="${b.y - 9}" stroke="${RULE}" stroke-width="0.6"/>` + (right ? `<text x="${b.x + b.w}" y="${b.y - 6}" text-anchor="end" class="sm">SCALE ${esc(scaleLabel)}</text>` : '');
-  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="612pt" height="792pt" viewBox="0 0 612 792"><style>${css}</style>
-  <rect width="612" height="792" fill="#f2f2f3"/><rect x="19" y="19" width="574" height="754" fill="none" stroke="${INK}" stroke-width="0.8"/>
-  <text x="38" y="46" class="hd">KELLY GOFF STUDIO</text><text x="574" y="46" text-anchor="end" class="sm">PROPOSAL RENDERING — NOT FOR CONSTRUCTION</text><line x1="38" y1="54" x2="574" y2="54" stroke="${RULE}" stroke-width="0.6"/>
-  
-  ${secHead(boxes.front, 'FRONT ELEVATION', true)}${secHead(boxes.side, 'SIDE ELEVATION', false)}${secHead(boxes.plan, 'PLAN', false)}
-  ${svg}${bar}${noteSvg}${tb}</svg>`;
-}
-function exportSvg() {
-  if (!needForm()) return;
-  saveBlob(new Blob([makeSheetSVG()], { type: 'image/svg+xml' }), slug() + '_sheet_A-2.svg'); setStatus('Sheet saved: plan, front and side elevations.');
-}
 
 // presets
 function collectConfig() {
@@ -4189,7 +3957,7 @@ function wire() {
   ['projName', 'siteName'].forEach(id => $(id).addEventListener('input', () => { }));
 
   $('exportDxf').addEventListener('click', exportDxf); $('exportContacts').addEventListener('click', exportContacts); $('exportObj').addEventListener('click', exportObj); $('exportGlb').addEventListener('click', exportGlb); $('exportUsdz').addEventListener('click', exportUsdz); $('exportStep').addEventListener('click', exportStep); $('exportCsv').addEventListener('click', exportCsvPoints);
-  $('exportSvg').addEventListener('click', exportSvg); $('exportA1').addEventListener('click', exportA1); $('exportA3').addEventListener('click', exportA3); $('exportFrames').addEventListener('click', exportFrames); $('exportTakeoff').addEventListener('click', exportTakeoff); $('exportBend').addEventListener('click', exportBend); $('exportRibs').addEventListener('click', exportRibs);
+  $('exportTakeoff').addEventListener('click', exportTakeoff); $('exportBend').addEventListener('click', exportBend); $('exportRibs').addEventListener('click', exportRibs);
   $('btnPrint').addEventListener('click', () => window.print());
   $('saveConfigBtn').addEventListener('click', () => {
     const cfg = collectConfig(), f = state.feat;
@@ -4357,7 +4125,7 @@ function wirePresent() {
   $('presTitle').onclick = () => document.body.classList.toggle('notitle');
   ['mousemove', 'mousedown', 'touchstart', 'wheel'].forEach(ev => container.addEventListener(ev, wakePres, { passive: true }));
   $('refFigs').addEventListener('change', buildRefs);
-  $('photoBtn').onclick = () => $('photoFile').click(); $('heroPhoto').onclick = () => $('photoFile').click(); $('photoFile').onchange = (e) => { if (e.target.files[0]) loadPhoto(e.target.files[0]); e.target.value = ''; };
+  $('photoBtn').onclick = () => $('photoFile').click(); $('photoFile').onchange = (e) => { if (e.target.files[0]) loadPhoto(e.target.files[0]); e.target.value = ''; };
   $('photoClear').onclick = () => { if (photoTex) { photoTex.dispose(); photoTex = null; } applyPhoto(); };
   $('photoFov').addEventListener('input', () => { $('photoFovVal').textContent = FMT.photoFov($('photoFov').value); if (photoTex) applyPhoto(); else { camera.fov = num('photoFov'); camera.updateProjectionMatrix(); } });
   $('photoGrid').addEventListener('change', applyPhoto);
