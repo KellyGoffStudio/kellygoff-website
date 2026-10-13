@@ -340,7 +340,7 @@ def about_page():
     aiblk = (f'<div id="ai">{sec(ai["title"])}<div class="prose">' + ''.join(f'<p>{E(t)}</p>' for t in ai['text']) + '</div></div>') if ai else ''
     wblk = (f'<div>{sec("Public Art at Wheaton")}<div class="twocol tc-wh"><div>{wfig2}</div>'
             f'<div><div class="prose"><p>{E(site["wheatonProgram"])}</p></div>'
-            f'<div class="btns" style="margin-top:26px"><a class="btn" href="{link("resume/")}">Resume →</a><a class="btn" href="{link("contact/")}">Contact →</a></div></div></div></div>')
+            f'<div class="btns" style="margin-top:26px"><a class="btn" href="https://wheatoncollege.edu/arts/public-art-at-wheaton/" target="_blank" rel="noopener">Public Art at Wheaton ↗</a><a class="btn" href="{link("resume/")}">Resume →</a><a class="btn" href="{link("contact/")}">Contact →</a></div></div></div></div>')
     body = (f'<div class="wrap page-top"><h1>About</h1><div class="twocol tc-about" style="margin-top:30px"><div>{vid}</div><div class="prose">{paras}</div></div>'
             f'<div class="twocol tc-about" style="margin-top:56px">{wblk}{aiblk}</div></div>')
     return layout('About', body, ' '.join(site['about'][:1]), active='about/')
