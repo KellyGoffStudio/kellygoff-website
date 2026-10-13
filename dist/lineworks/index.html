@@ -2708,7 +2708,8 @@ function buildPanel() {
         <div class="info" id="woodInfo">—</div>
       </div>
     </div>
-    ${R('distalFlare', 'Distal diameter flare', 1, 6, 0.05, 1, v => (+v).toFixed(2) + '×', 'Grows the profile as the path moves away from the center.')}
+    <div class="row2">${N_('distalOd', 'Far-end OD (in, 0 = no flare)', 0, 0, 48, 0.125)}<div></div></div>
+    <div class="info" id="flareInfo">Grows the profile as the path moves away from the center, out to this outside diameter at the farthest points.</div>
     <div class="sub">Bend marking</div>
     ${R('bendFactor', 'Roller comfort radius (× ID / width)', 0.5, 8, 0.25, 1.5, v => (+v).toFixed(2) + '×', 'Turns tighter than this are marked amber. They are buildable with extra roller work or kerf bending.')}
     <div class="info" id="sigmaInfo">—</div>`;
@@ -2861,6 +2862,7 @@ function csvUnit(P, fair) {
   if (chk('csvShape') && (P.rx || P.ry || P.rz)) pts = rotateEuler(pts, P.rx * D2R, P.ry * D2R, P.rz * D2R);
   return fair > 0 ? fairClosed(pts, Math.round(fair)) : pts;
 }
+function flareMult(odIn) { const d = num('distalOd'); return odIn > 0 && d > odIn + 1e-6 ? d / odIn : 1; }   // the far-end OD in inches is what is set; the growth factor follows from the pipe
 function computeAll() {
   const st = getStock(), P = gatherParams(), odFt = st.odIn / 12, cOdFt = (st.contactOdIn || st.odIn) / 12;
   let base = [num('dimW'), num('dimD'), num('dimH')];
@@ -2902,7 +2904,7 @@ function computeAll() {
   const lapR = rot(rotated); let ymin = 1e9; lapR.forEach(p => { ymin = Math.min(ymin, p[1]); });
   let dyBase = o.hangH - ymin;
   if (postsOn) {                                                // clear height is measured to the underside of the pipe, flare included
-    const fl = num('distalFlare'), cn = [0, 0, 0]; lapR.forEach(p => { for (let k = 0; k < 3; k++) cn[k] += p[k] / lapR.length; });
+    const fl = flareMult(st.odIn), cn = [0, 0, 0]; lapR.forEach(p => { for (let k = 0; k < 3; k++) cn[k] += p[k] / lapR.length; });
     let md = 0.001; lapR.forEach(p => { md = Math.max(md, Math.hypot(p[0] - cn[0], p[1] - cn[1], p[2] - cn[2])); });
     let under = 1e9; lapR.forEach(p => { const d = Math.hypot(p[0] - cn[0], p[1] - cn[1], p[2] - cn[2]), fac = 1 + (fl - 1) * Math.pow(Math.min(1, d / md), 2.5); under = Math.min(under, p[1] - odFt / 2 * fac); });
     dyBase = num('postClear') - under;
@@ -3410,7 +3412,7 @@ function buildScene(draft) {
   currentMeshGroup = new THREE.Group(); extraGroup = new THREE.Group();
   const centroid = new THREE.Vector3(); form.lap.forEach(p => centroid.add(new THREE.Vector3(p[0], p[1], p[2]))); centroid.divideScalar(form.lap.length);
   let maxDist = 0.001; form.lap.forEach(p => { maxDist = Math.max(maxDist, centroid.distanceTo(new THREE.Vector3(p[0], p[1], p[2]))); });
-  const X = { c, qMul: draft ? 0.35 : 1, flare: num('distalFlare'), centroid, maxDist, limit: c.pipeLimitFt, A: { length: 0, lenAbove: 0, minR: 99999, tightFt: 0, lowFt: 0, dense: [], members: [], ribs: [], baseW: 0, extraW: 0 } };
+  const X = { c, qMul: draft ? 0.35 : 1, flare: flareMult(c.st.odIn), centroid, maxDist, limit: c.pipeLimitFt, A: { length: 0, lenAbove: 0, minR: 99999, tightFt: 0, lowFt: 0, dense: [], members: [], ribs: [], baseW: 0, extraW: 0 } };
   form.pieces.forEach((pc, i) => buildPiece(pc, i, X));
   if (c.postsOn && c.posts.length) {
     const ps = postSpec(c), pm = new THREE.MeshStandardMaterial({ color: 0xb0b4b8, roughness: 0.55, metalness: 0.2 });
@@ -3474,7 +3476,7 @@ function updateReadouts(c, A) {
   const bb = vis.length ? bbox(vis) : { size: [0, 0, 0], mx: [0, 0, 0] };
   const cr = [].concat(...A.dense.map(d => splitAtGround(d.pts, d.closed).cross)); state.cross = cr;
   let W = bb.size[0] + od, D = bb.size[2] + od, H = pl.active ? bb.mx[1] + od / 2 : bb.size[1] + od;
-  { const fl = num('distalFlare'), L = form.lap; if (fl > 1.001 && L.length && vis.length) {   // the flared ends are wider than the nominal pipe, so measure the real surface
+  { const fl = flareMult(st.odIn), L = form.lap; if (fl > 1.001 && L.length && vis.length) {   // the flared ends are wider than the nominal pipe, so measure the real surface
       const cn = [0, 0, 0]; L.forEach(p => { for (let k = 0; k < 3; k++) cn[k] += p[k] / L.length; }); let md = 0.001; L.forEach(p => { md = Math.max(md, Math.hypot(p[0] - cn[0], p[1] - cn[1], p[2] - cn[2])); });
       const mn = [1e9, 1e9, 1e9], mx = [-1e9, -1e9, -1e9];
       vis.forEach(p => { const d = Math.hypot(p[0] - cn[0], p[1] - cn[1], p[2] - cn[2]), r = od / 2 * (1 + (fl - 1) * Math.pow(Math.min(1, d / md), 2.5)); for (let k = 0; k < 3; k++) { mn[k] = Math.min(mn[k], p[k] - r); mx[k] = Math.max(mx[k], p[k] + r); } });
@@ -3503,6 +3505,7 @@ function updateReadouts(c, A) {
   const angs = cr.map(x => x.angle);
   $('tbLegs').textContent = c._liftTxt ? c._liftTxt : !pl.active ? '—' : angs.length ? angs.slice(0, 4).map(a => a.toFixed(0) + '°').join(' / ') + (angs.length > 4 ? ' …' : '') : 'none — all above grade';
 
+  { const fi = $('flareInfo'), d = num('distalOd'); if (fi) fi.textContent = d > st.odIn + 1e-6 ? `${st.odIn.toFixed(3)}" OD at the center, flaring to ${d.toFixed(3)}" OD at the farthest points (×${(d / st.odIn).toFixed(2)}).` : (d > 0 ? `Far-end OD is not larger than the ${st.odIn.toFixed(3)}" pipe, so there is no flare.` : 'Grows the profile as the path moves away from the center, out to this outside diameter at the farthest points.'); }
   applyTitleOverrides();
   { const ci = $('contactInfo');
     if (!c.contactsEligible) ci.textContent = state.csvPoints ? 'Imported points: no touch analysis.' : 'Touch points are not available for this profile.';
@@ -3710,7 +3713,7 @@ async function exportStep() {
     const od = c.st.outerExtentIn * 2, id = prof === 'round_smooth' ? NPS_SCHED_40[$('npsSize').value].id : num('matSize');
     members = A.dense.map(d => ({ pts: d.pts.map(map), closed: d.closed, od, id, group: 0, L: d.ds * 12 * d.pts.length, df: d.df || undefined }));
     members.forEach((m, i) => { m.L = A.dense[i].ds * 12 * (m.closed ? m.pts.length : m.pts.length - 1); });
-    desc = `${od.toFixed(3)}" OD, ${id.toFixed(3)}" ID` + (A.dense.some(d => d.df) ? ` at the center, flaring out to ${(od * num('distalFlare')).toFixed(2)}" OD at the far ends` : '');
+    desc = `${od.toFixed(3)}" OD, ${id.toFixed(3)}" ID` + (A.dense.some(d => d.df) ? ` at the center, flaring out to ${Math.max(od, num('distalOd')).toFixed(2)}" OD at the far ends` : '');
   }
   stepBusy = true; const btn = $('exportStep'); btn.disabled = true;
   try {
@@ -3986,6 +3989,7 @@ function applyConfig(cfg) {
     const el = $(id); if (!el || el.type === 'file' || id.startsWith('_')) return;
     if (el.type === 'checkbox') el.checked = !!cfg[id]; else el.value = cfg[id];
   });
+  if (cfg.distalOd === undefined && cfg.distalFlare !== undefined) { const fl = +cfg.distalFlare; $('distalOd').value = fl > 1.001 ? Math.round(fl * getStock().odIn * 8) / 8 : 0; }   // presets from before the flare was set in inches
   updateVisibility(); refreshLabels(); buildScene(false);
 }
 let DEFAULTS = null;
