@@ -2591,6 +2591,7 @@ function buildPanel() {
     ${R('fairing', 'Extra fairing', 0, 120, 2, 0, v => v == 0 ? 'off' : v + ' passes')}
     ${R('shift', 'Start point in site data', 0, 100, 1, 0, pct, 'Slides where the site data begins on the line. A free variant of the same sound.')}
     ${C_('reverse', 'Reverse direction', false)}
+    ${C_('csvShape', 'Point file: shape it with the sliders', false, 'For an imported point file. On: the file is rotated, fitted to the envelope below, and held to the smoothness limit. Off: the points stay at their true size in feet.')}
     ${C_('lenOn', 'Set the path length', false, 'Finds the detail that gives this length inside the envelope.')}
     ${R('pathLen', 'Path length', 10, 250, 1, 60, v => ftIn(+v), 'Centerline length of the whole line.')}
     ${C_('lenGrow', 'Let the envelope grow if needed', true, 'If the envelope cannot hold that length at any detail, the whole form scales up or down to reach it.')}
@@ -2841,6 +2842,7 @@ function postSpec(c) {
 }
 function csvUnit(P, fair) {
   let pts = state.csvPoints.map(p => p.slice());
+  if (chk('csvShape') && (P.rx || P.ry || P.rz)) pts = rotateEuler(pts, P.rx * D2R, P.ry * D2R, P.rz * D2R);
   return fair > 0 ? fairClosed(pts, Math.round(fair)) : pts;
 }
 function computeAll() {
@@ -2849,13 +2851,14 @@ function computeAll() {
   if (state.disp && ['dimW', 'dimD', 'dimH'].every((id, i) => $(id).value === state.disp.vals[i])) base = state.disp.base;   // inputs are showing a grown size; the base is what the user set
   const [W, D, H] = base;
   const dimsC = [Math.max(1, W - odFt), Math.max(0.5, H - odFt), Math.max(1, D - odFt)];
-  const pipeLimitFt = state.csvPoints ? 0 : st.minCenterIn / 12, limitFt = state.csvPoints ? 0 : num('smooth') / 100 * Math.max(W, D);
+  const csvLit = !!state.csvPoints && !chk('csvShape');   // literal points keep their size, shape and smoothness
+  const pipeLimitFt = csvLit ? 0 : st.minCenterIn / 12, limitFt = csvLit ? 0 : num('smooth') / 100 * Math.max(W, D);
   const planeOn = chk('planeOn'), postsOn = chk('postsOn'), planeFt = planeOn && !postsOn ? num('planeFt') : 0, frac = 0;   // with posts, grade stays at the floor and the form is lifted
   const o = { dimsC, mode: 'suspended', hangH: planeOn ? 0 : num('hangH'), limitFt, N: 480 };
-  if (state.csvPoints) { o.noFit = true; o.unitFn = (sig, fair) => csvUnit(P, fair); }
+  if (state.csvPoints) { o.noFit = csvLit; o.unitFn = (sig, fair) => csvUnit(P, fair); }
   let solved, lenInfo = null;
   const lapLen = (lap) => { let s = 0; for (let i = 0; i < lap.length; i++) { const p = lap[i], q = lap[(i + 1) % lap.length]; s += Math.hypot(q[0] - p[0], q[1] - p[1], q[2] - p[2]); } return s; };
-  if (state.csvPoints) solved = solveForm(Object.assign({}, P, { rx: 0, ry: 0, rz: 0, p: 1, q: 1 }), {}, o);
+  if (state.csvPoints) solved = solveForm(Object.assign({}, P, { rx: 0, ry: 0, rz: 0, p: 1, q: 1 }), {}, o);   // csvUnit applies the rotation itself
   else if (chk('lenOn')) {
     const target = num('pathLen');
     const run = (k, s) => { const r = solveSeed(state.feat, Object.assign({}, P, { detail: k, relaxK: k }), Object.assign({}, o, { dimsC: dimsC.map(v => v * s), limitFt: limitFt * s })); r.len = lapLen(r.f.lap); return r; };
@@ -3489,7 +3492,7 @@ function updateReadouts(c, A) {
   // solver + sound description
   const sv = c.solved, floor = c.o.limitFt * 12, el = $('sigmaInfo');
   let msg = '', warn = false;
-  if (state.csvPoints) msg = 'Point file loaded. Smoothness is not enforced on imported points.';
+  if (state.csvPoints && !chk('csvShape')) msg = 'Point file loaded at true size. Turn on "Point file: shape it with the sliders" to rotate, fit, and smooth it.';
   else if (sv.note === 'fits') msg = `Full detail kept. Every turn is at least ${floor.toFixed(0)}" in radius.`;
   else if (sv.note === 'smoothed') msg = `Detail calmed to ${sv.kc.toFixed(1)} (asked ${sv.requested.toFixed(1)}) so every turn is at least ${floor.toFixed(0)}" in radius.`;
   else if (sv.note === 'relaxed') msg = `Detail and sound influence eased (${Math.round(sv.sigma * 100)}%) to keep turns at least ${floor.toFixed(0)}" in radius.`;
