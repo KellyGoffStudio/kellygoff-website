@@ -2733,6 +2733,7 @@ function buildPanel() {
       ${R('strandCount', 'Strands', 1, 30, 1, 4, v => v)}
       <div class="ctl" id="c_strandSizes"><label class="lbl" for="strandSizes"><span>Mixed sizes (nominal, in the stock chosen)</span></label><input type="text" id="strandSizes" value="" placeholder="e.g. 6, 2, 5, 3, 4, 2" spellcheck="false" autocomplete="off"><div class="hint">Leave empty for equal strands. Otherwise this list sets the count and the sizes. Repeats are fine.</div></div>
       ${S_('strandArrange', 'Order around the ring', [['auto', 'Auto: roundest and tightest'], ['listed', 'As listed']], 'auto')}
+      ${C_('strandShade', 'Shade each size (largest darkest; needs a non-white color)', true)}
       <div class="info" id="strandInfo">—</div>
       ${S_('strandStockType', 'Strand stock', [['sched40', 'Sched 40 pipe'], ['tubing', '0.125" wall tubing']], 'sched40')}
       <div id="g_strandS40">${S_('strandSched40Size', 'Pipe size', sizeOpts(NPS_SCHED_40, 'Sched 40').filter(o => +o[0] <= 6), '2.0')}</div>
@@ -3374,7 +3375,7 @@ function buildPiece(piece, idx, X) {
           }
           geo.computeVertexNormals();
         }
-        const shade = oHi > oLo ? 1 - 2 * (LY.sp[s].od - oLo) / (oHi - oLo) : undefined;
+        const shade = oHi > oLo && chk('strandShade') ? 1 - 2 * (LY.sp[s].od - oLo) / (oHi - oLo) : undefined;
         const m = new THREE.Mesh(geo); applyColor(m, geo, bend, { shade }); currentMeshGroup.add(m);
         const samp = sampleMember(sub, length, closed), Ns = samp.length;
         X.A.members.push({ pts: samp, closed, od: LY.sp[s].od, id: LY.sp[s].id, w: LY.sp[s].w, skey: LY.keys[s], group: idx, L: length, kind: 'strand', df: X.flare > 1 ? samp.map((_, i) => dfAt(i / (closed ? Ns : Math.max(1, Ns - 1)))) : undefined });
