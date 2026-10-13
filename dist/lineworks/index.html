@@ -129,6 +129,11 @@ input[type=checkbox] { accent-color: var(--ink); width: 13px; height: 13px; curs
 #titleBlock input.small { font: 400 11px var(--cond); letter-spacing: .1em; color: #4b5156; }
 #titleBlock input:focus { outline: none; border-bottom: 1px solid var(--navy); }
 .tbv.warn { color: var(--warn); font-weight: 700; }
+.tbv[contenteditable] { cursor: text; min-height: 1em; }
+.tbv[contenteditable]:hover { background: rgba(31, 58, 95, .06); }
+.tbv[contenteditable]:focus { outline: none; background: rgba(31, 58, 95, .08); text-overflow: clip; }
+.tbv.manual::after { content: ''; }
+.tbl[data-reset] { cursor: help; }
 
 @media (max-width: 980px) {
   #sheet { grid-template-columns: 1fr; grid-template-rows: 38px auto 70vh; overflow-y: auto; }
@@ -202,7 +207,7 @@ body.presenting #presBar.show { opacity: 1; pointer-events: auto; }
         <div class="tb-row r4">
           <div class="tb-cell"><span class="tbl">Date</span><span class="tbv" id="tbDate">—</span></div>
           <div class="tb-cell"><span class="tbl">Form</span><span class="tbv" id="tbForm">—</span></div>
-          <div class="tb-cell" style="grid-column: span 2;"><span class="tbl">Overall dims</span><span class="tbv" id="tbDims">—</span></div>
+          <div class="tb-cell" style="grid-column: span 2;"><span class="tbl" id="tbDimsL">Sculpture envelope</span><span class="tbv" id="tbDims">—</span></div>
         </div>
         <div class="tb-row r4">
           <div class="tb-cell" style="grid-column: span 2;"><span class="tbl">Material</span><span class="tbv" id="tbMat">—</span></div>
@@ -211,7 +216,7 @@ body.presenting #presBar.show { opacity: 1; pointer-events: auto; }
         </div>
         <div class="tb-row r4">
           <div class="tb-cell" style="grid-column: span 2;"><span class="tbl">Est. weight</span><span class="tbv" id="tbWeight">—</span></div>
-          <div class="tb-cell" style="grid-column: span 2;"><span class="tbl">Ground entry</span><span class="tbv" id="tbLegs">—</span></div>
+          <div class="tb-cell" style="grid-column: span 2;"><span class="tbl" id="tbLegsL">Ground entry</span><span class="tbv" id="tbLegs">—</span></div>
         </div>
       </div>
     </div>
@@ -2612,6 +2617,10 @@ function buildPanel() {
     ${C_('showContacts', 'Mark touch points in the view', true)}
     <div class="info" id="contactInfo" style="white-space:pre-line">—</div>
 
+    <div class="sub">Title block</div>
+    ${S_('tbWeightMode', 'Weight shown', [['both', 'Steel and aluminum'], ['steel', 'Steel only'], ['alum', 'Aluminum only'], ['none', 'Hide weight']], 'both')}
+    <div class="hint">Click any value in the title block to retype it. Clear it to leave it blank. Double-click its label to go back to automatic.</div>
+
     <div class="sub">Overall envelope (ft)</div>
     <div class="row3">${N_('dimW', 'W (x)', 10, 2, 80, 0.5)}${N_('dimD', 'D (z)', 10, 2, 80, 0.5)}${N_('dimH', 'H (y)', 10, 1, 60, 0.5)}</div>
     <div class="hint" id="dimHint">Pipe thickness is included in these dimensions.</div>
@@ -3444,15 +3453,39 @@ function buildScene(draft) {
   if (!state.fitted) { fitView(); state.fitted = true; }
 }
 
+// Every value in the title block can be retyped. A typed value stays until its label is double-clicked.
+state.tbManual = state.tbManual || {};
+function applyTitleOverrides() {
+  document.querySelectorAll('#titleBlock .tbv').forEach(v => { if (Object.prototype.hasOwnProperty.call(state.tbManual, v.id) && document.activeElement !== v) v.textContent = state.tbManual[v.id]; v.classList.toggle('manual', Object.prototype.hasOwnProperty.call(state.tbManual, v.id)); });
+}
+function wireTitleBlock() {
+  document.querySelectorAll('#titleBlock .tb-cell').forEach(cell => {
+    const lab = cell.querySelector('.tbl'), val = cell.querySelector('.tbv'); if (!lab || !val) return;
+    val.setAttribute('contenteditable', 'true'); val.setAttribute('spellcheck', 'false'); lab.setAttribute('data-reset', '1'); lab.title = 'Double-click to go back to automatic';
+    val.addEventListener('input', () => { state.tbManual[val.id] = val.textContent; });
+    val.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); val.blur(); } });
+    val.addEventListener('paste', (e) => { e.preventDefault(); document.execCommand('insertText', false, (e.clipboardData.getData('text/plain') || '').replace(/\s+/g, ' ')); });
+    lab.addEventListener('dblclick', () => { delete state.tbManual[val.id]; buildScene(false); });
+  });
+}
 function updateReadouts(c, A) {
   const st = c.st, form = c.form, od = c.odFt, limit = c.pipeLimitFt, pl = c.plane;
   const all = [].concat(...A.dense.map(d => d.pts)), vis = pl.active ? all.filter(p => p[1] >= -0.001) : all;
   const bb = vis.length ? bbox(vis) : { size: [0, 0, 0], mx: [0, 0, 0] };
   const cr = [].concat(...A.dense.map(d => splitAtGround(d.pts, d.closed).cross)); state.cross = cr;
-  const W = bb.size[0] + od, D = bb.size[2] + od, H = pl.active ? bb.mx[1] + od / 2 : bb.size[1] + od;
+  let W = bb.size[0] + od, D = bb.size[2] + od, H = pl.active ? bb.mx[1] + od / 2 : bb.size[1] + od;
+  { const fl = num('distalFlare'), L = form.lap; if (fl > 1.001 && L.length && vis.length) {   // the flared ends are wider than the nominal pipe, so measure the real surface
+      const cn = [0, 0, 0]; L.forEach(p => { for (let k = 0; k < 3; k++) cn[k] += p[k] / L.length; }); let md = 0.001; L.forEach(p => { md = Math.max(md, Math.hypot(p[0] - cn[0], p[1] - cn[1], p[2] - cn[2])); });
+      const mn = [1e9, 1e9, 1e9], mx = [-1e9, -1e9, -1e9];
+      vis.forEach(p => { const d = Math.hypot(p[0] - cn[0], p[1] - cn[1], p[2] - cn[2]), r = od / 2 * (1 + (fl - 1) * Math.pow(Math.min(1, d / md), 2.5)); for (let k = 0; k < 3; k++) { mn[k] = Math.min(mn[k], p[k] - r); mx[k] = Math.max(mx[k], p[k] + r); } });
+      W = mx[0] - mn[0]; D = mx[2] - mn[2]; H = pl.active ? mx[1] : mx[1] - mn[1]; } }
   $('tbDate').textContent = (() => { const d = new Date(); return `${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}.${d.getFullYear()}`; })();
   $('tbForm').textContent = pl.active ? `ABOVE GRADE · ${cr.length / 2 | 0} ARCS` : 'CLOSED LOOP';
   $('tbDims').textContent = `${ftIn(W)} W × ${ftIn(D)} D × ${ftIn(H)} H`;
+  { const lift = c.postsOn ? num('postClear') : (!pl.on && num('hangH') > 0 ? num('hangH') : 0), L2 = $('tbLegsL');
+    $('tbDimsL').textContent = lift > 0 ? 'Sculpture envelope (no posts)' : pl.active ? 'Above grade' : 'Overall dims';
+    L2.textContent = lift > 0 ? (c.postsOn ? 'Height above grade' : 'Height above floor') : 'Ground entry';
+    c._liftTxt = lift > 0 ? `${ftIn(lift + H)} TO TOP · ${ftIn(lift)} CLEAR` : null; }
   $('tbMat').textContent = st.label;
   const len = pl.active && !chk('exportBelow') ? A.lenAbove : A.length;
   $('tbLen').textContent = ftIn(len);
@@ -3465,10 +3498,12 @@ function updateReadouts(c, A) {
         const tot = wp.reduce((a, p) => a + p.lenFt, 0);
         wi.textContent = `${st.steelCount} stainless + ${st.woodCount} oak members (${st.memOD}" round).\n${wp.length} oak pieces, ${ftIn(tot)} in all. Gaps of 1/2" at every butt joint.`; } } }
   const fmtW = (w) => Math.round(w).toLocaleString() + ' lb', b = A.baseW * sc, ex = A.extraW * sc;
-  $('tbWeight').textContent = (st.woodCount > 0) ? `STAINLESS ${fmtW(b + ex)} · OAK ~${fmtW((A.woodW || 0) * sc)}` : (st.weightNote === 'pipe' || st.weightNote === 'steel') ? `STEEL ${fmtW(b + ex)} · ALUM ~${fmtW((b + ex) * 0.344)}` : st.weightNote === 'wood' ? `WOOD ~${fmtW(b)}` : `HDPE ~${fmtW(b)} (rough)`;
+  const wm = $('tbWeightMode').value;
+  $('tbWeight').textContent = ((st.weightNote === 'pipe' || st.weightNote === 'steel') && !(st.woodCount > 0) && wm !== 'both') ? (wm === 'steel' ? `STEEL ${fmtW(b + ex)}` : wm === 'alum' ? `ALUM ~${fmtW((b + ex) * 0.344)}` : '—') : (st.woodCount > 0) ? `STAINLESS ${fmtW(b + ex)} · OAK ~${fmtW((A.woodW || 0) * sc)}` : (st.weightNote === 'pipe' || st.weightNote === 'steel') ? `STEEL ${fmtW(b + ex)} · ALUM ~${fmtW((b + ex) * 0.344)}` : st.weightNote === 'wood' ? `WOOD ~${fmtW(b)}` : `HDPE ~${fmtW(b)} (rough)`;
   const angs = cr.map(x => x.angle);
-  $('tbLegs').textContent = !pl.active ? '—' : angs.length ? angs.slice(0, 4).map(a => a.toFixed(0) + '°').join(' / ') + (angs.length > 4 ? ' …' : '') : 'none — all above grade';
+  $('tbLegs').textContent = c._liftTxt ? c._liftTxt : !pl.active ? '—' : angs.length ? angs.slice(0, 4).map(a => a.toFixed(0) + '°').join(' / ') + (angs.length > 4 ? ' …' : '') : 'none — all above grade';
 
+  applyTitleOverrides();
   { const ci = $('contactInfo');
     if (!c.contactsEligible) ci.textContent = state.csvPoints ? 'Imported points: no touch analysis.' : 'Touch points are not available for this profile.';
     else {
@@ -3942,9 +3977,10 @@ function collectConfig() {
     if (el.type === 'file' || el.id === 'audioScrubber') return;
     cfg[el.id] = el.type === 'checkbox' ? el.checked : el.value;
   });
-  cfg.projName = $('projName').value; cfg.siteName = $('siteName').value; cfg.views = state.views || []; return cfg;
+  cfg.projName = $('projName').value; cfg.siteName = $('siteName').value; cfg.views = state.views || []; cfg._tb = Object.assign({}, state.tbManual); return cfg;
 }
 function applyConfig(cfg) {
+  state.tbManual = Object.assign({}, cfg._tb || {});
   if (cfg.views) { state.views = cfg.views; refreshViewChips(); }
   Object.keys(cfg).forEach(id => {
     const el = $(id); if (!el || el.type === 'file' || id.startsWith('_')) return;
@@ -3958,6 +3994,7 @@ let DEFAULTS = null;
 // Wiring
 // ---------------------------------------------------------------------
 function wire() {
+  wireTitleBlock();
   $('btnLoad').addEventListener('click', () => $('fileInput').click());
   $('fileInput').addEventListener('change', (e) => {
     const f = e.target.files[0]; if (!f) return; e.target.value = '';
