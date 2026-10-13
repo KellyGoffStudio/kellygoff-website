@@ -4082,6 +4082,11 @@ function goView(i) {
 function presentTick() {
   controls.autoRotate = !!state.turn; controls.autoRotateSpeed = 1.3;
   if (photoTex) fitPhoto();
+  if (state.turn && !camTween) {                                // the turntable spins about the vertical axis through the middle of the work, however the view was panned
+    if (!state.turnAxis) { const c = new THREE.Box3().setFromObject(currentMeshGroup).getCenter(new THREE.Vector3()); state.turnAxis = [c.x, c.z]; camera.up.set(0, 1, 0); }
+    const dx = state.turnAxis[0] - controls.target.x, dz = state.turnAxis[1] - controls.target.z;
+    if (Math.abs(dx) + Math.abs(dz) > 1e-6) { controls.target.x += dx; controls.target.z += dz; camera.position.x += dx; camera.position.z += dz; }
+  }
   if (!camTween) return;
   const k = Math.min(1, (performance.now() - camTween.t0) / camTween.dur), e = k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
   camera.position.lerpVectors(camTween.p0, camTween.p1, e); controls.target.lerpVectors(camTween.t0v, camTween.t1, e);
@@ -4113,7 +4118,7 @@ function wakePres() {
   $('presBar').classList.add('show'); document.body.classList.remove('idle'); clearTimeout(presTimer);
   presTimer = setTimeout(() => { $('presBar').classList.remove('show'); document.body.classList.add('idle'); }, 2800);
 }
-function setTurn(on) { state.turn = on; $('btnTurn').classList.toggle('active', on); $('presTurn').classList.toggle('active', on); }
+function setTurn(on) { state.turn = on; state.turnAxis = null; $('btnTurn').classList.toggle('active', on); $('presTurn').classList.toggle('active', on); }
 function wirePresent() {
   const bar = document.createElement('div'); bar.id = 'presBar';
   bar.innerHTML = '<button id="presPrev" title="Previous view (←)">◀</button><span id="presChips"></span><button id="presNext" title="Next view (→)">▶</button><span class="sep"></span><button id="presSave" title="Save the current camera as the next view">★ Save view</button><button id="presTurn" title="Turntable (Space)">Turn</button><button id="presTitle" title="Show or hide the title block (T)">Title</button><button id="presExit" title="Exit (Esc)">Exit</button>';
