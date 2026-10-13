@@ -3427,6 +3427,7 @@ function buildScene(draft) {
   }
   { let half = 0; c.form.lap.forEach(p => { half = Math.max(half, Math.abs(p[0]), Math.abs(p[2])); }); sizeGround(Math.max(24, Math.ceil((2 * half + 6) / 2) * 2)); gridHelper.position.y = c.plane.on ? c.plane.yc : 0; }
   slab.visible = c.plane.on;
+  { const cc = new THREE.Box3().setFromObject(currentMeshGroup).getCenter(new THREE.Vector3()); state.formCenter = [cc.x, cc.z]; vertRef.position.set(cc.x, 0, cc.z); }   // the vertical scale stands on the middle of the work, which is also the turntable axis
   vertRef.visible = chk('showVertRef'); buildRefs(); buildFootings(); { const fi = $('footInfo'); if (fi) fi.textContent = footingSummary() || (chk('planeOn') ? 'No place where the line meets grade.' : 'Turn on the ground plane to see footings.'); }
   marker.scale.setScalar(Math.max(0.28, Math.min(0.7, c.odFt * 0.8)));
   updateReadouts(c, X.A);
@@ -4083,8 +4084,8 @@ function presentTick() {
   controls.autoRotate = !!state.turn; controls.autoRotateSpeed = 1.3;
   if (photoTex) fitPhoto();
   if (state.turn && !camTween) {                                // the turntable spins about the vertical axis through the middle of the work, however the view was panned
-    if (!state.turnAxis) { const c = new THREE.Box3().setFromObject(currentMeshGroup).getCenter(new THREE.Vector3()); state.turnAxis = [c.x, c.z]; camera.up.set(0, 1, 0); }
-    const dx = state.turnAxis[0] - controls.target.x, dz = state.turnAxis[1] - controls.target.z;
+    camera.up.set(0, 1, 0); const ax = state.formCenter || [0, 0];
+    const dx = ax[0] - controls.target.x, dz = ax[1] - controls.target.z;
     if (Math.abs(dx) + Math.abs(dz) > 1e-6) { controls.target.x += dx; controls.target.z += dz; camera.position.x += dx; camera.position.z += dz; }
   }
   if (!camTween) return;
