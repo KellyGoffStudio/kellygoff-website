@@ -235,7 +235,7 @@ def project_page(p, folder, label, lst):
                  f'allow="{"autoplay; " if v.get("autoplay") else ""}fullscreen; picture-in-picture" allowfullscreen></iframe></div></figure>')
     figs = ''.join(figl)
     note = f'<p class="note">{LW(p.get("text") or p.get("summary") or "")}</p>' if (p.get('text') or p.get('summary')) else ''
-    lk = ''.join(f'<div class="fact"><div class="k">Link</div><div class="v"><a href="{E(l["url"])}" rel="noopener">{E(l["label"])}</a></div></div>' for l in p.get('links', []))
+    lk = ''.join(f'<div class="fact"><div class="k">Link</div><div class="v"><a href="{E(link(l["url"][1:]) if l["url"].startswith("/") else l["url"])}" rel="noopener">{E(l["label"])}</a></div></div>' for l in p.get('links', []))
     note += lk
     au = p.get('audio')
     if au: note += f'<div class="fact"><div class="k">Audio</div><div class="v"><audio controls preload="none" src="{asset("assets/media/" + au["file"])}" aria-label="{E(au["label"])}"></audio><div class="m">{E(au["label"])}</div></div></div>'
@@ -292,7 +292,7 @@ def fieldwork_page(f_, i):
         p = next(x for x in PUB if x['slug'] == s); rel += f'<div class="fact"><div class="k">Related work</div><div class="v"><a href="{link(f"public-work/{s}/")}">{E(p["title"])}, {p["year"]}</a></div></div>'
     for s in f_.get('related_studio', []):
         p = next(x for x in STU if x['slug'] == s); rel += f'<div class="fact"><div class="k">Related work</div><div class="v"><a href="{link(f"studio/{s}/")}">{E(p["title"])}, {p["year"]}</a></div></div>'
-    lk = ''.join(f'<div class="fact"><div class="k">Link</div><div class="v"><a href="{E(l["url"])}" rel="noopener">{E(l["label"])}</a></div></div>' for l in f_.get('links', []))
+    lk = ''.join(f'<div class="fact"><div class="k">Link</div><div class="v"><a href="{E(link(l["url"][1:]) if l["url"].startswith("/") else l["url"])}" rel="noopener">{E(l["label"])}</a></div></div>' for l in f_.get('links', []))
     text = ''.join(f'<p>{AIL(re.sub(r"\[([^\]]+)\]\((https?://[^)]+)\)", lambda m: f"<a href={chr(34)}{m.group(2)}{chr(34)} rel=noopener>{m.group(1)}</a>", E(t)))}</p>' for t in f_['text'])
     nxt = fw[i - 1] if i > 0 else None; prv = fw[i + 1] if i < len(fw) - 1 else None
     pager = (f'<nav class="pager" aria-label="More fieldwork"><span>{f"<a href={chr(34)}{link(f"fieldwork/{prv["slug"]}/")}{chr(34)}>← {E(prv["title"])}</a>" if prv else ""}</span>'
@@ -391,6 +391,7 @@ def main():
         (OUT / '_headers').write_text('/assets/*\n  Cache-Control: public, max-age=31536000, immutable\n/img/*\n  Cache-Control: public, max-age=31536000, immutable\n' + ('/*\n  X-Robots-Tag: noindex, nofollow\n' if site.get('prelaunch') else ''))
     (OUT / 'files').mkdir(exist_ok=True)
     for f in (ROOT / 'src/files').glob('*.pdf'): shutil.copy(f, OUT / 'files' / f.name)
+    (OUT / 'lineworks').mkdir(exist_ok=True); shutil.copy(ROOT / 'src/lineworks/index.html', OUT / 'lineworks' / 'index.html')   # the LineWorks tool, one self-contained file served from the site
     print(f'{MODE}: {len(PAGES)} pages -> {OUT}')
     if PLACEHOLDERS_USED: print('placeholders for', len(PLACEHOLDERS_USED), 'image folders')
 
