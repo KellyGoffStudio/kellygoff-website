@@ -1993,7 +1993,14 @@ function solveSeed(F, P, o) {
   if (limit > 0 && t.r < limit) {
     let ok = null; const kmin = P.mode === 'plot' ? 2 : Math.max(2, W);
     for (let Kc = kmax - 0.5; Kc >= kmin; Kc -= 0.5) { const c = trial(Kc, s0); if (c.r >= limit) { ok = c; break; } t = c; }
-    if (ok) { t = ok; note = 'smoothed'; }
+    let eased = null;
+    if (ok && P.mode === 'plot' && ok.kc < 4 && kmax >= 4) {   // calming all the way down leaves a plain ring, so ease the sound's pull at a moderate detail instead when that holds the limit
+      let lo = 0, hi = s0, best = trial(4, 0);
+      for (let k = 0; k < 9; k++) { const mid = (lo + hi) / 2, c = trial(4, mid); if (c.r >= limit) { lo = mid; best = c; } else hi = mid; }
+      if (best.r >= limit) eased = best;
+    }
+    if (eased) { t = eased; note = 'relaxed'; }
+    else if (ok) { t = ok; note = 'smoothed'; }
     else {                                                     // ease amplitude at the calmest detail (bisection on how much the sound reshapes the line)
       const kr = P.mode === 'plot' ? Math.max(2, Math.min(kmax, P.relaxK ?? 4)) : kmin;   // plot mode: ease how far the sound pulls the line, at a moderate detail unless told otherwise
       let lo = 0, hi = s0, best = trial(kr, 0); note = 'cap';
@@ -3539,6 +3546,34 @@ async function processAudioFile(file) {
   setStatus('Site data read. The whole file is one lap of the line.');
   state.sigKey = ''; updateVisibility(); refreshLabels(); buildScene(false);
 }
+// A table of numbers over time (stream flow, tide, traffic) is read the way a recording is: each column becomes a signal along one lap of the line.
+function loadSeries(rows, file) {
+  const heads = rows.length ? Object.keys(rows[0]) : [], cols = [];
+  heads.forEach(h => { const v = rows.map(r => r[h]).filter(x => Number.isFinite(x)); if (v.length >= 16 && v.length >= rows.length * 0.8) cols.push({ name: h.trim(), v: rows.map(r => Number.isFinite(r[h]) ? r[h] : NaN) }); });
+  if (!cols.length) return false;
+  const M = 1024, order = ['loud', 'bright', 'tilt', 'noisy', 'flux', 'busy'];
+  const fill = (v) => { const n = v.length, out = v.slice(); let last = NaN; for (let i = 0; i < n; i++) { if (Number.isFinite(out[i])) last = out[i]; else if (Number.isFinite(last)) out[i] = last; } let nx = NaN; for (let i = n - 1; i >= 0; i--) { if (Number.isFinite(out[i])) nx = out[i]; else out[i] = nx; } return out; };
+  const smooth = (x, k) => { const n = x.length, o = new Float64Array(n); for (let i = 0; i < n; i++) { let a = 0, c = 0; for (let j = -k; j <= k; j++) { const w = 1 - Math.abs(j) / (k + 1); a += w * x[(i + j + n) % n]; c += w; } o[i] = a / c; } return o; };
+  const zs = (x) => { let m = 0; x.forEach(v => m += v); m /= x.length; let sd = 0; x.forEach(v => sd += (v - m) * (v - m)); sd = Math.sqrt(sd / x.length) || 1; return Float64Array.from(x, v => (v - m) / sd); };
+  const prep = (c) => {
+    let v = fill(c.v); const mn = Math.min(...v), mx = Math.max(...v);
+    if (mn > 0 && mx / mn > 5) v = v.map(Math.log);                               // flows span orders of magnitude, so read them in log
+    const n = v.length, x = new Float64Array(M);
+    for (let i = 0; i < M; i++) { const t = i * (n - 1) / (M - 1), a = Math.floor(t), b = Math.min(n - 1, a + 1); x[i] = v[a] + (v[b] - v[a]) * (t - a); }
+    const k = Math.round(M * 0.08); for (let i = 0; i < k; i++) { const w = i / k; x[M - k + i] = x[M - k + i] * (1 - w) + x[0] * w; }   // close the lap
+    return zs(x);
+  };
+  const base = cols.slice(0, 6).map(prep), d = (x) => { const o = new Float64Array(M), s = smooth(x, 8); for (let i = 0; i < M; i++) o[i] = Math.abs(s[(i + 1) % M] - s[(i - 1 + M) % M]); return o; };
+  const derived = [() => zs(d(base[0])), () => zs(d(base[1] || base[0])), () => zs(smooth(d(base[2] || base[0]), 30)), () => zs(smooth(d(base[0]), 60))];
+  const feats = {}; order.forEach((n, i) => { feats[n] = Float32Array.from(i < base.length ? base[i] : derived[i - base.length]()); });
+  state.feat = { feats, order, M, stereo: false, v: 2, meta: { durationSec: 0, channels: 0, sampleRate: 0, frames: 0, quietShare: 0 } };
+  state.csvPoints = null; state.featVer++; state.recName = file.name; stopAudio(); $('audioPlayerWidget').style.display = 'none';
+  $('srcName').textContent = file.name;
+  $('srcMeta').textContent = `${rows.length} rows · ${cols.slice(0, 6).map(c => c.name).join(', ')}${cols.length > 6 ? ' (first six used)' : ''}`;
+  setStatus('Table read as site data. The whole table is one lap of the line, and every slider works as it does for a recording.');
+  state.sigKey = ''; updateVisibility(); refreshLabels(); buildScene(false);
+  return true;
+}
 function loadCsv(file) {
   setStatus('Reading points…');
   Papa.parse(file, {
@@ -3549,7 +3584,7 @@ function loadCsv(file) {
         const k = {}; Object.keys(row).forEach(h => k[h.trim().toLowerCase()] = row[h]);
         if (Number.isFinite(k.x) && Number.isFinite(k.y) && Number.isFinite(k.z)) pts.push([k.x, k.y, k.z]);
       });
-      if (pts.length < 8) { setStatus('Point file needs numeric x, y, z columns (8+ rows), in feet.'); return; }
+      if (pts.length < 8) { if (loadSeries(res.data, file)) return; setStatus('Point file needs numeric x, y, z columns (8+ rows), in feet. A table of numbers over time (stream flow, say) is read as site data instead.'); return; }
       state.csvPoints = pts; stopAudio(); $('audioPlayerWidget').style.display = 'none';
       $('srcName').textContent = file.name; $('srcMeta').textContent = `${pts.length} points · treated as a closed loop`;
       setStatus('Point file loaded. Sound controls are bypassed.'); buildScene(false);
