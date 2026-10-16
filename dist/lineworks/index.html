@@ -2793,6 +2793,7 @@ function buildPanel() {
         ${R('stripEdgeTol', 'Edge-bend tolerance', 0.25, 3, 0.25, 1, v => (+v).toFixed(2) + '"', 'Flat bar cannot bend in its own plane. Strips are cut shorter wherever the path curves sideways more than this away from a straight line.')}
         ${R('stripTwistLim', 'Hand-twist limit', 5, 60, 1, 20, v => v + '°/ft', 'Strips twisting faster than this are marked and need to be pre-rolled. About 20 to 30°/ft is the elastic limit for 2" × 1/8" aluminum.')}
         ${R('stripTone', 'Batch variation', 0, 30, 1, 10, v => v + '%', 'Small lightness changes from strip to strip.')}
+        ${C_('stripFlat', 'Lay strips flat between ribs', true, 'Each strip is a flat panel from rib to rib, so any twist or bend happens at the ribs. Off: one continuous ribbon along the path.')}
         ${C_('stripShowTwist', 'Color strips by twist (green, amber, red)', false)}
         ${C_('stripRivets', 'Show rivets', true)}
         ${S_('rivetEvery', 'Rivet at', [['1', 'Every rib'], ['2', 'Every second rib'], ['3', 'Every third rib']], '2')}
@@ -3531,7 +3532,7 @@ function buildStrips(X) {
   const A = X.A, draft = X.qMul < 1;
   const O = { w: num('stripW') / 12, th: parseFloat($('stripT').value) / 12, tilt: num('stripTilt') * Math.PI / 180, stock: parseFloat($('stripStock').value),
     minLen: num('stripMinLen'), maxLen: num('stripMaxLen'), butt: num('stripGap') / 12, skip: num('stripSkip') / 100, tol: num('stripEdgeTol') / 12,
-    twLim: num('stripTwistLim') * Math.PI / 180, tone: num('stripTone') / 100, every: Math.max(1, parseInt($('rivetEvery').value)), rivets: chk('stripRivets'), showTw: chk('stripShowTwist') };
+    twLim: num('stripTwistLim') * Math.PI / 180, tone: num('stripTone') / 100, every: Math.max(1, parseInt($('rivetEvery').value)), rivets: chk('stripRivets'), showTw: chk('stripShowTwist'), flat: chk('stripFlat') };
   O.maxLen = Math.min(O.maxLen, O.stock - 0.5); O.minLen = Math.min(O.minLen, O.maxLen);
   let seed = (parseInt($('stripSeed').value) * 7919 + 13) % 4294967296;
   const rnd = () => { seed = (seed * 1664525 + 1013904223) % 4294967296; return seed / 4294967296; }, rr = (a, b) => a + (b - a) * rnd();
@@ -3581,22 +3582,50 @@ function buildStrips(X) {
         if (dev(i0, i1) > O.tol) forced = true;
         const sLen = S[i1] - S[i0]; s = S[i1] + O.butt;
         if (sLen < 0.8 || rnd() < O.skip) continue;
-        let twM = 0, kEM = 0, kFM = 0; for (let i = i0; i <= i1; i++) { twM = Math.max(twM, tw[i]); kEM = Math.max(kEM, kE[i]); kFM = Math.max(kFM, kF[i]); }
+        let twM = 0, kEM = 0, kFM = 0, kn = null, KP = null, spans = null;
+        const corners = (P, ac, nm) => [-1, 1, 1, -1].map((sa, k) => P.clone().addScaledVector(ac, sa * O.w / 2).addScaledVector(nm, (k < 2 ? -1 : 1) * O.th / 2));
+        if (O.flat) {
+          // a flat panel between each pair of neighboring ribs (and the strip's two ends); the bend and twist happen at the ribs
+          kn = [...new Set([i0, ...ribsIn(i0, i1), i1])].sort((x, y) => x - y); KP = kn.map(k => ribP.get(k) || Pm[k]); spans = [];
+          for (let q = 0; q < kn.length - 1; q++) {
+            const a = kn[q], b = kn[q + 1], C = KP[q + 1].clone().sub(KP[q]), L = Math.max(1e-6, C.length()), Ts = C.clone().divideScalar(L);
+            const nm0 = NR[a].clone().add(NR[b]); nm0.addScaledVector(Ts, -nm0.dot(Ts)); if (nm0.length() < 1e-6) nm0.copy(NR[a]); nm0.normalize();
+            const ac = Ts.clone().cross(nm0).normalize(), nm = ac.clone().cross(Ts).normalize(); spans.push({ L, Ts, nm, ac });
+          }
+          for (let q = 1; q < spans.length; q++) {
+            const p0 = spans[q - 1], p1 = spans[q], Lh = (p0.L + p1.L) / 2, Ta = p0.Ts.clone().add(p1.Ts).normalize(), d = p1.Ts.clone().sub(p0.Ts);
+            const pa = p0.nm.clone().addScaledVector(Ta, -p0.nm.dot(Ta)).normalize(), pb = p1.nm.clone().addScaledVector(Ta, -p1.nm.dot(Ta)).normalize();
+            twM = Math.max(twM, Math.abs(Math.atan2(pa.clone().cross(pb).dot(Ta), pa.dot(pb))) / Lh);
+            kFM = Math.max(kFM, Math.abs(d.dot(p0.nm.clone().add(p1.nm).normalize())) / Lh); kEM = Math.max(kEM, Math.abs(d.dot(p0.ac.clone().add(p1.ac).normalize())) / Lh);
+          }
+        } else for (let i = i0; i <= i1; i++) { twM = Math.max(twM, tw[i]); kEM = Math.max(kEM, kE[i]); kFM = Math.max(kFM, kF[i]); }
         if (O.showTw) { const ratio = twM / O.twLim; tmpC.setHSL(0.33 * (1 - Math.max(0, Math.min(1, ratio / 1.5))), 0.75, 0.5); }
         else { tmpC.copy(base); tmpC.offsetHSL(0, 0, (rnd() - 0.5) * O.tone); }
-        const ring = [];
-        for (let i = i0; i <= i1; i += stride) { const ii = Math.min(i, i1), acr = AC[ii], nrm = NR[ii], Pc = Pm[ii];
-          ring.push([-1, 1, 1, -1].map((sa, k) => Pc.clone().addScaledVector(acr, sa * O.w / 2).addScaledVector(nrm, (k < 2 ? -1 : 1) * O.th / 2))); if (ii === i1) break; }
-        if (ring.length < 2) continue;
-        for (let i = 0; i < ring.length - 1; i++) { const A0 = ring[i], B0 = ring[i + 1]; for (let k = 0; k < 4; k++) { const k2 = (k + 1) % 4; addQuad(A0[k], A0[k2], B0[k2], B0[k], tmpC); } }
-        addQuad(ring[0][3], ring[0][2], ring[0][1], ring[0][0], tmpC); const e = ring.length - 1; addQuad(ring[e][0], ring[e][1], ring[e][2], ring[e][3], tmpC);
+        if (O.flat) {
+          const rings = spans.map((sp, q) => [corners(KP[q], sp.ac, sp.nm), corners(KP[q + 1], sp.ac, sp.nm)]);
+          rings.forEach((rg, q) => {
+            for (let k = 0; k < 4; k++) { const k2 = (k + 1) % 4; addQuad(rg[0][k], rg[0][k2], rg[1][k2], rg[1][k], tmpC); }
+            if (q > 0) { const prev = rings[q - 1][1]; for (let k = 0; k < 4; k++) { const k2 = (k + 1) % 4; addQuad(prev[k], prev[k2], rg[0][k2], rg[0][k], tmpC); } }       // the hinge at the rib
+          });
+          const f0 = rings[0][0], f1 = rings[rings.length - 1][1]; addQuad(f0[3], f0[2], f0[1], f0[0], tmpC); addQuad(f1[0], f1[1], f1[2], f1[3], tmpC);
+        } else {
+          const ring = [];
+          for (let i = i0; i <= i1; i += stride) { const ii = Math.min(i, i1), acr = AC[ii], nrm = NR[ii], Pc = Pm[ii];
+            ring.push([-1, 1, 1, -1].map((sa, k) => Pc.clone().addScaledVector(acr, sa * O.w / 2).addScaledVector(nrm, (k < 2 ? -1 : 1) * O.th / 2))); if (ii === i1) break; }
+          if (ring.length < 2) continue;
+          for (let i = 0; i < ring.length - 1; i++) { const A0 = ring[i], B0 = ring[i + 1]; for (let k = 0; k < 4; k++) { const k2 = (k + 1) % 4; addQuad(A0[k], A0[k2], B0[k2], B0[k], tmpC); } }
+          addQuad(ring[0][3], ring[0][2], ring[0][1], ring[0][0], tmpC); const e = ring.length - 1; addQuad(ring[e][0], ring[e][1], ring[e][2], ring[e][3], tmpC);
+        }
         // rivets at the rib rings under the strip
         const cand = ribsIn(i0, i1); let sel = cand.filter((_, k) => k % O.every === 0);              // rivets go only at ribs, first and last rib always included
         if (sel[sel.length - 1] !== cand[cand.length - 1]) sel.push(cand[cand.length - 1]);
-        if (O.rivets && !draft) sel.forEach(i => { const Pr = ribP.get(i) || Pm[i]; addRivet(Pr.clone().addScaledVector(NR[i], O.th / 2), NR[i], AC[i], T[i]); });
+        const rivFrame = (i) => { if (O.flat) { const q = kn.indexOf(i), s1 = spans[Math.max(0, q - 1)], s2 = spans[Math.min(spans.length - 1, q)];
+            return { P: KP[q], nrm: s1.nm.clone().add(s2.nm).normalize(), acr: s1.ac.clone().add(s2.ac).normalize(), tn: s1.Ts.clone().add(s2.Ts).normalize() }; }
+          return { P: ribP.get(i) || Pm[i], nrm: NR[i], acr: AC[i], tn: T[i] }; };
+        if (O.rivets && !draft) sel.forEach(i => { const f = rivFrame(i); addRivet(f.P.clone().addScaledVector(f.nrm, O.th / 2), f.nrm, f.acr, f.tn); });
         SS.count++; if (lengthened) SS.lengthened++; SS.totalFt += sLen; SS.maxTw = Math.max(SS.maxTw, twM); if (twM > O.twLim) SS.over++; if (forced) SS.forced++; SS.rivets += sel.length;
         if (kEM > 1e-6) SS.minEdgeR = Math.min(SS.minEdgeR, 1 / kEM); if (kFM > 1e-6) SS.minFlatR = Math.min(SS.minFlatR, 1 / kFM);
-        A.stripPieces.push({ lenFt: sLen, lane: wi, group: g, twDegFt: twM * 180 / Math.PI, over: twM > O.twLim, forced, rivets: sel.length, rivetIdx: sel, rivetPts: sel.map(i => { const q = ribP.get(i) || Pm[i]; return [q.x, q.y, q.z]; }), N });
+        A.stripPieces.push({ lenFt: sLen, lane: wi, group: g, twDegFt: twM * 180 / Math.PI, over: twM > O.twLim, forced, rivets: sel.length, rivetIdx: sel, rivetPts: sel.map(i => { const q = rivFrame(i).P; return [q.x, q.y, q.z]; }), N });
       }
     });
   });
