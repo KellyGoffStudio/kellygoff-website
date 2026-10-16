@@ -2187,6 +2187,7 @@ const FONT_WOFF={'bc400':'d09GRgABAAAAAEhUAA4AAAAAhOQAAQABAAAAAAAAAAAAAAAAAAAAAA
 // Uses core4.js for the math. Feet in the model, inches in the pieces.
 // ---------------------------------------------------------------------
 const TK = { barIn: 120, usableIn: 96, kerfIn: 0.125, flatUsableIn: 108, extra: 0.2 };
+const AL_FACTOR = 0.344, AL_LB_IN3 = 0.0975, STEEL_LB_IN3 = 0.2836;     // aluminum weighs 0.344 of steel; 6061 is 0.0975 lb/in³
 const fi = (inches) => {                                   // 7'-4 1/4"  (nearest 1/4")
   const neg = inches < 0; let q = Math.round(Math.abs(inches) * 4), ft = Math.floor(q / 48); q -= ft * 48; const w = Math.floor(q / 4), fr = q % 4;
   return (neg ? '-' : '') + ft + "'-" + w + (fr ? (fr === 2 ? ' 1/2' : fr === 1 ? ' 1/4' : ' 3/4') : '') + '"';
@@ -2209,7 +2210,7 @@ function buildTakeoff() {
     A.members.forEach((m, i) => { const s = addStock('strand_' + m.skey, `${m.od}" OD × ${((m.od - m.id) / 2).toFixed(3)}" wall ${tube ? 'tubing' : 'Sched 40 pipe'}`, m.od, m.id, m.w); MM.push({ ptsFt: m.pts, closed: m.closed, group: i, kind: 'metal', stock: s.key }); });
   } else if (prof === 'truss') {
     const tube = $('trussStockType').value !== 'sched40', sp = tube ? TUBING_0125[$('trussTubingSize').value] : NPS_SCHED_40[$('trussSched40Size').value];
-    const s = addStock('truss', `${sp.od}" OD × ${((sp.od - sp.id) / 2).toFixed(3)}" wall stainless ${tube ? 'tubing' : 'pipe'}`, sp.od, sp.id, sp.w);
+    const al = $('trussMetal').value === 'alum', s = addStock('truss', `${sp.od}" OD × ${((sp.od - sp.id) / 2).toFixed(3)}" wall ${al ? '6061 aluminum' : 'stainless'} ${tube ? 'tubing' : 'pipe'}`, sp.od, sp.id, sp.w * (al ? AL_FACTOR : 1));
     A.members.forEach((m, i) => {
       if (m.mat === 'wood') m.pieces.forEach(pc => { const N = m.pts.length, pts = []; for (let k = pc.a; k <= pc.b; k++) pts.push(m.pts[k % N]); if (pts.length >= 3) MM.push({ ptsFt: pts, closed: false, group: i, kind: 'wood', od: m.od, pre: true }); });
       else MM.push({ ptsFt: m.pts, closed: m.closed, group: i, kind: 'metal', stock: s.key });
@@ -2240,8 +2241,13 @@ function buildTakeoff() {
     order.groups.push({ type: 'bars', item: `${metalName === 'Stainless' ? '' : ''}${s.name}`, pcs: ps.length, net: n, order: n20, unit: "× 10' bars", wt: lb, wt20: lb20, usedIn: used, bars });
   });
   if (prof === 'truss' && A.ribs && A.ribs.length) {
-    const rl = A.ribs.map((r, i) => ({ id: 'R' + (i + 1), lenIn: Math.PI * (r.Ro + r.Ri) * 12 })); const bars = nestBars(rl, TK.flatUsableIn, TK.kerfIn), n = bars.length, n20 = Math.ceil(n * (1 + TK.extra) - 1e-9), lbFt = 0.25 * 1.25 * 12 * 0.2836;
-    order.groups.push({ type: 'bars', item: `Stainless flat bar 1/4" × 1-1/4" — rolled into ${A.ribs.length} rib rings (${(A.ribs[0].odIn).toFixed(1)}" OD)`, pcs: A.ribs.length, net: n, order: n20, unit: "× 10' bars", wt: n * 10 * lbFt, wt20: n20 * 10 * lbFt, usedIn: rl.reduce((a, r) => a + r.lenIn, 0), bars });
+    const rl = A.ribs.map((r, i) => ({ id: 'R' + (i + 1), lenIn: Math.PI * (r.Ro + r.Ri) * 12 })); const bars = nestBars(rl, TK.flatUsableIn, TK.kerfIn), n = bars.length, n20 = Math.ceil(n * (1 + TK.extra) - 1e-9), lbFt = 0.25 * 1.25 * 12 * (st.alum ? AL_LB_IN3 : STEEL_LB_IN3);
+    order.groups.push({ type: 'bars', item: `${st.alum ? '6061 aluminum' : 'Stainless'} flat bar 1/4" × 1-1/4" — rolled into ${A.ribs.length} rib rings (${(A.ribs[0].odIn).toFixed(1)}" OD)`, pcs: A.ribs.length, net: n, order: n20, unit: "× 10' bars", wt: n * 10 * lbFt, wt20: n20 * 10 * lbFt, usedIn: rl.reduce((a, r) => a + r.lenIn, 0), bars });
+  }
+  if (prof === 'truss' && A.stripPieces && A.stripPieces.length && A.stripStats) {
+    const SS = A.stripStats, o = SS.opts, capIn = o.stock * 12 - 1, items = A.stripPieces.map((p, i) => ({ id: 'S' + (i + 1), lenIn: p.lenFt * 12 })),
+      bars = nestBars(items, capIn, TK.kerfIn), n = bars.length, n20 = Math.ceil(n * (1 + TK.extra) - 1e-9), lbFt = SS.lbFt, tt = Math.abs(o.t - 0.125) < 1e-4 ? '1/8' : o.t.toFixed(3);
+    order.groups.push({ type: 'strips', item: `6061 aluminum flat bar ${o.w}" × ${tt}" — ${A.stripPieces.length} slat strips, roughly ${SS.rivets} rivets`, pcs: A.stripPieces.length, net: n, order: n20, unit: `× ${o.stock}' bars`, wt: n * o.stock * lbFt, wt20: n20 * o.stock * lbFt, usedIn: items.reduce((a, r) => a + r.lenIn, 0), bars, capIn });
   }
   const wood = pieces.filter(p => p.kind === 'wood');
   if (wood.length) {
@@ -2314,23 +2320,24 @@ function makeTakeoffSVGraw() {
   const cols = [tx, tx + 330, tx + 392, tx + 500, tx + 608, tx + 692]; const heads = ['ITEM', 'PIECES', 'NET QUANTITY', 'ORDER (+20%)', 'WEIGHT NET', 'WEIGHT +20%'];
   heads.forEach((h, i) => svg += `<text x="${cols[i]}" y="${y}" class="th">${h}</text>`); y += 5; svg += `<line x1="${tx}" y1="${y}" x2="${tx + tw}" y2="${y}" stroke="${INK}" stroke-width="0.7"/>`; y += 12;
   const lb = (v) => Math.round(v).toLocaleString() + ' lb', nf = (v) => v.toFixed(1);
-  let tBars = 0, tBars20 = 0, tBf = 0, tBf20 = 0, tWt = 0, tWt20 = 0, tPcs = 0;
+  let tBars = 0, tBars20 = 0, tBf = 0, tBf20 = 0, tWt = 0, tWt20 = 0, tPcs = 0, tStr = 0, tStr20 = 0;
   const wrap = (t, n) => { const w = t.split(' '), lines = []; let cur = ''; w.forEach(x => { if ((cur + ' ' + x).trim().length > n) { lines.push(cur.trim()); cur = x; } else cur += ' ' + x; }); lines.push(cur.trim()); return lines; };
   T.order.groups.forEach(g => {
     const lines = wrap(g.item, 62); lines.forEach((l, i) => svg += `<text x="${cols[0]}" y="${y + i * 10}" class="row">${esc(l)}</text>`);
-    const net = g.type === 'bars' ? `${g.net} ${g.unit}` : `${nf(g.net)} ${g.unit}`, ord = g.type === 'bars' ? `${g.order} ${g.unit}` : `${nf(g.order)} ${g.unit}`;
+    const isBar = g.type === 'bars' || g.type === 'strips', net = isBar ? `${g.net} ${g.unit}` : `${nf(g.net)} ${g.unit}`, ord = isBar ? `${g.order} ${g.unit}` : `${nf(g.order)} ${g.unit}`;
     svg += `<text x="${cols[1]}" y="${y}" class="row">${g.pcs}</text><text x="${cols[2]}" y="${y}" class="row">${net}</text><text x="${cols[3]}" y="${y}" class="rowb">${ord}</text><text x="${cols[4]}" y="${y}" class="row">${lb(g.wt)}</text><text x="${cols[5]}" y="${y}" class="row">${lb(g.wt20)}</text>`;
     if (g.type === 'wood' && g.byLen) svg += `<text x="${cols[0]}" y="${y + lines.length * 10}" class="tn">${Object.keys(g.byLen).sort((a, b) => a - b).map(kk => `${g.byLen[kk]} × ${kk}'`).join('   ')}  ·  gross board feet incl. 3" trim per piece</text>`;
+    else if (g.type === 'strips') svg += `<text x="${cols[0]}" y="${y + lines.length * 10}" class="tn">${fi(g.usedIn)} of cut strips on ${g.net} bars (${((g.net * g.capIn - g.usedIn) / 12).toFixed(1)}' of offcut)</text>`;
     else svg += `<text x="${cols[0]}" y="${y + lines.length * 10}" class="tn">${g.usedIn ? `${fi(g.usedIn)} of cut pieces on ${g.net} bars (${(g.net * 96 - g.usedIn / 1 > 0 ? ((g.net * 96 - g.usedIn) / 12).toFixed(1) : 0)}' of usable offcut)` : ''}</text>`;
     y += lines.length * 10 + 14; tPcs += g.pcs; tWt += g.wt; tWt20 += g.wt20;
-    if (g.type === 'bars') { tBars += g.net; tBars20 += g.order; } else { tBf += g.net; tBf20 += g.order; }
+    if (g.type === 'bars') { tBars += g.net; tBars20 += g.order; } else if (g.type === 'strips') { tStr += g.net; tStr20 += g.order; } else { tBf += g.net; tBf20 += g.order; }
     svg += `<line x1="${tx}" y1="${y - 5}" x2="${tx + tw}" y2="${y - 5}" stroke="${RULE}" stroke-width="0.5"/>`; y += 6;
   });
   const metalSub = T.order.groups.filter(g => g.type === 'bars'), woodSub = T.order.groups.filter(g => g.type === 'wood');
   if (metalSub.length) { const w1 = metalSub.reduce((a, g) => a + g.wt, 0), w2 = metalSub.reduce((a, g) => a + g.wt20, 0); svg += `<text x="${cols[0]}" y="${y}" class="rowb">SUBTOTAL — METAL STOCK</text><text x="${cols[1]}" y="${y}" class="rowb">${metalSub.reduce((a, g) => a + g.pcs, 0)}</text><text x="${cols[2]}" y="${y}" class="rowb">${tBars} × 10' bars</text><text x="${cols[3]}" y="${y}" class="rowb">${tBars20} × 10' bars</text><text x="${cols[4]}" y="${y}" class="rowb">${lb(w1)}</text><text x="${cols[5]}" y="${y}" class="rowb">${lb(w2)}</text>`; y += 13; }
   if (woodSub.length) { const g = woodSub[0]; svg += `<text x="${cols[0]}" y="${y}" class="rowb">SUBTOTAL — WOOD</text><text x="${cols[1]}" y="${y}" class="rowb">${g.pcs}</text><text x="${cols[2]}" y="${y}" class="rowb">${nf(g.net)} bd ft</text><text x="${cols[3]}" y="${y}" class="rowb">${nf(g.order)} bd ft</text><text x="${cols[4]}" y="${y}" class="rowb">${lb(g.wt)}</text><text x="${cols[5]}" y="${y}" class="rowb">${lb(g.wt20)}</text>`; y += 13; }
   svg += `<line x1="${tx}" y1="${y - 4}" x2="${tx + tw}" y2="${y - 4}" stroke="${INK}" stroke-width="0.9"/>`; y += 8;
-  svg += `<text x="${cols[0]}" y="${y}" class="rowb">TOTAL ORDER</text><text x="${cols[1]}" y="${y}" class="rowb">${tPcs}</text><text x="${cols[2]}" y="${y}" class="rowb">${[tBars ? tBars + " bars" : '', tBf ? nf(tBf) + ' bd ft' : ''].filter(Boolean).join(' + ')}</text><text x="${cols[3]}" y="${y}" class="rowb">${[tBars20 ? tBars20 + " bars" : '', tBf20 ? nf(tBf20) + ' bd ft' : ''].filter(Boolean).join(' + ')}</text><text x="${cols[4]}" y="${y}" class="rowb">${lb(tWt)}</text><text x="${cols[5]}" y="${y}" class="rowb">${lb(tWt20)}</text>`;
+  svg += `<text x="${cols[0]}" y="${y}" class="rowb">TOTAL ORDER</text><text x="${cols[1]}" y="${y}" class="rowb">${tPcs}</text><text x="${cols[2]}" y="${y}" class="rowb">${[tBars ? tBars + " bars" : '', tStr ? tStr + ' flat bar' : '', tBf ? nf(tBf) + ' bd ft' : ''].filter(Boolean).join(' + ')}</text><text x="${cols[3]}" y="${y}" class="rowb">${[tBars20 ? tBars20 + " bars" : '', tStr20 ? tStr20 + ' flat bar' : '', tBf20 ? nf(tBf20) + ' bd ft' : ''].filter(Boolean).join(' + ')}</text><text x="${cols[4]}" y="${y}" class="rowb">${lb(tWt)}</text><text x="${cols[5]}" y="${y}" class="rowb">${lb(tWt20)}</text>`;
   const orderBottom = y + 8;
   // ---- notes ---------------------------------------------------------
   const nx = M + tw + 30, nw = W - M - nx; let ny = by + bh + 34;
@@ -2340,7 +2347,8 @@ function makeTakeoffSVGraw() {
     "Each piece shows its main bend radius, plus up to two tighter radii with the span they cover, measured from the piece's start end. Radii are estimates from the model centerline; pieces are drawn flattened to their best-fit plane.",
     "Order columns add 20% for waste and mistakes. Bars round up to whole bars.",
     T.order.groups.some(g => g.type === 'wood') ? "Oak is rounded from square blanks: diameter + 1/4\", rounded up to 1/4\". Board feet include 3\" of trim per piece. White oak weighs about 47 lb per cubic foot." : "",
-    T.order.groups.some(g => /rib rings/.test(g.item)) ? "Rib rings are rolled from flat bar. Each bar loses 12\" for tool ends." : ""].filter(Boolean);
+    T.order.groups.some(g => /rib rings/.test(g.item)) ? "Rib rings are rolled from flat bar. Each bar loses 12\" for tool ends." : "",
+    T.order.groups.some(g => g.type === 'strips') ? "Strips are cut from flat bar sticks with 1\" trim per stick and 1/8\" kerf. Each strip crosses at least two rib rings and is riveted only at the ribs, never to the tubes. Pre-roll any strip marked for twist or tight flatwise bends before painting. Strips are not in the STEP file." : ""].filter(Boolean);
   notes.forEach(n => wrap(n, 62).forEach(l => { svg += `<text x="${nx}" y="${ny}" class="tn">${esc(l)}</text>`; ny += 9.5; }) || (ny += 3));
   // member colour legend
   const mem = [...new Set(T.pieces.filter(p => p.kind === 'metal').map(p => p.group))].sort((a, b) => a - b);
@@ -2372,7 +2380,7 @@ function makeTakeoffSVGraw() {
   };
   function stocksName(T, p) { const s = T.stocks[p.stock]; return s ? s.name : ''; }
   let partsSvg = ''; const rows = Math.ceil(metal.length / 3);
-  if (metal.length) { partsSvg += `<text x="${M}" y="${y}" class="sec">PARTS — ${T.prof === 'truss' ? 'STAINLESS' : 'METAL'}, LETTERED</text><line x1="${M + 190}" y1="${y - 3}" x2="${W - M}" y2="${y - 3}" stroke="${RULE}" stroke-width="0.6"/>`; y += 12;
+  if (metal.length) { partsSvg += `<text x="${M}" y="${y}" class="sec">PARTS — ${T.prof === 'truss' ? (st.alum ? 'ALUMINUM' : 'STAINLESS') : 'METAL'}, LETTERED</text><line x1="${M + 190}" y1="${y - 3}" x2="${W - M}" y2="${y - 3}" stroke="${RULE}" stroke-width="0.6"/>`; y += 12;
     metal.forEach((p, i) => { partsSvg += card(p, M + (i % 3) * (cw + 12), y + Math.floor(i / 3) * (ch + 10)); }); y += rows * (ch + 10) + 16; }
   // ---- wood table ------------------------------------------------------
   if (woodP.length) {
@@ -2746,19 +2754,49 @@ function buildPanel() {
       ${S_('trussStockType', 'Member stock', [['sched40', 'Sched 40 pipe'], ['tubing', '0.125" wall tubing']], 'sched40')}
       <div id="g_trussS40">${S_('trussSched40Size', 'Pipe size', sizeOpts(NPS_SCHED_40, 'Sched 40').filter(o => +o[0] <= 6), '1.5')}</div>
       <div id="g_trussTub">${S_('trussTubingSize', 'Tubing size', sizeOpts(TUBING_0125, 'tube'), '1.5')}</div>
+      ${S_('trussMetal', 'Truss metal', [['stainless', 'Stainless (weights as steel)'], ['alum', '6061 aluminum']], 'stainless')}
       ${R('trussOD', 'Rib ring outer diameter', 8, 18, 0.5, 12, v => (+v).toFixed(1) + '"')}
       ${S_('trussDistribution', 'Member spacing', [['even', 'Even'], ['irregular', 'Irregular / clustered']], 'even')}
       <div id="g_seed">${R('trussSeed', 'Cluster pattern', 1, 20, 1, 3, v => v)}</div>
       ${S_('ribSpacing', 'Rib spacing', [['10', '10"'], ['12', '12"'], ['14', '14"'], ['16', '16"']], '12')}
-      <div class="hint">Solid 1/4" × 1.25" flat-bar rings along the path at the spacing above.</div>
+      ${C_('ribAuto', 'Auto place ribs', false, 'Spacing follows the form: closest where the bundle flares, farthest where it is skinnier and straighter. Tight bends pull it halfway to the closest spacing.')}
+      <div id="g_ribAuto">
+        ${R('ribMin', 'Closest rib spacing', 6, 16, 1, 8, v => v + '"')}
+        ${R('ribMax', 'Farthest rib spacing', 8, 24, 1, 16, v => v + '"')}
+      </div>
+      ${C_('ribOutside', 'Ribs on the outside of the tubes', false, 'Off by default: the rings sit inside, and the tubes rest against their outer edge. On: the rings wrap the outside of the tubes. With strips on, every member then stays a tube and the strips lie outside the rings.')}
+      <div class="hint">Solid 1/4" × 1.25" flat-bar rings along the path.</div>
+      <div class="info" id="ribInfo">—</div>
       <div class="sub">Oak fill</div>
-      ${C_('woodOn', 'Add oak members', false, 'Some members become round oak, the same diameter as the tubing. The rest stay stainless.')}
+      ${C_('woodOn', 'Add oak members', false, 'Some members become round oak, the same diameter as the tubing. The rest stay tube.')}
+      ${C_('stripOn', 'Add flat-bar strips (shingle skin)', false, 'Some members become lanes of overlapping flat bar laid along the same paths. The rest stay tube. Turning this on also switches the truss to aluminum.')}
+      <div id="g_fill">
+        ${R('steelShare', 'Tube share of members', 10, 90, 5, 25, pct, 'Spread evenly around the bundle. At least one member stays a tube.')}
+      </div>
       <div id="g_wood">
-        ${R('steelShare', 'Stainless share of members', 10, 90, 5, 25, pct, 'Spread evenly around the bundle. At least one member stays stainless.')}
         ${S_('woodTone', 'Oak finish', [['white', 'White oak, clear'], ['charred', 'Charred, dark charcoal']], 'white')}
         ${S_('oakLen', 'Oak piece length', [['mix', 'Mix of 4\', 6\' and 8\''], ['4', '4\' pieces'], ['6', '6\' pieces'], ['8', '8\' pieces']], 'mix')}
         ${R('oakSeed', 'Oak layout (re-roll)', 1, 40, 1, 1, v => v, 'Changes where the oak pieces start and stop. Pieces are staggered so joints do not line up. 1/2" gap between butt ends.')}
         <div class="info" id="woodInfo">—</div>
+      </div>
+      <div id="g_strip">
+        <div class="sub">Strips</div>
+        ${R('stripW', 'Strip width', 1, 4, 0.25, 2, v => (+v).toFixed(2).replace(/\.?0+$/, '') + '"')}
+        ${S_('stripT', 'Strip thickness', [['0.063', '0.063" (about 16 ga)'], ['0.08', '0.080"'], ['0.1', '0.100"'], ['0.125', '1/8"'], ['0.1875', '3/16"'], ['0.25', '1/4"']], '0.125')}
+        ${S_('stripStock', 'Flat bar stock length', [['12', "12' sticks"], ['20', "20' sticks"]], '12')}
+        ${R('stripMinLen', 'Shortest strip', 1.5, 12, 0.5, 5, v => v + "'")}
+        ${R('stripMaxLen', 'Longest strip', 4, 19, 0.5, 11, v => v + "'", 'Held under the stock length, with 6" for trim.')}
+        ${R('stripTilt', 'Strip tilt', 0, 45, 1, 20, v => v + '°', 'How far each strip leans off the bundle surface. The sign alternates from lane to lane so the edges overlap.')}
+        ${R('stripGap', 'Gap between strip ends', 0, 3, 0.25, 0.5, v => (+v).toFixed(2) + '"')}
+        ${R('stripSkip', 'Open gaps (negative space)', 0, 40, 1, 6, v => v + '%', 'Share of strips left out so the tubes show through.')}
+        ${R('stripSeed', 'Strip layout (re-roll)', 1, 40, 1, 11, v => v, 'Changes where the strips start and stop.')}
+        ${R('stripEdgeTol', 'Edge-bend tolerance', 0.25, 3, 0.25, 1, v => (+v).toFixed(2) + '"', 'Flat bar cannot bend in its own plane. Strips are cut shorter wherever the path curves sideways more than this away from a straight line.')}
+        ${R('stripTwistLim', 'Hand-twist limit', 5, 60, 1, 20, v => v + '°/ft', 'Strips twisting faster than this are marked and need to be pre-rolled. About 20 to 30°/ft is the elastic limit for 2" × 1/8" aluminum.')}
+        ${R('stripTone', 'Batch variation', 0, 30, 1, 10, v => v + '%', 'Small lightness changes from strip to strip.')}
+        ${C_('stripShowTwist', 'Color strips by twist (green, amber, red)', false)}
+        ${C_('stripRivets', 'Show rivets', true)}
+        ${S_('rivetEvery', 'Rivet at', [['1', 'Every rib'], ['2', 'Every second rib'], ['3', 'Every third rib']], '2')}
+        <div class="info" id="stripInfo">—</div>
       </div>
     </div>
     <div class="row2">${N_('distalOd', 'Far-end OD (in, 0 = no flare)', 0, 0, 48, 0.125)}<div></div></div>
@@ -2773,6 +2811,12 @@ function buildPanel() {
     ${R('matRoughness', 'Roughness', 0.05, 1, 0.05, 0.35, x2)}
     ${R('matMetalness', 'Metalness', 0, 1, 0.05, 0.05, x2)}
     ${C_('trussStainless', 'Truss metal shown as brushed stainless', true, 'Truss members and ribs use a stainless look. Turn off to use the surface color above.')}
+    <div class="sub">Truss and strip colors</div>
+    ${S_('trussFinish', 'Truss finish', [['metal', 'Bare metal'], ['paint', 'Painted (truss color below)']], 'metal')}
+    <label class="lbl" for="trussColor"><span>Truss color (tubes, ribs, posts)</span></label>
+    <input type="color" id="trussColor" value="#ff6a13" aria-label="Truss color">
+    <label class="lbl" for="stripColor"><span>Strip color</span></label>
+    <input type="color" id="stripColor" value="#f4f4f1" aria-label="Strip color">
     ${C_('showKinks', 'Mark tight bends (amber)', true)}
     ${C_('enableWireframe', 'Wireframe', false)}`;
 
@@ -2821,7 +2865,7 @@ function buildPanel() {
 }
 
 function trussAutoFill() {
-  if (!chk('woodOn') || state.fillManual) return;
+  if ((!chk('woodOn') && !chk('stripOn')) || state.fillManual) return;
   const stock = $('trussStockType').value, od = num('trussOD'),
     sp = stock === 'sched40' ? NPS_SCHED_40[$('trussSched40Size').value] : TUBING_0125[$('trussTubingSize').value],
     rc = od / 2 + sp.od / 2, nmax = Math.floor(Math.PI / Math.asin(Math.min(0.99, (sp.od / 2) / rc))),
@@ -2836,7 +2880,7 @@ function updateVisibility() {
   show('g_mobius', prof === 'square' && !planeOn);
   show('g_strandS40', $('strandStockType').value === 'sched40'); show('g_strandTub', $('strandStockType').value === 'tubing');
   show('g_trussS40', $('trussStockType').value === 'sched40'); show('g_trussTub', $('trussStockType').value === 'tubing');
-  show('g_seed', $('trussDistribution').value === 'irregular'); show('g_wood', chk('woodOn'));
+  show('g_seed', $('trussDistribution').value === 'irregular'); show('g_wood', chk('woodOn')); show('g_fill', chk('woodOn') || chk('stripOn')); show('g_strip', chk('stripOn')); show('c_ribSpacing', !chk('ribAuto')); show('g_ribAuto', chk('ribAuto'));
   $('detail').disabled = chk('lenOn'); $('pathLen').disabled = !chk('lenOn'); $('c_detail').style.opacity = chk('lenOn') ? .5 : 1; $('c_pathLen').style.opacity = chk('lenOn') ? 1 : .6; $('lenGrow').disabled = !chk('lenOn');
   show('g_plane', planeOn); show('g_found', chk('foundOn') && !chk('postsOn')); show('g_susp', !planeOn); show('g_posts', chk('postsOn')); show('g_plates', chk('plateOn')); show('c_planeFt', !chk('postsOn'));
   $('exportRibs').disabled = prof !== 'truss';
@@ -2869,10 +2913,12 @@ function getStock() {
       contactOdIn: n >= 3 ? 2 * (LY.E - rm) * Math.cos(Math.PI / n) + 2 * rm : 2 * LY.E });
   } else {
     const stock = $('trussStockType').value, n = parseInt($('trussCount').value), od = num('trussOD');
-    const wood = chk('woodOn'), ns = wood ? Math.max(1, Math.min(n - 1, Math.round(n * num('steelShare') / 100))) : n;
+    const strip = chk('stripOn'), wood = chk('woodOn') || strip, ns = wood ? Math.max(1, Math.min(n - 1, Math.round(n * num('steelShare') / 100))) : n;
     const sp = stock === 'sched40' ? NPS_SCHED_40[$('trussSched40Size').value] : TUBING_0125[$('trussTubingSize').value];
-    Object.assign(st, { outerExtentIn: od / 2 + sp.od, minInsideIn: sp.id * bf, weightLbFt: sp.w * ns, weightNote: stock === 'sched40' ? 'pipe' : 'steel',
-      label: wood ? `${ns} STAINLESS + ${n - ns} OAK × ${sp.od}" · ${od}" RIBS` : `${n} × ${sp.od}" MEMBERS · ${od}" RIBS`, memOD: sp.od, memID: sp.id, memCount: n, steelCount: ns, woodCount: wood ? n - ns : 0, memLbFt: sp.w, ringOD: od });
+    const alum = $('trussMetal').value === 'alum', mw = alum ? 'ALUMINUM' : 'STAINLESS', fw = strip ? 'STRIP LANES' : 'OAK', allTubes = strip && chk('ribOutside');   // strips outside the rings: every member stays a tube
+    Object.assign(st, { outerExtentIn: od / 2 + sp.od + (chk('ribOutside') ? 0.25 : 0), minInsideIn: sp.id * bf, weightLbFt: sp.w * (allTubes ? n : ns) * (alum ? AL_FACTOR : 1), weightNote: stock === 'sched40' ? 'pipe' : 'steel',
+      label: allTubes ? `${n} ${mw} TUBES + ${n - ns} STRIP LANES OUTSIDE × ${sp.od}" · ${od}" RIBS` : wood ? `${ns} ${mw} + ${n - ns} ${fw} × ${sp.od}" · ${od}" RIBS` : `${n} × ${sp.od}" ${alum ? 'ALUMINUM ' : ''}MEMBERS · ${od}" RIBS`, memOD: sp.od, memID: sp.id, memCount: n, steelCount: ns, woodCount: wood ? n - ns : 0, memLbFt: sp.w, ringOD: od,
+      strip, alum, metalWord: mw, fillWord: fw, allTubes });
     { const seed = parseInt($('trussSeed').value), irr = $('trussDistribution').value === 'irregular', rc = od / 2 + sp.od / 2;
       const angs = Array.from({ length: n }, (_, m) => (((m / n) * TAU + (irr ? Math.sin(m * 2.3 + seed) * Math.min(0.45, 0.22 * TAU / n) : 0)) % TAU + TAU) % TAU).sort((a, b) => a - b);
       let gap = n >= 2 ? 0 : TAU; for (let i = 0; i < n && n >= 2; i++) gap = Math.max(gap, (i + 1 < n ? angs[i + 1] : angs[0] + TAU) - angs[i]);
@@ -3235,7 +3281,7 @@ function vertexU(geo, i) {
 }
 const AMBER = new THREE.Color(0xf59e0b), CLEAR = new THREE.Color(0xd9480f);
 function applyColor(mesh, geo, bend, flags) {
-  const stain = flags && flags.stain, mode = $('colorMode').value, base = new THREE.Color(stain ? 0xd2d5d9 : $('matColor').value), rough = stain ? 0.42 : num('matRoughness'), metal = stain ? 0.45 : num('matMetalness'), wire = chk('enableWireframe');
+  const stain = flags && flags.stain, own = flags && flags.col, mode = own ? 'solid' : $('colorMode').value, base = new THREE.Color(own ? own : stain ? 0xd2d5d9 : $('matColor').value), rough = own ? flags.rough : stain ? 0.42 : num('matRoughness'), metal = own ? flags.metal : stain ? 0.45 : num('matMetalness'), wire = chk('enableWireframe');
   if (flags && flags.shade !== undefined && !stain) { const hsl = {}; base.getHSL(hsl); if (!(hsl.l > 0.93 && hsl.s < 0.15)) base.setHSL(hsl.h, hsl.s, Math.max(0.1, Math.min(0.9, hsl.l + flags.shade * 0.15))); }   // a color other than white: each size gets its own shade, the largest darkest
   const marks = (chk('showKinks') && bend && bend.minFt > 0) || (chk('showClear') && bend && bend.hasLow);
   if (mode === 'solid' && !marks) { mesh.material = new THREE.MeshStandardMaterial({ color: base, roughness: rough, metalness: metal, wireframe: wire }); return; }
@@ -3386,8 +3432,21 @@ function buildPiece(piece, idx, X) {
       const angs = Array.from({ length: n }, (_, m) => (m / n) * TAU + (irregular ? Math.sin(m * 2.3 + seed) * Math.min(0.45, 0.22 * TAU / n) : 0));
       const ns = st.steelCount, isSteel = new Array(n).fill(st.woodCount === 0);
       if (st.woodCount > 0) for (let k = 0; k < ns; k++) isSteel[Math.min(n - 1, Math.floor((k + 0.5) * n / ns))] = true;
-      const stainless = chk('trussStainless') && $('colorMode').value === 'solid', oakSeed = parseInt($('oakSeed').value), oakMode = $('oakLen').value;
+      const paint = $('trussFinish').value === 'paint', paintHex = $('trussColor').value, stainless = chk('trussStainless') && $('colorMode').value === 'solid' && !paint, oakSeed = parseInt($('oakSeed').value), oakMode = $('oakLen').value;
       const oakHex = $('woodTone').value === 'charred' ? 0x34373a : 0xb1906b, oakRough = $('woodTone').value === 'charred' ? 0.85 : 0.78;
+      // strip lanes are built from the same frames and radii as the tubes and the rib rings, so they land on the rings exactly:
+      // inside, a lane sits where its tube would; outside, it lies just beyond the ring, its nearest edge resting on it
+      const stripP = st.strip ? { w: num('stripW') / 12, th: parseFloat($('stripT').value) / 12, tilt: num('stripTilt') * Math.PI / 180 } : null;
+      const mkLane = (m, samp) => {
+        const th = angs[m] + manual, P = [], Rad = [], outside = chk('ribOutside'), clr = (stripP.w / 2) * Math.sin(Math.abs(stripP.tilt)) + (stripP.th / 2) * Math.cos(stripP.tilt);
+        for (let i = 0; i < cnt; i++) {
+          const tan = curve.getTangentAt(Math.min(1, i / nF)).normalize(), r0 = frames.normals[i].clone().multiplyScalar(Math.cos(th)).addScaledVector(frames.binormals[i], Math.sin(th));
+          r0.addScaledVector(tan, -r0.dot(tan)); if (r0.length() < 1e-6) r0.copy(frames.normals[i]); r0.normalize();
+          const R = outside ? Rb * df(i) + st.memOD / 12 + 0.25 / 12 + clr : Rb * df(i) + mR;
+          P.push(spaced[i].clone().addScaledVector(r0, R)); Rad.push(r0);
+        }
+        return { pts: samp, closed, group: idx, L: length, m, P, Rad, nF, cnt };
+      };
       let woodVolIn3 = 0, woodPieces = [];
       for (let m = 0; m < n; m++) {
         const pts = [];
@@ -3396,13 +3455,17 @@ function buildPiece(piece, idx, X) {
           pts.push(spaced[i].clone().addScaledVector(frames.normals[i], Math.cos(th) * rc).addScaledVector(frames.binormals[i], Math.sin(th) * rc));
         }
         const sub = new THREE.CatmullRomCurve3(pts, closed, 'centripetal', 0.25), samp = sampleMember(sub, length, closed);
-        if (isSteel[m]) {
+        const outStrips = st.strip && chk('ribOutside');          // strips go outside the rings, so no member is given up to them
+        if (outStrips && !isSteel[m]) X.A.stripLanes.push(mkLane(m, samp));
+        if (isSteel[m] || outStrips) {
           const geo = new THREE.TubeGeometry(sub, Math.max(100, Math.ceil(cnt * (q < 1 ? 0.6 : 1))), mR, q < 1 ? 10 : 16, closed);
           geo.userData = { kind: 'tube', vps: (q < 1 ? 10 : 16) + 1 };
-          const mm = new THREE.Mesh(geo); applyColor(mm, geo, bend, { stain: stainless });
+          const mm = new THREE.Mesh(geo); applyColor(mm, geo, bend, paint ? { col: paintHex, rough: 0.42, metal: 0.1 } : { stain: stainless });
           if (stainless && !geo.attributes.color) addVC(geo, 0xd2d5d9);
           currentMeshGroup.add(mm);
           X.A.members.push({ pts: samp, closed, od: st.memOD, id: st.memID, group: idx, L: length, kind: 'truss', mat: 'steel' });
+        } else if (st.strip) {                                    // a lane for the flat-bar strips; they are built after every member is known
+          X.A.stripLanes.push(mkLane(m, samp));
         } else {
           const N = samp.length; let Lm = 0; for (let i = 1; i < N; i++) Lm += Math.hypot(samp[i][0] - samp[i - 1][0], samp[i][1] - samp[i - 1][1], samp[i][2] - samp[i - 1][2]); if (closed) Lm += Math.hypot(samp[0][0] - samp[N - 1][0], samp[0][1] - samp[N - 1][1], samp[0][2] - samp[N - 1][2]);
           const lay = oakLayout(Lm, closed, oakMode, oakSeed, m, 0.5), mem = { pts: samp, closed, od: st.memOD, id: 0, group: idx, L: length, kind: 'truss', mat: 'wood', pieces: [] };
@@ -3426,21 +3489,123 @@ function buildPiece(piece, idx, X) {
       }
       X.A.woodW = (X.A.woodW || 0) + woodVolIn3 * 0.0272; X.A.woodPieces = (X.A.woodPieces || []).concat(woodPieces);
       // flat-bar rib rings every 12"
-      const nRibs = Math.max(2, Math.floor(length / (num('ribSpacing') / 12))), tRib = 0.25 / 12, wRib = 1.25 / 12;
-      const ribMat = (chk('trussStainless') && $('colorMode').value === 'solid') ? stainlessMat() : new THREE.MeshStandardMaterial({ color: 0xcfd3d8, roughness: 0.35, metalness: 0.3 }), last = closed ? nRibs - 1 : nRibs;
-      for (let r = 0; r <= last; r++) {
-        const u = r / nRibs, ctr = curve.getPointAt(u), tan = curve.getTangentAt(u).normalize();
-        const si = Math.min(cnt - 1, Math.floor(u * cnt)), Ro = Rb * df(si), Ri = Math.max(0.01, Ro - tRib);
+      const nRibs = Math.max(2, Math.floor(length / (num('ribSpacing') / 12))), tRib = 0.25 / 12, wRib = 1.25 / 12, ribOut = chk('ribOutside'), ribAuto = chk('ribAuto');
+      X.ribOutside = ribOut;
+      const ribMat = paint ? new THREE.MeshStandardMaterial({ color: paintHex, roughness: 0.42, metalness: 0.1 }) : (chk('trussStainless') && $('colorMode').value === 'solid') ? stainlessMat() : new THREE.MeshStandardMaterial({ color: 0xcfd3d8, roughness: 0.35, metalness: 0.3 }), last = closed ? nRibs - 1 : nRibs;
+      // rib stations as fractions of the path: even, or placed by the form (closest in the flares, farthest where it is skinny and straight)
+      const ribU = [];
+      if (ribAuto) {
+        const rmin = Math.min(num('ribMin'), num('ribMax')), rmax = Math.max(num('ribMin'), num('ribMax')), D = st.ringOD / 12;
+        const spAt = (u) => { const i = Math.min(cnt - 1, Math.floor(Math.min(1, u) * cnt)), tF = X.flare > 1 ? Math.max(0, Math.min(1, (df(i) - 1) / (X.flare - 1))) : 0;
+          const k = Math.min(nd - 1, Math.round(Math.min(1, u) * (nd - 1))), R = radii[k], tC = Math.max(0, Math.min(1, (10 - R / D) / 7)), tt = Math.max(tF, 0.5 * tC);
+          return (rmax - (rmax - rmin) * tt) / 12; };
+        let s = 0; ribU.push(0);
+        for (let guard = 0; guard < 5000; guard++) {
+          const mid = Math.min(length, s + spAt(s / length) / 2), step = spAt(mid / length); s += step;
+          if (s >= length - 0.4 * step) break; ribU.push(s / length);
+        }
+        if (!closed) ribU.push(1);
+      } else for (let r = 0; r <= last; r++) ribU.push(r / nRibs);
+      for (const u of ribU) {
+        const ctr = curve.getPointAt(u), tan = curve.getTangentAt(u).normalize();
+        const si = Math.min(cnt - 1, Math.floor(u * cnt)); let Ro, Ri;
+        if (ribOut) { Ri = Rb * df(si) + st.memOD / 12; Ro = Ri + tRib; } else { Ro = Rb * df(si); Ri = Math.max(0.01, Ro - tRib); }
         const shape = new THREE.Shape(); shape.absarc(0, 0, Ro, 0, TAU, false);
         const hole = new THREE.Path(); hole.absarc(0, 0, Ri, 0, TAU, true); shape.holes.push(hole);
         const rg = new THREE.ExtrudeGeometry(shape, { depth: wRib, bevelEnabled: false, curveSegments: q < 1 ? 14 : 32 });
         addVC(rg, 0xd2d5d9); const rm = new THREE.Mesh(rg, ribMat); rm.position.copy(ctr); rm.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tan); currentMeshGroup.add(rm);
         X.A.ribs.push({ piece: idx, station: u * length, odIn: Ro * 24, idIn: Ri * 24, ctr: [ctr.x, ctr.y, ctr.z], tan: [tan.x, tan.y, tan.z], w: wRib, Ro, Ri, group: idx });
-        X.A.extraW += Math.PI * (Ro * Ro - Ri * Ri) * 144 * 1.25 * 0.2836 * 0 + Math.PI * (Math.pow(Ro * 12, 2) - Math.pow(Ri * 12, 2)) * 1.25 * 0.2836;
+        X.A.extraW += Math.PI * (Ro * Ro - Ri * Ri) * 144 * 1.25 * 0.2836 * 0 + Math.PI * (Math.pow(Ro * 12, 2) - Math.pow(Ri * 12, 2)) * 1.25 * (st.alum ? AL_LB_IN3 : STEEL_LB_IN3);
       }
       X.A.baseW += length * st.weightLbFt;
     }
   }
+}
+// ---------------------------------------------------------------------
+// Strip skin: overlapping flat bar laid along the lane members of a truss.
+// Flat bar bends easily across its thickness and twists fairly freely, but it will not bend sideways in its own plane,
+// so each strip is cut short wherever the lane curves sideways more than the edge-bend tolerance.
+// Strips do not wrap the seam of a closed path.
+// ---------------------------------------------------------------------
+function buildStrips(X) {
+  const A = X.A, draft = X.qMul < 1;
+  const O = { w: num('stripW') / 12, th: parseFloat($('stripT').value) / 12, tilt: num('stripTilt') * Math.PI / 180, stock: parseFloat($('stripStock').value),
+    minLen: num('stripMinLen'), maxLen: num('stripMaxLen'), butt: num('stripGap') / 12, skip: num('stripSkip') / 100, tol: num('stripEdgeTol') / 12,
+    twLim: num('stripTwistLim') * Math.PI / 180, tone: num('stripTone') / 100, every: Math.max(1, parseInt($('rivetEvery').value)), rivets: chk('stripRivets'), showTw: chk('stripShowTwist') };
+  O.maxLen = Math.min(O.maxLen, O.stock - 0.5); O.minLen = Math.min(O.minLen, O.maxLen);
+  let seed = (parseInt($('stripSeed').value) * 7919 + 13) % 4294967296;
+  const rnd = () => { seed = (seed * 1664525 + 1013904223) % 4294967296; return seed / 4294967296; }, rr = (a, b) => a + (b - a) * rnd();
+  const stride = draft ? 6 : 3, base = new THREE.Color($('stripColor').value), tmpC = new THREE.Color();
+  const pos = [], col = [], idx = [], rpos = [], ridx = [];
+  const addQuad = (a, b, c2, d2, cc) => { const b0 = pos.length / 3; [a, b, c2, d2].forEach(p => { pos.push(p.x, p.y, p.z); col.push(cc.r, cc.g, cc.b); }); idx.push(b0, b0 + 1, b0 + 2, b0, b0 + 2, b0 + 3); };
+  const RV = 8, rr0 = 0.25 / 12, rh = 0.09 / 12;                       // rivet head: 1/2" dia, 0.09" high dome
+  const addRivet = (ctr, nrm, acr, tan) => {
+    const b0 = rpos.length / 3, ring = (f, h) => { for (let k = 0; k < RV; k++) { const a = k / RV * TAU; const p = ctr.clone().addScaledVector(acr, Math.cos(a) * rr0 * f).addScaledVector(tan, Math.sin(a) * rr0 * f).addScaledVector(nrm, h); rpos.push(p.x, p.y, p.z); } };
+    ring(1, 0); ring(0.8, rh * 0.65); const top = ctr.clone().addScaledVector(nrm, rh); rpos.push(top.x, top.y, top.z);
+    for (let k = 0; k < RV; k++) { const k2 = (k + 1) % RV; ridx.push(b0 + k, b0 + k2, b0 + RV + k2, b0 + k, b0 + RV + k2, b0 + RV + k); ridx.push(b0 + RV + k, b0 + RV + k2, b0 + 2 * RV); }
+  };
+  const SS = { count: 0, lengthened: 0, dropped: 0, totalFt: 0, maxTw: 0, over: 0, minEdgeR: 1e9, forced: 0, rivets: 0, minFlatR: 1e9, lanes: A.stripLanes.length };
+  const groups = [...new Set(A.stripLanes.map(l => l.group))];
+  groups.forEach(g => {
+    const lanes = A.stripLanes.filter(l => l.group === g), N = lanes[0].cnt, nF = lanes[0].nF, Lp = lanes[0].L, ribsG = A.ribs.filter(r => r.group === g);
+    lanes.forEach((ln, wi) => {
+      const Pm = ln.P, Rad = ln.Rad, S = [0]; for (let i = 1; i < N; i++) S.push(S[i - 1] + Pm[i].distanceTo(Pm[i - 1]));
+      const Lm = S[N - 1], sp = Lm / (N - 1), T = [];
+      for (let i = 0; i < N; i++) T.push(Pm[Math.min(N - 1, i + 2)].clone().sub(Pm[Math.max(0, i - 2)]).normalize());
+      const alpha = ((wi % 2) ? 1 : -1) * O.tilt + (rnd() - 0.5) * 0.05, NR = [], AC = [];
+      for (let i = 0; i < N; i++) { const t = T[i], u = Rad[i].clone().addScaledVector(t, -Rad[i].dot(t)).normalize(), n = u.clone().multiplyScalar(Math.cos(alpha)).add(t.clone().cross(u).multiplyScalar(Math.sin(alpha))).normalize(); NR.push(n); AC.push(t.clone().cross(n).normalize()); }
+      // twist (rotation of the strip about its own length, relative to a parallel-transported frame) and the two bending curvatures
+      const phi = new Float64Array(N); { const b = NR[0].clone(); let pa = 0;
+        for (let i = 1; i < N; i++) { b.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(T[i - 1], T[i])); b.sub(T[i].clone().multiplyScalar(b.dot(T[i]))).normalize();
+          let a = Math.atan2(b.clone().cross(NR[i]).dot(T[i]), b.dot(NR[i])); while (a - pa > Math.PI) a -= 2 * Math.PI; while (a - pa < -Math.PI) a += 2 * Math.PI; phi[i] = a; pa = a; } }
+      const kw = 12, kE = new Float32Array(N), kF = new Float32Array(N), tw = new Float32Array(N);
+      for (let i = 0; i < N; i++) { const a = Math.max(0, i - kw), b = Math.min(N - 1, i + kw), ds = S[b] - S[a]; if (ds < 1e-6) continue; const dT = T[b].clone().sub(T[a]); kE[i] = Math.abs(dT.dot(AC[i])) / ds; kF[i] = Math.abs(dT.dot(NR[i])) / ds; tw[i] = Math.abs(phi[b] - phi[a]) / ds; }
+      const minS = Math.max(4, Math.ceil(1.5 / sp)), mRiv = Math.max(2, Math.ceil((2 / 12) / sp));
+      // each ring's mid-width, where this lane passes through it
+      const ribP = new Map();
+      ribsG.forEach(r => { const fi = Math.max(0, Math.min(nF, (r.station + r.w / 2) / Lp * nF)), i0 = Math.min(Math.max(0, N - 2), Math.floor(fi)), f = Math.min(1, fi - i0), j = Math.min(N - 1, Math.round(fi));
+        if (!ribP.has(j)) ribP.set(j, Pm[i0].clone().lerp(Pm[Math.min(N - 1, i0 + 1)], f)); });
+      const ribI = [...ribP.keys()].sort((a, b) => a - b), ribsIn = (a, b) => ribI.filter(i => i >= a + mRiv && i <= b - mRiv);
+      const dev = (a, b) => { const P0 = Pm[a], e = Pm[b].clone().sub(P0), l = e.length(); if (l < 1e-6) return 0; e.divideScalar(l); let mx = 0;
+        for (let i = a; i <= b; i += 2) { const d = Pm[i].clone().sub(P0); d.addScaledVector(e, -d.dot(e)); mx = Math.max(mx, Math.abs(d.dot(AC[i]))); } return mx; };
+      let s = -rr(0, O.maxLen * 0.8);
+      while (s < Lm) {
+        const len = rr(O.minLen, O.maxLen), s0 = Math.max(0, s), sEnd = Math.min(Lm, s + len);
+        let i0 = S.findIndex(v => v >= s0), i1 = S.length - 1; for (let i = N - 1; i >= 0; i--) if (S[i] <= sEnd) { i1 = i; break; }
+        if (i0 < 0 || i1 - i0 < 4) { s += len + O.butt; continue; }
+        let forced = false;
+        while (i1 - i0 > minS && dev(i0, i1) > O.tol) i1 = i0 + Math.max(minS, Math.floor((i1 - i0) * 0.88));
+        // every strip must cross at least two rib rings, with room for a rivet at each; a short strip is lengthened until it does
+        let lengthened = false; while (ribsIn(i0, i1).length < 2 && i1 < N - 1) { i1 = Math.min(N - 1, i1 + 3); lengthened = true; }
+        if (ribsIn(i0, i1).length < 2) { s = S[i1] + O.butt; SS.dropped++; continue; }             // the end of a lane, no second rib to reach: leave it open
+        if (dev(i0, i1) > O.tol) forced = true;
+        const sLen = S[i1] - S[i0]; s = S[i1] + O.butt;
+        if (sLen < 0.8 || rnd() < O.skip) continue;
+        let twM = 0, kEM = 0, kFM = 0; for (let i = i0; i <= i1; i++) { twM = Math.max(twM, tw[i]); kEM = Math.max(kEM, kE[i]); kFM = Math.max(kFM, kF[i]); }
+        if (O.showTw) { const ratio = twM / O.twLim; tmpC.setHSL(0.33 * (1 - Math.max(0, Math.min(1, ratio / 1.5))), 0.75, 0.5); }
+        else { tmpC.copy(base); tmpC.offsetHSL(0, 0, (rnd() - 0.5) * O.tone); }
+        const ring = [];
+        for (let i = i0; i <= i1; i += stride) { const ii = Math.min(i, i1), acr = AC[ii], nrm = NR[ii], Pc = Pm[ii];
+          ring.push([-1, 1, 1, -1].map((sa, k) => Pc.clone().addScaledVector(acr, sa * O.w / 2).addScaledVector(nrm, (k < 2 ? -1 : 1) * O.th / 2))); if (ii === i1) break; }
+        if (ring.length < 2) continue;
+        for (let i = 0; i < ring.length - 1; i++) { const A0 = ring[i], B0 = ring[i + 1]; for (let k = 0; k < 4; k++) { const k2 = (k + 1) % 4; addQuad(A0[k], A0[k2], B0[k2], B0[k], tmpC); } }
+        addQuad(ring[0][3], ring[0][2], ring[0][1], ring[0][0], tmpC); const e = ring.length - 1; addQuad(ring[e][0], ring[e][1], ring[e][2], ring[e][3], tmpC);
+        // rivets at the rib rings under the strip
+        const cand = ribsIn(i0, i1); let sel = cand.filter((_, k) => k % O.every === 0);              // rivets go only at ribs, first and last rib always included
+        if (sel[sel.length - 1] !== cand[cand.length - 1]) sel.push(cand[cand.length - 1]);
+        if (O.rivets && !draft) sel.forEach(i => { const Pr = ribP.get(i) || Pm[i]; addRivet(Pr.clone().addScaledVector(NR[i], O.th / 2), NR[i], AC[i], T[i]); });
+        SS.count++; if (lengthened) SS.lengthened++; SS.totalFt += sLen; SS.maxTw = Math.max(SS.maxTw, twM); if (twM > O.twLim) SS.over++; if (forced) SS.forced++; SS.rivets += sel.length;
+        if (kEM > 1e-6) SS.minEdgeR = Math.min(SS.minEdgeR, 1 / kEM); if (kFM > 1e-6) SS.minFlatR = Math.min(SS.minFlatR, 1 / kFM);
+        A.stripPieces.push({ lenFt: sLen, lane: wi, group: g, twDegFt: twM * 180 / Math.PI, over: twM > O.twLim, forced, rivets: sel.length, rivetIdx: sel, rivetPts: sel.map(i => { const q = ribP.get(i) || Pm[i]; return [q.x, q.y, q.z]; }), N });
+      }
+    });
+  });
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); geo.setIndex(idx); geo.computeVertexNormals();
+  currentMeshGroup.add(new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.42, metalness: 0.12, side: THREE.DoubleSide })));
+  if (ridx.length) { const rg = new THREE.BufferGeometry(); rg.setAttribute('position', new THREE.Float32BufferAttribute(rpos, 3)); rg.setIndex(ridx); rg.computeVertexNormals();
+    currentMeshGroup.add(new THREE.Mesh(rg, new THREE.MeshStandardMaterial({ color: 0xcfd3d8, roughness: 0.35, metalness: 0.55, side: THREE.DoubleSide }))); }
+  SS.lbFt = (O.w * 12) * (O.th * 12) * 12 * AL_LB_IN3; SS.wLb = SS.totalFt * SS.lbFt; SS.opts = { w: O.w * 12, t: O.th * 12, stock: O.stock, twLimDeg: O.twLim * 180 / Math.PI, tolIn: O.tol * 12 };
+  A.stripStats = SS;
 }
 function stainlessMat() { return new THREE.MeshStandardMaterial({ color: 0xd2d5d9, metalness: 0.45, roughness: 0.42 }); }
 const OAK_JPG = 'data:image/jpeg;base64,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';
@@ -3479,10 +3644,11 @@ function buildScene(draft) {
   currentMeshGroup = new THREE.Group(); extraGroup = new THREE.Group();
   const centroid = new THREE.Vector3(); form.lap.forEach(p => centroid.add(new THREE.Vector3(p[0], p[1], p[2]))); centroid.divideScalar(form.lap.length);
   let maxDist = 0.001; form.lap.forEach(p => { maxDist = Math.max(maxDist, centroid.distanceTo(new THREE.Vector3(p[0], p[1], p[2]))); });
-  const X = { c, qMul: draft ? 0.35 : 1, flare: flareMult(c.st.odIn), centroid, maxDist, limit: c.pipeLimitFt, A: { length: 0, lenAbove: 0, minR: 99999, tightFt: 0, lowFt: 0, dense: [], members: [], ribs: [], baseW: 0, extraW: 0 } };
+  const X = { c, qMul: draft ? 0.35 : 1, flare: flareMult(c.st.odIn), centroid, maxDist, limit: c.pipeLimitFt, A: { length: 0, lenAbove: 0, minR: 99999, tightFt: 0, lowFt: 0, dense: [], members: [], ribs: [], baseW: 0, extraW: 0, stripLanes: [], stripPieces: [], stripStats: null } };
   form.pieces.forEach((pc, i) => buildPiece(pc, i, X));
+  if (c.st.profile === 'truss' && c.st.strip) { try { buildStrips(X); } catch (e) { console.error(e); } }
   if (c.postsOn && c.posts.length) {
-    const ps = postSpec(c), pm = new THREE.MeshStandardMaterial({ color: 0xb0b4b8, roughness: 0.55, metalness: 0.2 });
+    const ps = postSpec(c), pm = new THREE.MeshStandardMaterial({ color: (c.st.profile === 'truss' && $('trussFinish').value === 'paint') ? $('trussColor').value : 0xb0b4b8, roughness: 0.55, metalness: 0.2 });
     const pl = chk('plateOn') ? plateSpec(ps.od) : null, tF = pl ? pl.t / 12 : 0, bm = new THREE.MeshStandardMaterial({ color: 0x8e9398, roughness: 0.4, metalness: 0.6 });
     c.posts.forEach(p => {
       const h = p.yTop - tF, m = new THREE.Mesh(new THREE.CylinderGeometry(ps.od / 24, ps.od / 24, h, 32), pm); m.position.set(p.x, tF + h / 2, p.z); currentMeshGroup.add(m);
@@ -3566,8 +3732,25 @@ function updateReadouts(c, A) {
       else { const by = {}; wp.forEach(p => { const k = Math.round(p.lenFt); by[k] = (by[k] || 0) + 1; });
         const tot = wp.reduce((a, p) => a + p.lenFt, 0);
         wi.textContent = `${st.steelCount} stainless + ${st.woodCount} oak members (${st.memOD}" round).\n${wp.length} oak pieces, ${ftIn(tot)} in all. Gaps of 1/2" at every butt joint.`; } } }
+  { const ri = $('ribInfo'); if (ri) { if (st.profile !== 'truss' || !A.ribs.length) ri.textContent = '—'; else {
+      const g = {}; A.ribs.forEach(r => (g[r.group] = g[r.group] || []).push(r.station)); let mn = 1e9, mx = 0;
+      Object.values(g).forEach(a => { a.sort((x, y) => x - y); for (let i = 1; i < a.length; i++) { const d = (a[i] - a[i - 1]) * 12; mn = Math.min(mn, d); mx = Math.max(mx, d); } });
+      ri.textContent = `${A.ribs.length} ribs, ${mn < 1e8 ? mn.toFixed(0) + '" to ' + mx.toFixed(0) + '" apart' : 'one ring'}, ${chk('ribOutside') ? 'outside' : 'inside'} the tubes.`; } } }
+  { const si = $('stripInfo'); if (si) { const S = A.stripStats;
+      if (!st.strip || !S) si.textContent = '—';
+      else { const fr = S.minFlatR * 12, eps = fr < 1e5 ? S.opts.t / 2 / fr * 100 : 0;
+        si.textContent = `${S.count} strips on ${S.lanes} lanes, ${ftIn(S.totalFt)} of ${S.opts.w}" flat bar, about ${Math.round(S.wLb)} lb.\n` +
+          `Twist: worst ${(S.maxTw * 180 / Math.PI).toFixed(0)}°/ft. ${S.over} strip${S.over === 1 ? '' : 's'} over the ${S.opts.twLimDeg.toFixed(0)}°/ft limit need pre-rolling.\n` +
+          `Sideways (edge) bend: tightest radius ${S.minEdgeR > 1e8 ? 'none' : ftIn(S.minEdgeR)}; ${S.forced} strip${S.forced === 1 ? ' is' : 's are'} still over the ${S.opts.tolIn.toFixed(2)}" tolerance at the shortest length that reaches two ribs.\n` +
+          `Flatwise: tightest radius ${fr < 1e5 ? inch(fr) : 'none'} (${eps.toFixed(2)}% strain at the surface).\nRivets: ${S.rivets}, only at rib rings, at least 2 per strip. ${S.lengthened} strip${S.lengthened === 1 ? ' was' : 's were'} lengthened to reach a second rib${S.dropped ? '; ' + S.dropped + ' left out at lane ends' : ''}.`; } } }
   const fmtW = (w) => Math.round(w).toLocaleString() + ' lb', b = A.baseW * sc, ex = A.extraW * sc;
   const wm = $('tbWeightMode').value;
+  if (st.profile === 'truss' && (st.alum || st.strip)) {
+    const parts = [`${st.alum ? 'ALUM' : 'STAINLESS'} ${st.alum ? '~' : ''}${fmtW(b + ex)}`];
+    if (st.strip && A.stripStats) parts.push(`STRIPS ~${fmtW(A.stripStats.wLb * sc)}`);
+    if (st.woodCount > 0 && !st.strip) parts.push(`OAK ~${fmtW((A.woodW || 0) * sc)}`);
+    $('tbWeight').textContent = parts.join(' · ');
+  } else
   $('tbWeight').textContent = ((st.weightNote === 'pipe' || st.weightNote === 'steel') && !(st.woodCount > 0) && wm !== 'both') ? (wm === 'steel' ? `STEEL ${fmtW(b + ex)}` : wm === 'alum' ? `ALUM ~${fmtW((b + ex) * 0.344)}` : '—') : (st.woodCount > 0) ? `STAINLESS ${fmtW(b + ex)} · OAK ~${fmtW((A.woodW || 0) * sc)}` : (st.weightNote === 'pipe' || st.weightNote === 'steel') ? `STEEL ${fmtW(b + ex)} · ALUM ~${fmtW((b + ex) * 0.344)}` : st.weightNote === 'wood' ? `WOOD ~${fmtW(b)}` : `HDPE ~${fmtW(b)} (rough)`;
   const angs = cr.map(x => x.angle);
   $('tbLegs').textContent = c._liftTxt ? c._liftTxt : !pl.active ? '—' : angs.length ? angs.slice(0, 4).map(a => a.toFixed(0) + '°').join(' / ') + (angs.length > 4 ? ' …' : '') : 'none — all above grade';
@@ -4097,9 +4280,13 @@ function wire() {
   document.querySelectorAll('#panel select, #panel input[type=checkbox], #panel input[type=number], #panel input[type=color]').forEach(el => {
     if (LOCAL_IDS.includes(el.id)) return;
     el.addEventListener(el.type === 'color' || el.type === 'number' ? 'input' : 'change', () => {
-      if (el.id === 'woodOn') {
-        if (el.checked) { state.prevTrussCount = $('trussCount').value; state.fillManual = false; state.fillShareReset = true; trussAutoFill(); }
-        else if (state.prevTrussCount) { $('trussCount').value = state.prevTrussCount; const v = $('trussCountVal'); if (v) v.textContent = state.prevTrussCount; }
+      if (el.id === 'woodOn' || el.id === 'stripOn') {
+        if (el.checked) {
+          const other = $(el.id === 'woodOn' ? 'stripOn' : 'woodOn'), wasFill = other.checked; other.checked = false;
+          if (!wasFill) state.prevTrussCount = $('trussCount').value;
+          state.fillManual = false; state.fillShareReset = true; trussAutoFill();
+          if (el.id === 'stripOn') { $('trussMetal').value = 'alum'; $('trussStockType').value = 'sched40'; $('trussSched40Size').value = '1.5'; updateVisibility(); trussAutoFill(); }
+        } else if (!chk('woodOn') && !chk('stripOn') && state.prevTrussCount) { $('trussCount').value = state.prevTrussCount; const v = $('trussCountVal'); if (v) v.textContent = state.prevTrussCount; }
       } else if (['trussStockType', 'trussSched40Size', 'trussTubingSize'].includes(el.id)) trussAutoFill();
       updateVisibility(); rebuild();
     });
