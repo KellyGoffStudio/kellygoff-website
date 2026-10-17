@@ -2038,8 +2038,16 @@ function _segSeg(p1, q1, p2, q2) {                              // closest point
 }
 function _arcs(lap) { const n = lap.length, s = new Float64Array(n + 1); for (let i = 0; i < n; i++) { const p = lap[i], q = lap[(i + 1) % n]; s[i + 1] = s[i] + Math.hypot(q[0] - p[0], q[1] - p[1], q[2] - p[2]); } return s; }
 
+// Local pipe growth along a flared line: the same rule the model uses to draw it (grows with distance from the centroid).
+function _flareDf(lap, flare) {
+  const n = lap.length; if (!(flare > 1) || !n) return null;
+  const c = [0, 0, 0]; lap.forEach(p => { c[0] += p[0]; c[1] += p[1]; c[2] += p[2]; }); c[0] /= n; c[1] /= n; c[2] /= n;
+  const d = lap.map(p => Math.hypot(p[0] - c[0], p[1] - c[1], p[2] - c[2])); let mx = 0.001; d.forEach(v => { mx = Math.max(mx, v); });
+  return d.map(v => 1 + (flare - 1) * Math.pow(Math.min(1, v / mx), 2.5));
+}
 function findContacts(lap, od, opt = {}) {
-  const n = lap.length, S = _arcs(lap), L = S[n], nearGap = (opt.near ?? 0.9) * od, minSep = (opt.minSepOD ?? 8) * od, thr = od + nearGap;
+  const n = lap.length, S = _arcs(lap), L = S[n], df = _flareDf(lap, opt.flare), dmax = df ? Math.max(...df) : 1, nearFrac = opt.near ?? 0.9, minSep = (opt.minSepOD ?? 8) * od, thr = od * dmax * (1 + nearFrac);
+  const odIJ = (i, j) => df ? od * (df[i] + df[j]) / 2 : od;
   const dArc = (a, b) => { const d = Math.abs(a - b); return Math.min(d, L - d); };
   const D = new Float32Array(n * n).fill(1e9);
   for (let i = 0; i < n; i++) for (let j = i + 2; j < n; j++) {
@@ -2050,7 +2058,7 @@ function findContacts(lap, od, opt = {}) {
   }
   const cand = [];
   for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
-    const v = D[i * n + j]; if (v > thr) continue;
+    const v = D[i * n + j]; if (v > thr || v > odIJ(i, j) * (1 + nearFrac)) continue;
     let ok = true;
     for (let di = -2; di <= 2 && ok; di++) for (let dj = -2; dj <= 2; dj++) { if (!di && !dj) continue; const ii = (i + di + n) % n, jj = (j + dj + n) % n; if (D[ii * n + jj] < v - 1e-9 || (D[ii * n + jj] === v && (ii < i || (ii === i && jj < j)))) { ok = false; break; } }
     if (ok) cand.push([v, i, j]);
@@ -2060,7 +2068,8 @@ function findContacts(lap, od, opt = {}) {
   cand.forEach(([v, i, j]) => {
     const r = _segSeg(lap[i], lap[(i + 1) % n], lap[j], lap[(j + 1) % n]), sa = S[i] + r.s * (S[i + 1] - S[i]), sb = S[j] + r.t * (S[j + 1] - S[j]);
     if (out.some(c => (dArc(c.sa, sa) < 3 * od && dArc(c.sb, sb) < 3 * od) || (dArc(c.sa, sb) < 3 * od && dArc(c.sb, sa) < 3 * od))) return;
-    out.push({ i, j, sa: Math.min(sa, sb), sb: Math.max(sa, sb), d: r.d, gap: r.d - od, overlap: od - r.d, pct: (od - r.d) / od, pa: sa <= sb ? r.A : r.B, pb: sa <= sb ? r.B : r.A, mid: [(r.A[0] + r.B[0]) / 2, (r.A[1] + r.B[1]) / 2, (r.A[2] + r.B[2]) / 2] });
+    const odp = df ? od * ((df[i] + (df[(i + 1) % n] - df[i]) * r.s) + (df[j] + (df[(j + 1) % n] - df[j]) * r.t)) / 2 : od;   // local pipe OD at the two passes
+    out.push({ i, j, od: odp, sa: Math.min(sa, sb), sb: Math.max(sa, sb), d: r.d, gap: r.d - odp, overlap: odp - r.d, pct: (odp - r.d) / odp, pa: sa <= sb ? r.A : r.B, pb: sa <= sb ? r.B : r.A, mid: [(r.A[0] + r.B[0]) / 2, (r.A[1] + r.B[1]) / 2, (r.A[2] + r.B[2]) / 2] });
   });
   out.sort((x, y) => x.sa - y.sa); out.forEach((c, k) => { c.id = k + 1; });
   return { contacts: out, length: L };
@@ -2072,22 +2081,22 @@ function _bump(lap, S, L, sc, dir, amp, H) {                     // raised-cosin
 }
 // rules: { minTouches, overlapIn (target, inches), maxPct (0-1) }.  floorFt: smoothest allowed bend radius (the solver's floor).
 function shapeContacts(lap0, od, rules, floorFt) {
-  const target = (rules.overlapIn ?? 1.5) / 12, maxOv = (rules.maxPct ?? 0.5) * od, minT = rules.minTouches ?? 3;
+  const target = (rules.overlapIn ?? 1.5) / 12, maxPct = rules.maxPct ?? 0.5, flare = rules.flare || 1, minT = rules.minTouches ?? 3;
   let lap = lap0.map(p => p.slice()), notes = [], moved = 0;
-  const lowGood = Math.max(0.25 / 12, Math.min(0.75 / 12, target * 0.5)), good = (c) => c.overlap >= lowGood && c.overlap <= maxOv + 1e-6;
+  const lowGood = Math.max(0.25 / 12, Math.min(0.75 / 12, target * 0.5)), good = (c) => c.overlap >= lowGood && c.overlap <= maxPct * c.od + 1e-6;
   const apply = (lapIn, plan, factor) => {
     const out = lapIn.map(p => p.slice()), S = _arcs(out), L = S[out.length];
     plan.forEach(m => { const H = Math.min(m.H, 0.45 * Math.min(Math.abs(m.sb - m.sa), L - Math.abs(m.sb - m.sa))); _bump(out, S, L, m.sa, m.dir, m.amp * factor, H); _bump(out, S, L, m.sb, m.dir, -m.amp * factor, H); });
     return out;
   };
-  const reach = rules.reach ?? 2.2, clear = Math.max(0.1 * od, 0.75 / 12), dist3 = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
+  const reach = rules.reach ?? 2.2, clearOf = (c) => Math.max(0.1 * c.od, 0.75 / 12), dist3 = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
   for (let pass = 0; pass < 4; pass++) {
-    const { contacts } = findContacts(lap, od, { near: reach }), plan = [];
+    const { contacts } = findContacts(lap, od, { near: reach, flare }), plan = [];
     const mk = (c, newOverlap) => { const dv = [c.pb[0] - c.pa[0], c.pb[1] - c.pa[1], c.pb[2] - c.pa[2]], l = Math.hypot(dv[0], dv[1], dv[2]);
-      const dir = l > 1e-6 ? [dv[0] / l, dv[1] / l, dv[2] / l] : [0, 1, 0]; const delta = c.d - (od - newOverlap);   // positive pulls together, negative pushes apart
-      return { sa: c.sa, sb: c.sb, dir, amp: delta / 2, H: 5 * od }; };
+      const dir = l > 1e-6 ? [dv[0] / l, dv[1] / l, dv[2] / l] : [0, 1, 0]; const delta = c.d - (c.od - newOverlap);   // positive pulls together, negative pushes apart
+      return { sa: c.sa, sb: c.sb, dir, amp: delta / 2, H: 5 * c.od }; };
     // Keep exactly minT touches: the ones that need the least movement and are spread furthest apart; the rest are cleared or left alone.
-    const cand = contacts.filter(c => c.gap <= reach * od), cost = (c) => good(c) ? 0 : Math.abs(c.d - (od - target));
+    const cand = contacts.filter(c => c.gap <= reach * c.od), cost = (c) => good(c) ? 0 : Math.abs(c.d - (c.od - target));
     const chosen = [], pool = cand.slice();
     while (chosen.length < minT && pool.length) {
       let bi = -1, bs = -1;
@@ -2095,7 +2104,7 @@ function shapeContacts(lap0, od, rules, floorFt) {
       chosen.push(pool.splice(bi, 1)[0]);
     }
     chosen.forEach(c => { if (!good(c)) plan.push(mk(c, target)); });
-    cand.filter(c => !chosen.includes(c) && c.overlap > -clear).forEach(c => plan.push(mk(c, -clear)));
+    cand.filter(c => !chosen.includes(c) && c.overlap > -clearOf(c)).forEach(c => plan.push(mk(c, -clearOf(c))));
     if (chosen.length < minT) { const n = chosen.length; if (!notes.length) notes.push(`only ${n} touch point${n === 1 ? '' : 's'} could be made without moving the line too far`); }
     if (!plan.length) break;
     let f = 1, trial = null;                                     // back off if the bumps would tighten a bend past the floor
@@ -2103,7 +2112,7 @@ function shapeContacts(lap0, od, rules, floorFt) {
     if (!trial) { notes.push('touch points were left as they are, because moving them would make a bend too tight'); break; }
     lap = trial; moved += plan.length;
   }
-  const res = findContacts(lap, od);
+  const res = findContacts(lap, od, { flare });
   return { lap, contacts: res.contacts, notes, moved };
 }
 
@@ -2546,7 +2555,8 @@ const NPS_SCHED_40 = {
   '1.0': { od: 1.315, id: 1.049, w: 1.68 }, '1.25': { od: 1.660, id: 1.380, w: 2.27 }, '1.5': { od: 1.900, id: 1.610, w: 2.72 },
   '2.0': { od: 2.375, id: 2.067, w: 3.66 }, '2.5': { od: 2.875, id: 2.469, w: 5.79 }, '3.0': { od: 3.500, id: 3.068, w: 7.58 },
   '3.5': { od: 4.000, id: 3.548, w: 9.11 }, '4.0': { od: 4.500, id: 4.026, w: 10.79 }, '5.0': { od: 5.563, id: 5.047, w: 14.62 },
-  '6.0': { od: 6.625, id: 6.065, w: 18.97 }, '8.0': { od: 8.625, id: 7.981, w: 28.55 }
+  '6.0': { od: 6.625, id: 6.065, w: 18.97 }, '8.0': { od: 8.625, id: 7.981, w: 28.55 },
+  '10.0': { od: 10.750, id: 10.020, w: 40.48 }, '12.0': { od: 12.750, id: 11.938, w: 49.56 }
 };
 const TUBING_0125 = {
   '0.75': { od: 0.750, id: 0.500, w: 0.84 }, '1.0': { od: 1.000, id: 0.750, w: 1.17 }, '1.25': { od: 1.250, id: 1.000, w: 1.50 },
@@ -2678,6 +2688,7 @@ function buildPanel() {
     ${R('minTouches', 'Touch points wanted', 0, 8, 1, 3, v => v)}
     ${R('touchOverlap', 'Overlap at a touch', 0.25, 6, 0.25, 1.5, v => (+v).toFixed(2) + '"')}
     ${R('maxOverlapPct', 'Deepest overlap allowed', 10, 100, 5, 50, v => v + '% of diameter')}
+    ${C_('flareTouch', 'Size touch points to the flared pipe', true, 'On: overlap and the deepest-overlap limit are measured on the pipe as drawn, flare included, so a touch between two wide flared ends is judged at their real size. Off: the nominal pipe size is used, as in older versions.')}
     ${C_('showContacts', 'Mark touch points in the view', true)}
     <div class="info" id="contactInfo" style="white-space:pre-line">—</div>
 
@@ -2688,6 +2699,7 @@ function buildPanel() {
     <div class="sub">Overall envelope (ft)</div>
     <div class="row3">${N_('dimW', 'W (x)', 10, 2, 80, 0.5)}${N_('dimD', 'D (z)', 10, 2, 80, 0.5)}${N_('dimH', 'H (y)', 10, 1, 60, 0.5)}</div>
     <div class="hint" id="dimHint">Pipe thickness is included in these dimensions.</div>
+    <div id="flareSlotForm"></div>
     <div class="sub">Orientation</div>
     ${R('rotX', 'Tilt X', 0, 355, 5, 0, v => v + '°')}
     ${R('rotY', 'Turn Y', 0, 355, 5, 0, v => v + '°')}
@@ -2808,8 +2820,9 @@ function buildPanel() {
         <div class="info" id="stripInfo">—</div>
       </div>
     </div>
+    <div id="flareSlotStock"><div id="flareBox"><div class="sub" id="flareSub" style="display:none">Flare</div>
     <div class="row2">${N_('distalOd', 'Far-end OD (in, 0 = no flare)', 0, 0, 48, 0.125)}<div></div></div>
-    <div class="info" id="flareInfo">Grows the profile as the path moves away from the center, out to this outside diameter at the farthest points.</div>
+    <div class="info" id="flareInfo">Grows the profile as the path moves away from the center, out to this outside diameter at the farthest points.</div></div></div>
     <div class="sub">Bend marking</div>
     ${R('bendFactor', 'Roller comfort radius (× ID / width)', 0.5, 8, 0.25, 1.5, v => (+v).toFixed(2) + '×', 'Turns tighter than this are marked amber. They are buildable with extra roller work or kerf bending.')}
     <div class="info" id="sigmaInfo">—</div>`;
@@ -2885,6 +2898,7 @@ function updateVisibility() {
   show('g_nps', prof === 'round_smooth'); show('g_corr', prof === 'corrugated'); show('g_rect', prof === 'square');
   show('g_strand', prof === 'strand'); show('g_truss', prof === 'truss');
   show('g_mobius', prof === 'square' && !planeOn);
+  { const inForm = prof === 'strand' || prof === 'truss', box = $('flareBox'), slot = $(inForm ? 'flareSlotForm' : 'flareSlotStock'); if (box && slot && box.parentNode !== slot) slot.appendChild(box); $('flareSub').style.display = inForm ? '' : 'none'; }   // flare sits under Stock for a single pipe, under Form for bundles and trusses
   show('g_strandS40', $('strandStockType').value === 'sched40'); show('g_strandTub', $('strandStockType').value === 'tubing');
   show('g_trussS40', $('trussStockType').value === 'sched40'); show('g_trussTub', $('trussStockType').value === 'tubing');
   show('g_seed', $('trussDistribution').value === 'irregular'); show('g_wood', chk('woodOn')); show('g_fill', chk('woodOn')); { const tr = prof === 'truss', fin = $('trussFinish').value; show('g_trussColors', tr); show('g_trussColor', tr && fin === 'paint'); show('g_stripColor', tr && chk('stripOn')); show('g_surface', !tr || fin === 'surface'); } { const ro = $('ribOutside'); if (chk('stripOn')) ro.checked = true; ro.disabled = chk('stripOn'); } show('g_strip', chk('stripOn')); show('c_ribSpacing', !chk('ribAuto')); show('g_ribAuto', chk('ribAuto'));
@@ -3001,10 +3015,10 @@ function computeAll() {
   const contactsEligible = ['round_smooth', 'corrugated', 'square', 'strand', 'truss'].includes($('profileType').value);
   if (contactsEligible) {
     if (chk('contactsOn') && !state.csvPoints) {
-      const sc = shapeContacts(f0.lap, cOdFt, { minTouches: num('minTouches'), overlapIn: num('touchOverlap'), maxPct: num('maxOverlapPct') / 100 }, Math.min(o.limitFt, solved.r) * 0.98);
+      const sc = shapeContacts(f0.lap, cOdFt, { minTouches: num('minTouches'), overlapIn: num('touchOverlap'), maxPct: num('maxOverlapPct') / 100, flare: chk('flareTouch') ? flareMult(st.odIn) : 1 }, Math.min(o.limitFt, solved.r) * 0.98);
       f0 = Object.assign({}, f0, { lap: sc.lap, pieces: f0.pieces.map((pc, i) => i === 0 ? Object.assign({}, pc, { pts: sc.lap, raw: Object.assign({}, pc.raw, { pts: sc.lap }) }) : pc) });
       contacts = sc.contacts; contactNotes = sc.notes;
-    } else contacts = findContacts(f0.lap, cOdFt).contacts;
+    } else contacts = findContacts(f0.lap, cOdFt, { flare: chk('flareTouch') ? flareMult(st.odIn) : 1 }).contacts;
   }
   const cen = [0, 0, 0]; f0.lap.forEach(p => { for (let k = 0; k < 3; k++) cen[k] += p[k] / f0.lap.length; });
   const rotated = f0.lap.map(p => p.slice()); const rot = (pts) => (P.rx || P.ry || P.rz) ? rotateEuler(pts.map(p => [p[0] - cen[0], p[1] - cen[1], p[2] - cen[2]]), P.rx * D2R, P.ry * D2R, P.rz * D2R).map(p => [p[0] + cen[0], p[1] + cen[1], p[2] + cen[2]]) : pts;
@@ -3745,10 +3759,10 @@ function buildScene(draft) {
     });
     const pi = $('postInfo'); if (pi) pi.textContent = `${c.posts.length} post${c.posts.length === 1 ? '' : 's'}, ${ps.od.toFixed(3)}" OD, ${c.posts.map(p => ftIn(p.yTop)).join(' / ')} to the centerline.` + (pl ? ` Plates ${pl.D}" dia × ${pl.t}", ${pl.n} × ${pl.bd}" bolts and ${pl.ng} gusset${pl.ng === 1 ? "" : "s"} each.` : '');
   } else { const pi = $('postInfo'); if (pi) pi.textContent = '—'; }
-  if (chk('showContacts') && c.contacts) { const mo = num('maxOverlapPct') / 100 * c.cOdFt;
-    c.contacts.filter(k => k.gap <= 0.5 * c.cOdFt).forEach(k => {
-      const col = k.overlap > mo + 1e-6 ? 0xd9822b : k.overlap >= 0.25 / 12 ? 0x2e9e5b : 0x8b9096;
-      const m = new THREE.Mesh(new THREE.SphereGeometry(c.cOdFt * 0.3, 16, 12), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.8, depthTest: false }));
+  if (chk('showContacts') && c.contacts) { const mp = num('maxOverlapPct') / 100;
+    c.contacts.filter(k => k.gap <= 0.5 * k.od).forEach(k => {
+      const col = k.overlap > mp * k.od + 1e-6 ? 0xd9822b : k.overlap >= 0.25 / 12 ? 0x2e9e5b : 0x8b9096;
+      const m = new THREE.Mesh(new THREE.SphereGeometry(k.od * 0.3, 16, 12), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.8, depthTest: false }));
       m.position.set(k.mid[0], k.mid[1], k.mid[2]); m.renderOrder = 6; extraGroup.add(m);
     }); }
   scene.add(currentMeshGroup); scene.add(extraGroup);
@@ -3839,7 +3853,7 @@ function updateReadouts(c, A) {
   { const ci = $('contactInfo');
     if (!c.contactsEligible) ci.textContent = state.csvPoints ? 'Imported points: no touch analysis.' : 'Touch points are not available for this profile.';
     else {
-      const mo = num('maxOverlapPct') / 100 * c.cOdFt, ts = c.contacts.filter(k => k.overlap >= 0.25 / 12 && k.overlap <= mo + 1e-6), deep = c.contacts.filter(k => k.overlap > mo + 1e-6), near = c.contacts.filter(k => k.overlap < 0.25 / 12 && k.gap <= 0.9 * c.cOdFt);
+      const mp = num('maxOverlapPct') / 100, ts = c.contacts.filter(k => k.overlap >= 0.25 / 12 && k.overlap <= mp * k.od + 1e-6), deep = c.contacts.filter(k => k.overlap > mp * k.od + 1e-6), near = c.contacts.filter(k => k.overlap < 0.25 / 12 && k.gap <= 0.9 * k.od);
       const L = [`${ts.length} touch point${ts.length === 1 ? '' : 's'}${chk('contactsOn') ? ' (wanted ' + num('minTouches') + ')' : ''}${deep.length ? ' · ' + deep.length + ' too deep' : ''}${near.length ? ' · ' + near.length + ' near miss' + (near.length === 1 ? '' : 'es') : ''}`];
       c.contacts.filter(k => k.overlap >= 0.25 / 12).slice(0, 8).forEach(k => { const mg = (c.st.profile === 'strand' || c.st.profile === 'truss') ? memberGap(k) : null; L.push(`#${k.id}  ${ftIn(k.sa)} / ${ftIn(k.sb)}  ·  ${(k.overlap * 12).toFixed(1)}" (${Math.round(k.pct * 100)}%)` + (mg === null ? '' : mg < 0 ? `  ·  members meet by ${(-mg * 12).toFixed(1)}"` : `  ·  members miss by ${(mg * 12).toFixed(1)}"`)); });
       (c.contactNotes || []).forEach(n => L.push(n.charAt(0).toUpperCase() + n.slice(1) + '.'));
@@ -4092,9 +4106,9 @@ async function exportStep() {
   finally { stepBusy = false; btn.disabled = false; }
 }
 function exportContacts() {
-  if (!needForm()) return; const c = state.last, mo = num('maxOverlapPct') / 100 * c.cOdFt;
+  if (!needForm()) return; const c = state.last, mp = num('maxOverlapPct') / 100;
   const rows = ['id,path_a_ft,path_b_ft,overlap_in,overlap_pct,class,through_member,notched_member,x_ft,y_ft,z_ft'];
-  (c.contacts || []).forEach(k => rows.push([k.id, k.sa.toFixed(3), k.sb.toFixed(3), (k.overlap * 12).toFixed(2), (k.pct * 100).toFixed(1), k.overlap > mo + 1e-6 ? 'too_deep' : k.overlap >= 0.25 / 12 ? 'touch' : 'near_miss', 'a', 'b', k.mid[0].toFixed(4), k.mid[1].toFixed(4), k.mid[2].toFixed(4)].join(',')));
+  (c.contacts || []).forEach(k => rows.push([k.id, k.sa.toFixed(3), k.sb.toFixed(3), (k.overlap * 12).toFixed(2), (k.pct * 100).toFixed(1), k.overlap > mp * k.od + 1e-6 ? 'too_deep' : k.overlap >= 0.25 / 12 ? 'touch' : 'near_miss', 'a', 'b', k.mid[0].toFixed(4), k.mid[1].toFixed(4), k.mid[2].toFixed(4)].join(',')));
   saveBlob(new Blob([rows.join('\n')], { type: 'text/csv' }), slug() + '_touch_points.csv'); setStatus('Touch points saved (feet, y up, grade at 0 when the plane is on). Member a is the earlier strand along the path and continues through; b is notched.');
 }
 function exportCsvPoints() {
@@ -4312,6 +4326,7 @@ function collectConfig() {
   cfg.projName = $('projName').value; cfg.siteName = $('siteName').value; cfg.views = state.views || []; cfg._tb = Object.assign({}, state.tbManual); return cfg;
 }
 function applyConfig(cfg) {
+  if (cfg.flareTouch === undefined) cfg = Object.assign({}, cfg, { flareTouch: !(cfg.profileType === 'truss' || cfg.profileType === 'strand') });   // older truss and strand presets keep their saved form; single pipe now counts the flare
   if (cfg.trussStainless === false && (cfg.trussFinish || 'metal') === 'metal') cfg = Object.assign({}, cfg, { trussFinish: 'surface' });      // presets from before the finish menu had a third choice
   state.tbManual = Object.assign({}, cfg._tb || {});
   if (cfg.strandSizes === undefined) $('strandSizes').value = '';
