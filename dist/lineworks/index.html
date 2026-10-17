@@ -31,16 +31,17 @@ body { background: var(--paper); color: var(--ink); font: 400 13px/1.35 var(--bo
 
 /* ---------- control panel ---------- */
 #panel { grid-row: 2; overflow-y: auto; padding: 8px 14px 24px; border-right: 1px solid var(--rule); scrollbar-width: thin; scrollbar-color: var(--rule) transparent; }
-details.sec { margin-top: 10px; }
+details.sec { margin-top: 20px; border-top: 3px solid var(--ink); }
 details.sec > summary {
-  list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px; user-select: none; padding: 4px 0;
+  list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px; user-select: none; padding: 7px 10px;
+  position: sticky; top: -8px; z-index: 5; background: var(--ink); color: var(--paper);
 }
 details.sec > summary::-webkit-details-marker { display: none; }
-.sec .num { font: 600 11px var(--cond); color: var(--navy); letter-spacing: .1em; }
+.sec .num { font: 600 11px var(--cond); color: #9db3d1; letter-spacing: .1em; }
 .sec .ttl { font: 700 12.5px var(--cond); letter-spacing: .2em; text-transform: uppercase; }
-.sec .ln { flex: 1; height: 1px; background: var(--rule); }
-.sec .nt { font: 500 10px var(--cond); letter-spacing: .14em; color: var(--navy-soft); text-transform: uppercase; }
-.sec > .body { padding: 6px 0 2px; }
+.sec .ln { flex: 1; height: 1px; background: rgba(255,255,255,.28); }
+.sec .nt { font: 500 10px var(--cond); letter-spacing: .14em; color: #aab4c2; text-transform: uppercase; }
+.sec > .body { padding: 10px 0 6px; }
 .sec[open] > summary .nt::after { content: ' —'; }
 
 .ctl { margin: 7px 0; }
@@ -53,7 +54,7 @@ details.sec > summary::-webkit-details-marker { display: none; }
 .hint b { font-weight: 600; color: var(--ink); }
 .info { font: 500 11.5px var(--cond); letter-spacing: .05em; color: var(--ink); background: var(--panel); border-left: 2px solid var(--navy); padding: 5px 8px; margin: 6px 0; }
 .info.warn { border-left-color: var(--warn); }
-.sub { margin: 10px 0 2px; font: 600 10px var(--cond); letter-spacing: .2em; color: var(--navy-soft); text-transform: uppercase; border-top: 1px dotted var(--rule); padding-top: 7px; }
+.sub { margin: 14px 0 2px; font: 700 10px var(--cond); letter-spacing: .2em; color: var(--navy); text-transform: uppercase; border-top: 1px solid var(--rule); padding-top: 8px; }
 
 input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 18px; background: transparent; cursor: pointer; }
 input[type=range]::-webkit-slider-runnable-track { height: 1px; background: var(--ink); }
@@ -2789,7 +2790,8 @@ function buildPanel() {
         ${R('stripMinLen', 'Shortest strip', 1.5, 12, 0.5, 5, v => v + "'")}
         ${R('stripMaxLen', 'Longest strip', 4, 19, 0.5, 11, v => v + "'", 'Held under the stock length, with 6" for trim.')}
         ${R('stripGap', 'Gap between strip ends', 0, 3, 0.25, 0.5, v => (+v).toFixed(2) + '"')}
-        ${R('stripSkip', 'Open gaps (negative space)', 0, 40, 1, 6, v => v + '%', 'Share of strips left out so the tubes show through.')}
+        ${R('stripGaps', 'Openings between ribs', 0, 50, 1, 8, v => v + '%', 'Share of rib-to-rib spans left with no strip, so the pipes show through in one-span windows. Strips on either side end on their rib with the usual 1 inch overhang.')}
+        ${R('stripSkip', 'Whole strips left out', 0, 40, 1, 0, v => v + '%', 'Share of whole strips left out, which opens a longer gap of several ribs.')}
         ${R('stripSeed', 'Strip layout (re-roll)', 1, 40, 1, 11, v => v, 'Changes where the strips start and stop.')}
         ${R('stripEdgeTol', 'Edge-bend tolerance', 0.25, 3, 0.25, 1, v => (+v).toFixed(2) + '"', 'Flat bar cannot bend in its own plane. Strips are cut shorter wherever the path curves sideways more than this away from a straight line.')}
         ${R('stripTwistLim', 'Hand-twist limit', 5, 60, 1, 20, v => v + '°/ft', 'Strips twisting faster than this are marked and need to be pre-rolled. About 20 to 30°/ft is the elastic limit for 2" × 1/8" aluminum.')}
@@ -3551,7 +3553,7 @@ function buildPiece(piece, idx, X) {
 function buildStrips(X) {
   const A = X.A, draft = X.qMul < 1;
   const O = { w: num('stripW') / 12, th: parseFloat($('stripT').value) / 12, stock: parseFloat($('stripStock').value),
-    minLen: num('stripMinLen'), maxLen: num('stripMaxLen'), butt: num('stripGap') / 12, skip: num('stripSkip') / 100, tol: num('stripEdgeTol') / 12,
+    minLen: num('stripMinLen'), maxLen: num('stripMaxLen'), butt: num('stripGap') / 12, skip: num('stripSkip') / 100, gaps: num('stripGaps') / 100, tol: num('stripEdgeTol') / 12,
     twLim: num('stripTwistLim') * Math.PI / 180, tone: num('stripTone') / 100, every: Math.max(1, parseInt($('rivetEvery').value)), rivets: chk('stripRivets'), showTw: chk('stripShowTwist'), flat: false };
   O.maxLen = Math.min(O.maxLen, O.stock - 0.5); O.minLen = Math.min(O.minLen, O.maxLen);
   let seed = (parseInt($('stripSeed').value) * 7919 + 13) % 4294967296;
@@ -3618,12 +3620,14 @@ function buildStrips(X) {
       const actOk = (a, b) => { if (!actD) return true; for (let i = Math.max(0, Math.floor(a)); i <= Math.min(N - 1, Math.ceil(b)); i++) if (!actD[i]) return false; return true; };
       const half = O.butt / 2 / sp, off = (O.butt / 2 + ribW / 2) / 2 / sp;            // in stations: half the gap, and where the rivet sits on the strip's half of the rib
       const r0 = closedG ? Math.floor(rnd() * nR) : 0, rEnd = closedG ? r0 + nR : ribF.length - 1;       // a closed lane starts on a random rib and comes back around to it
+      // some rib-to-rib spans are left open, at random, like windows in the flow
+      const nSp = Math.max(1, closedG ? nR : ribF.length - 1), openBase = Array.from({ length: nSp }, () => rnd() < O.gaps), isOpen = (r) => openBase[r % nSp];
       let ra = r0; const plan = [];
       while (ra < rEnd) {
         const fa = ribF[ra];
-        if (!actOk(fa, fa + 1)) { ra++; continue; }
+        if (!actOk(fa, fa + 1) || isOpen(ra)) { ra++; continue; }
         const tgt = fa + rr(O.minLen, O.maxLen) / sp; let rb = -1, best = 1e9;
-        for (let r = ra + 1; r <= rEnd && (ribF[r] - fa) * sp - O.butt <= O.maxLen; r++) { if (!actOk(fa, ribF[r])) break; const d = Math.abs(ribF[r] - tgt); if (d < best) { best = d; rb = r; } }
+        for (let r = ra + 1; r <= rEnd && (ribF[r] - fa) * sp - O.butt <= O.maxLen; r++) { if (!actOk(fa, ribF[r]) || isOpen(r - 1)) break; const d = Math.abs(ribF[r] - tgt); if (d < best) { best = d; rb = r; } }
         if (rb < 0) { ra++; continue; }
         const idx0 = (r1, r2) => [Math.ceil(ribF[r1] + half), Math.floor(ribF[r2] - half)];
         let [i0, i1] = idx0(ra, rb), forced = false;
