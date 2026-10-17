@@ -3443,14 +3443,14 @@ function buildPiece(piece, idx, X) {
       // inside, a lane sits where its tube would; outside, it lies just beyond the ring, its nearest edge resting on it
       const stripP = st.strip ? { w: num('stripW') / 12, th: parseFloat($('stripT').value) / 12 } : null;
       const mkLane = (th0, act) => {
-        const th = th0 + manual, P = [], Rad = [], outside = ribOutOn(), clr = stripP.th / 2;
+        const th = th0 + manual, P = [], Rad = [], Cc = [], RoA = [], outside = ribOutOn(), clr = stripP.th / 2;
         for (let i = 0; i < cnt; i++) {
           const tan = curve.getTangentAt(Math.min(1, i / nF)).normalize(), r0 = frames.normals[i].clone().multiplyScalar(Math.cos(th)).addScaledVector(frames.binormals[i], Math.sin(th));
           r0.addScaledVector(tan, -r0.dot(tan)); if (r0.length() < 1e-6) r0.copy(frames.normals[i]); r0.normalize();
           const R = outside ? Rb * df(i) + st.memOD / 12 + 0.25 / 12 + clr : Rb * df(i) + mR;
-          P.push(spaced[i].clone().addScaledVector(r0, R)); Rad.push(r0);
+          P.push(spaced[i].clone().addScaledVector(r0, R)); Rad.push(r0); Cc.push(spaced[i]); RoA.push(R + stripP.th / 2);
         }
-        return { closed, group: idx, L: length, P, Rad, nF, cnt, act, th };
+        return { closed, group: idx, L: length, P, Rad, nF, cnt, act, th, C: Cc, Ro: RoA };
       };
       let woodVolIn3 = 0, woodPieces = [];
       for (let m = 0; m < n; m++) {
@@ -3581,6 +3581,12 @@ function buildStrips(X) {
   const groups = [...new Set(A.stripLanes.map(l => l.group))];
   groups.forEach(g => {
     const lanes = A.stripLanes.filter(l => l.group === g), closedG = !!lanes[0].closed, N = lanes[0].cnt * (closedG ? 2 : 1), nF = lanes[0].nF, Lp = lanes[0].L, ribsG = A.ribs.filter(r => r.group === g);
+    // where two parts of the sculpture meet, a strip that would end up inside the other part's skin is left out
+    const Cg = lanes[0].C, Rog = lanes[0].Ro, cntG = lanes[0].cnt, sepIdx = Math.ceil(5 / (Lp / nF)), cellG = 0.5, gridG = new Map();
+    Cg.forEach((c, j) => { const k = Math.floor(c.x / cellG) + ',' + Math.floor(c.y / cellG) + ',' + Math.floor(c.z / cellG); let a = gridG.get(k); if (!a) gridG.set(k, a = []); a.push(j); });
+    const inOther = (p, i) => { const ii = i % cntG, cx = Math.floor(p.x / cellG), cy = Math.floor(p.y / cellG), cz = Math.floor(p.z / cellG);
+      for (let x = cx - 2; x <= cx + 2; x++) for (let y = cy - 2; y <= cy + 2; y++) for (let z = cz - 2; z <= cz + 2; z++) { const a = gridG.get(x + ',' + y + ',' + z); if (!a) continue;
+        for (const j of a) { let dj = Math.abs(j - ii); if (closedG) dj = Math.min(dj, cntG - dj); if (dj < sepIdx) continue; const r = Rog[j] - 0.01; if (p.distanceToSquared(Cg[j]) < r * r) return true; } } return false; };
     lanes.forEach((ln, wi) => {
       // a closed path is laid out twice around, so a strip can run across the seam where the path starts and ends
       const Pm = closedG ? ln.P.concat(ln.P) : ln.P, Rad = closedG ? ln.Rad.concat(ln.Rad) : ln.Rad, actD = ln.act ? (closedG ? Uint8Array.from([...ln.act, ...ln.act]) : ln.act) : null, S = [0]; for (let i = 1; i < N; i++) S.push(S[i - 1] + Pm[i].distanceTo(Pm[i - 1]));
@@ -3650,6 +3656,7 @@ function buildStrips(X) {
           let blocked = false;            // still cutting a tube after lifting (a strip crossing the tight inside of a curl): leave it out
           for (let i = lo; i <= hi && !blocked; i++) for (let c = -2; c <= 2 && !blocked; c++) { tp.copy(Pm[i]).addScaledVector(AC[i], c * O.w / 4).addScaledVector(NR[i], LF[i] - O.th / 2);
             for (const q of nearTubes(tp)) { const dx = tp.x - q[0], dy = tp.y - q[1], dz = tp.z - q[2]; if (dx * dx + dy * dy + dz * dz < (tubeR - 1 / 400) ** 2) { blocked = true; break; } } }
+          for (let i = lo; i <= hi && !blocked; i += 2) { tp.copy(Pm[i]).addScaledVector(NR[i], LF[i]); if (inOther(tp, i)) blocked = true; }
           if (blocked) { SS.blocked++; return; }
           for (let i = lo; i <= hi; i++) SS.maxLift = Math.max(SS.maxLift, LF[i]);
           const LFat = (f) => { const i = Math.min(N - 2, Math.max(0, Math.floor(f))); return LF[i] + (LF[i + 1] - LF[i]) * (f - i); };
@@ -3809,7 +3816,7 @@ function updateReadouts(c, A) {
         si.textContent = `${S.count} strips on ${S.lanes} lanes, ${ftIn(S.totalFt)} of ${S.opts.w}" flat bar, about ${Math.round(S.wLb)} lb.\n` +
           `Twist: worst ${(S.maxTw * 180 / Math.PI).toFixed(0)}°/ft. ${S.over} strip${S.over === 1 ? '' : 's'} over the ${S.opts.twLimDeg.toFixed(0)}°/ft limit need pre-rolling.\n` +
           `Sideways (edge) bend: tightest radius ${S.minEdgeR > 1e8 ? 'none' : ftIn(S.minEdgeR)}; ${S.forced} strip${S.forced === 1 ? ' is' : 's are'} still over the ${S.opts.tolIn.toFixed(2)}" tolerance at the shortest length that reaches two ribs.\n` +
-          `Flatwise: tightest radius ${fr < 1e5 ? inch(fr) : 'none'} (${eps.toFixed(2)}% strain at the surface).\nRivets: ${S.rivets}, only at rib rings, at least 2 per strip. ${S.lengthened} strip${S.lengthened === 1 ? ' was' : 's were'} lengthened to reach a second rib${S.dropped ? '; ' + S.dropped + ' left out at lane ends' : ''}.${S.blocked ? ' ' + S.blocked + ' left out where they would cut into a tube in a tight curl.' : ''}${S.maxLift > 0.01 ? ' Strips are raised up to ' + inch(S.maxLift) + ' off the rings to clear the tubes.' : ''}`; } } }
+          `Flatwise: tightest radius ${fr < 1e5 ? inch(fr) : 'none'} (${eps.toFixed(2)}% strain at the surface).\nRivets: ${S.rivets}, only at rib rings, at least 2 per strip. ${S.lengthened} strip${S.lengthened === 1 ? ' was' : 's were'} lengthened to reach a second rib${S.dropped ? '; ' + S.dropped + ' left out at lane ends' : ''}.${S.blocked ? ' ' + S.blocked + ' left out where they would cut into a tube or into another part of the truss.' : ''}${S.maxLift > 0.01 ? ' Strips are raised up to ' + inch(S.maxLift) + ' off the rings to clear the tubes.' : ''}`; } } }
   const fmtW = (w) => Math.round(w).toLocaleString() + ' lb', b = A.baseW * sc, ex = A.extraW * sc;
   const wm = $('tbWeightMode').value;
   if (st.profile === 'truss' && (st.alum || st.strip)) {
