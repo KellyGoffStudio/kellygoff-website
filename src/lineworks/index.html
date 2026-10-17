@@ -2776,7 +2776,7 @@ function buildPanel() {
       <div class="info" id="ribInfo">—</div>
       <div class="sub">Oak fill</div>
       ${C_('woodOn', 'Add oak members', false, 'Some members become round oak, the same diameter as the tubing. The rest stay tube.')}
-      ${C_('stripOn', 'Add flat-bar strips (shingle skin)', false, 'A skin of flat-bar strips laid over the outside of the truss and riveted to the rib rings. The members all stay pipe. Turning this on switches the truss to aluminum and puts the rings outside the tubes.')}
+      ${C_('stripOn', 'Riffle mode: skin the truss in overlapping strips', false, 'Riffle mode skins the truss in overlapping strips, called riffles, laid over the outside of the truss and riveted to the rib rings. The members all stay pipe. Turning this on switches the truss to aluminum and puts the rings outside the tubes.')}
       <div id="g_fill">
         ${R('steelShare', 'Tube share of members', 10, 90, 5, 25, pct, 'Spread evenly around the bundle. At least one member stays a tube.')}
       </div>
@@ -2787,7 +2787,7 @@ function buildPanel() {
         <div class="info" id="woodInfo">—</div>
       </div>
       <div id="g_strip">
-        <div class="sub">Strips</div>
+        <div class="sub">Riffles</div>
         ${R('ribWidth', 'Rib width', 1.25, 3, 0.25, 2, v => (+v).toFixed(2).replace(/\.?0+$/, '') + '"', 'With strips on, every strip starts and ends on a rib so none hangs free where it could be bent by hand. Two strips can butt on the same rib, so the ribs are wider: 2" leaves room for a rivet in each. A strip with nothing butted to it runs 1 inch past the far edge of the rib.')}
         ${R('stripCover', 'Coverage', 10, 100, 5, 80, v => v + '%', 'How much of the surface the strips cover, edge to edge. Strips are set by this, not by the member count. Where the form flares, extra rows of strips start so the coverage holds.')}
         ${R('stripW', 'Strip width', 1, 4, 0.25, 2, v => (+v).toFixed(2).replace(/\.?0+$/, '') + '"')}
