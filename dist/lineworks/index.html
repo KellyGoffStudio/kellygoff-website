@@ -2808,7 +2808,8 @@ function buildPanel() {
         ${R('stripMinLen', 'Shortest strip', 1.5, 12, 0.5, 5, v => v + "'")}
         ${R('stripMaxLen', 'Longest strip', 4, 19, 0.5, 11, v => v + "'", 'Held under the stock length, with 6" for trim.')}
         ${R('stripGap', 'Gap between strip ends', 0, 3, 0.25, 0.5, v => (+v).toFixed(2) + '"')}
-        ${S_('stripFill', 'Extra rows on the flares', [['fine', 'Add rows as room allows (never overlapping)'], ['double', 'Double the rows']], 'fine')}
+        ${S_('stripFill', 'Extra rows on the flares', [['fine', 'Spread rows evenly (they drift apart as the flare opens)'], ['double', 'Double the rows']], 'fine')}
+        <div id="g_stripSpread">${R('stripSpread', 'Spreading', 0, 100, 5, 100, v => v + '%', 'How fully the rows spread out as the flare opens. 100% keeps them evenly spaced, so the coverage holds all the way around, and the rows slowly wander around the form as they go. Lower holds them straighter but leaves more open space on the flares. Rows never overlap.')}</div>
         ${R('stripGaps', 'Openings between ribs', 0, 50, 1, 8, v => v + '%', 'Share of rib-to-rib spans left with no strip, so the pipes show through in one-span windows. Strips on either side end on their rib with the usual 1 inch overhang.')}
         ${R('stripSkip', 'Whole strips left out', 0, 40, 1, 0, v => v + '%', 'Share of whole strips left out, which opens a longer gap of several ribs.')}
         ${C_('patchOn', 'Patch riffles at contact points', true, 'Where a whole strip would run into another part of the truss, it is cut into patches: the longest runs of rib-to-rib spans that clear the other part, each riveted to a rib at both ends. The skin carries on right up to the contact, and only the spans the other part actually passes through stay open. Patches are counted in the strip total and the cut list.')}
@@ -2913,7 +2914,7 @@ function updateVisibility() {
   { const inForm = prof === 'strand' || prof === 'truss', box = $('flareBox'), slot = $(inForm ? 'flareSlotForm' : 'flareSlotStock'); if (box && slot && box.parentNode !== slot) slot.appendChild(box); $('flareSub').style.display = inForm ? '' : 'none'; }   // flare sits under Stock for a single pipe, under Form for bundles and trusses
   show('g_strandS40', $('strandStockType').value === 'sched40'); show('g_strandTub', $('strandStockType').value === 'tubing');
   show('g_trussS40', $('trussStockType').value === 'sched40'); show('g_trussTub', $('trussStockType').value === 'tubing');
-  show('g_seed', $('trussDistribution').value === 'irregular'); show('g_wood', chk('woodOn')); show('g_fill', chk('woodOn')); { const tr = prof === 'truss', fin = $('trussFinish').value; show('g_trussColors', tr); show('g_trussColor', tr && fin === 'paint'); show('g_stripColor', tr && chk('stripOn')); show('g_patchColor', tr && chk('stripOn') && chk('patchOn') && chk('patchShow')); show('g_postColor', chk('postsOn')); show('g_patch', chk('patchOn')); show('g_stepStrips', prof === 'truss' && chk('stripOn')); show('g_flareWhole', prof === 'truss'); show('g_surface', !tr || fin === 'surface'); } { const ro = $('ribOutside'); if (chk('stripOn')) ro.checked = true; ro.disabled = chk('stripOn'); } show('g_strip', chk('stripOn')); show('c_ribSpacing', !chk('ribAuto')); show('g_ribAuto', chk('ribAuto'));
+  show('g_seed', $('trussDistribution').value === 'irregular'); show('g_wood', chk('woodOn')); show('g_fill', chk('woodOn')); { const tr = prof === 'truss', fin = $('trussFinish').value; show('g_trussColors', tr); show('g_trussColor', tr && fin === 'paint'); show('g_stripColor', tr && chk('stripOn')); show('g_patchColor', tr && chk('stripOn') && chk('patchOn') && chk('patchShow')); show('g_postColor', chk('postsOn')); show('g_patch', chk('patchOn')); show('g_stripSpread', $('stripFill').value === 'fine'); show('g_stepStrips', prof === 'truss' && chk('stripOn')); show('g_flareWhole', prof === 'truss'); show('g_surface', !tr || fin === 'surface'); } { const ro = $('ribOutside'); if (chk('stripOn')) ro.checked = true; ro.disabled = chk('stripOn'); } show('g_strip', chk('stripOn')); show('c_ribSpacing', !chk('ribAuto')); show('g_ribAuto', chk('ribAuto'));
   $('detail').disabled = chk('lenOn'); $('pathLen').disabled = !chk('lenOn'); $('c_detail').style.opacity = chk('lenOn') ? .5 : 1; $('c_pathLen').style.opacity = chk('lenOn') ? 1 : .6; $('lenGrow').disabled = !chk('lenOn');
   show('g_plane', planeOn); show('g_found', chk('foundOn') && !chk('postsOn')); show('g_susp', !planeOn); show('g_posts', chk('postsOn')); show('g_plates', chk('plateOn')); show('c_planeFt', !chk('postsOn'));
   $('exportRibs').disabled = prof !== 'truss';
@@ -3477,9 +3478,9 @@ function buildPiece(piece, idx, X) {
       // inside, a lane sits where its tube would; outside, it lies just beyond the ring, its nearest edge resting on it
       const stripP = st.strip ? { w: num('stripW') / 12, th: parseFloat($('stripT').value) / 12 } : null;
       const mkLane = (th0, act, lift = 0) => {
-        const th = th0 + manual, P = [], Rad = [], Cc = [], RoA = [], outside = ribOutOn(), clr = stripP.th / 2;
+        const th = (typeof th0 === 'function' ? th0(0) : th0) + manual, P = [], Rad = [], Cc = [], RoA = [], outside = ribOutOn(), clr = stripP.th / 2;
         for (let i = 0; i < cnt; i++) {
-          const tan = curve.getTangentAt(Math.min(1, i / nF)).normalize(), r0 = frames.normals[i].clone().multiplyScalar(Math.cos(th)).addScaledVector(frames.binormals[i], Math.sin(th));
+          const thi = typeof th0 === 'function' ? th0(i) + manual : th, tan = curve.getTangentAt(Math.min(1, i / nF)).normalize(), r0 = frames.normals[i].clone().multiplyScalar(Math.cos(thi)).addScaledVector(frames.binormals[i], Math.sin(thi));
           r0.addScaledVector(tan, -r0.dot(tan)); if (r0.length() < 1e-6) r0.copy(frames.normals[i]); r0.normalize();
           const R = outside ? Rb * df(i) + st.memOD / 12 + 0.25 / 12 + clr + lift : Rb * df(i) + mR;
           P.push(spaced[i].clone().addScaledVector(r0, R)); Rad.push(r0); Cc.push(spaced[i]); RoA.push(R + stripP.th / 2);
@@ -3533,20 +3534,15 @@ function buildPiece(piece, idx, X) {
         const erode = (a, e) => { if (!e) return a; const pre = [0]; for (let i = 0; i < cnt; i++) pre.push(pre[i] + a[i]); const o = new Uint8Array(cnt);
           for (let i = 0; i < cnt; i++) { const lo = Math.max(0, i - e), hi = Math.min(cnt - 1, i + e); o[i] = (pre[hi + 1] - pre[lo]) === (hi - lo + 1) ? 1 : 0; } return o; };
         const fine = $('stripFill').value === 'fine';
-        if (fine) {      // rows are added one at a time wherever the flare leaves room for another strip, flush beside its neighbors and never overlapping them
-          const N0f = Math.max(2, Math.floor(Math.min(...nreq) + 1e-6)), rStrip = (i) => Rb * df(i) + st.memOD / 12 + 0.25 / 12 + stripP.th / 2;
-          const sub = Math.max(1, Math.floor(cnt / 100)), idxs = []; for (let i = 0; i < cnt; i += sub) idxs.push(i);
-          const wAs = idxs.map(i => stripP.w * 1.01 / rStrip(i)), occ = idxs.map(() => []);                 // the angle a strip covers at each sampled station, and which angles are taken
-          const aDist = (a, b) => { const d = Math.abs(a - b) % TAU; return d > Math.PI ? TAU - d : d; }, free = (a, k) => { const o = occ[k]; for (let q = 0; q < o.length; q++) if (aDist(a, o[q]) < wAs[k]) return false; return true; };
-          for (let k = 0; k < N0f; k++) { const a = TAU * k / N0f; X.A.stripLanes.push(mkLane(a, null)); occ.forEach(o => o.push(a)); }
-          const ftPer = length / Math.max(1, nF) * sub;
-          for (let it = 0; it < 70; it++) {
-            let best = 0, bestN = 0; for (let c = 0; c < 120; c++) { const a = TAU * (c + 0.5) / 120; let n = 0; for (let k = 0; k < idxs.length; k++) if (free(a, k)) n++; if (n > bestN) { bestN = n; best = a; } }
-            if (bestN * ftPer < 2) break;
-            const e = ((Math.imul(it + 1, 2654435761) ^ Math.imul(7, 40503) ^ Math.imul(parseInt($('stripSeed').value) + 1, 97)) >>> 0) % (Emax + 1);
-            const act = erode(Uint8Array.from({ length: cnt }, (_, i) => free(best, Math.min(idxs.length - 1, Math.round(i / sub))) ? 1 : 0), e);
-            if (!act.some(v => v)) break;
-            X.A.stripLanes.push(mkLane(best, act)); idxs.forEach((i, k) => { if (act[i]) occ[k].push(best); });
+        if (fine) {      // rows are spread evenly around the circumference at every station: as the flare opens, rows drift apart and new rows are born in the seam, never overlapping
+          const N0f = Math.max(2, Math.floor(Math.min(...nreq) + 1e-6)), lam = num('stripSpread') / 100, K = Math.max(N0f, Math.floor(Math.max(...nreq) + 1e-6));
+          const wAng = (i) => stripP.w * 1.005 / (Rb * df(i) + st.memOD / 12 + 0.25 / 12 + stripP.th / 2);
+          const angAt = (j) => (i) => TAU * j * ((1 - lam) / N0f + lam / nreq[Math.min(cnt - 1, i)]);
+          for (let j = 0; j < K; j++) {
+            if (j < N0f) { X.A.stripLanes.push(mkLane(angAt(j), null)); continue; }
+            const f = angAt(j), e = ((Math.imul(j + 1, 2654435761) ^ Math.imul(7, 40503) ^ Math.imul(parseInt($('stripSeed').value) + 1, 97)) >>> 0) % (Emax + 1);
+            const act = erode(Uint8Array.from({ length: cnt }, (_, i) => f(i) + wAng(i) <= TAU ? 1 : 0), e);
+            if (act.some(v => v)) X.A.stripLanes.push(mkLane(f, act));
           }
         }
         if (!fine) for (let L = 0; L <= maxL; L++) {
