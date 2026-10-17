@@ -2046,8 +2046,8 @@ function _flareDf(lap, flare) {
   return d.map(v => 1 + (flare - 1) * Math.pow(Math.min(1, v / mx), 2.5));
 }
 function findContacts(lap, od, opt = {}) {
-  const n = lap.length, S = _arcs(lap), L = S[n], df = _flareDf(lap, opt.flare), dmax = df ? Math.max(...df) : 1, nearFrac = opt.near ?? 0.9, minSep = (opt.minSepOD ?? 8) * od, thr = od * dmax * (1 + nearFrac);
-  const odIJ = (i, j) => df ? od * (df[i] + df[j]) / 2 : od;
+  const n = lap.length, S = _arcs(lap), L = S[n], df = _flareDf(lap, opt.flare), dmax = df ? Math.max(...df) : 1, nearFrac = opt.near ?? 0.9, minSep = (opt.minSepOD ?? 8) * od, grow = opt.grow ?? od, thr = (od + (dmax - 1) * grow) * (1 + nearFrac);
+  const odIJ = (i, j) => df ? od + ((df[i] + df[j]) / 2 - 1) * grow : od;   // grow: how much of the OD opens up with the flare (all of it for a pipe, only the ring for a truss)
   const dArc = (a, b) => { const d = Math.abs(a - b); return Math.min(d, L - d); };
   const D = new Float32Array(n * n).fill(1e9);
   for (let i = 0; i < n; i++) for (let j = i + 2; j < n; j++) {
@@ -2068,7 +2068,7 @@ function findContacts(lap, od, opt = {}) {
   cand.forEach(([v, i, j]) => {
     const r = _segSeg(lap[i], lap[(i + 1) % n], lap[j], lap[(j + 1) % n]), sa = S[i] + r.s * (S[i + 1] - S[i]), sb = S[j] + r.t * (S[j + 1] - S[j]);
     if (out.some(c => (dArc(c.sa, sa) < 3 * od && dArc(c.sb, sb) < 3 * od) || (dArc(c.sa, sb) < 3 * od && dArc(c.sb, sa) < 3 * od))) return;
-    const odp = df ? od * ((df[i] + (df[(i + 1) % n] - df[i]) * r.s) + (df[j] + (df[(j + 1) % n] - df[j]) * r.t)) / 2 : od;   // local pipe OD at the two passes
+    const odp = df ? od + (((df[i] + (df[(i + 1) % n] - df[i]) * r.s) + (df[j] + (df[(j + 1) % n] - df[j]) * r.t)) / 2 - 1) * grow : od;   // local pipe OD at the two passes
     out.push({ i, j, od: odp, sa: Math.min(sa, sb), sb: Math.max(sa, sb), d: r.d, gap: r.d - odp, overlap: odp - r.d, pct: (odp - r.d) / odp, pa: sa <= sb ? r.A : r.B, pb: sa <= sb ? r.B : r.A, mid: [(r.A[0] + r.B[0]) / 2, (r.A[1] + r.B[1]) / 2, (r.A[2] + r.B[2]) / 2] });
   });
   out.sort((x, y) => x.sa - y.sa); out.forEach((c, k) => { c.id = k + 1; });
@@ -2081,7 +2081,7 @@ function _bump(lap, S, L, sc, dir, amp, H) {                     // raised-cosin
 }
 // rules: { minTouches, overlapIn (target, inches), maxPct (0-1) }.  floorFt: smoothest allowed bend radius (the solver's floor).
 function shapeContacts(lap0, od, rules, floorFt) {
-  const target = (rules.overlapIn ?? 1.5) / 12, maxPct = rules.maxPct ?? 0.5, flare = rules.flare || 1, minT = rules.minTouches ?? 3;
+  const target = (rules.overlapIn ?? 1.5) / 12, maxPct = rules.maxPct ?? 0.5, flare = rules.flare || 1, grow = rules.grow ?? od, minT = rules.minTouches ?? 3;
   let lap = lap0.map(p => p.slice()), notes = [], moved = 0;
   const lowGood = Math.max(0.25 / 12, Math.min(0.75 / 12, target * 0.5)), good = (c) => c.overlap >= lowGood && c.overlap <= maxPct * c.od + 1e-6;
   const apply = (lapIn, plan, factor) => {
@@ -2091,7 +2091,7 @@ function shapeContacts(lap0, od, rules, floorFt) {
   };
   const reach = rules.reach ?? 2.2, clearOf = (c) => Math.max(0.1 * c.od, 0.75 / 12), dist3 = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
   for (let pass = 0; pass < 4; pass++) {
-    const { contacts } = findContacts(lap, od, { near: reach, flare }), plan = [];
+    const { contacts } = findContacts(lap, od, { near: reach, flare, grow }), plan = [];
     const mk = (c, newOverlap) => { const dv = [c.pb[0] - c.pa[0], c.pb[1] - c.pa[1], c.pb[2] - c.pa[2]], l = Math.hypot(dv[0], dv[1], dv[2]);
       const dir = l > 1e-6 ? [dv[0] / l, dv[1] / l, dv[2] / l] : [0, 1, 0]; const delta = c.d - (c.od - newOverlap);   // positive pulls together, negative pushes apart
       return { sa: c.sa, sb: c.sb, dir, amp: delta / 2, H: 5 * c.od }; };
@@ -2112,7 +2112,7 @@ function shapeContacts(lap0, od, rules, floorFt) {
     if (!trial) { notes.push('touch points were left as they are, because moving them would make a bend too tight'); break; }
     lap = trial; moved += plan.length;
   }
-  const res = findContacts(lap, od, { flare });
+  const res = findContacts(lap, od, { flare, grow });
   return { lap, contacts: res.contacts, notes, moved };
 }
 
@@ -2810,6 +2810,11 @@ function buildPanel() {
         ${R('stripGap', 'Gap between strip ends', 0, 3, 0.25, 0.5, v => (+v).toFixed(2) + '"')}
         ${R('stripGaps', 'Openings between ribs', 0, 50, 1, 8, v => v + '%', 'Share of rib-to-rib spans left with no strip, so the pipes show through in one-span windows. Strips on either side end on their rib with the usual 1 inch overhang.')}
         ${R('stripSkip', 'Whole strips left out', 0, 40, 1, 0, v => v + '%', 'Share of whole strips left out, which opens a longer gap of several ribs.')}
+        ${C_('patchOn', 'Patch riffles at contact points', true, 'Where a whole strip would run into another part of the truss, it is cut into patches: the longest runs of rib-to-rib spans that clear the other part, each riveted to a rib at both ends. The skin carries on right up to the contact, and only the spans the other part actually passes through stay open. Patches are counted in the strip total and the cut list.')}
+        <div id="g_patch">
+        ${C_('patchShow', 'Show patches in their own color', true, 'Patches take the patch color (under Surface) so you can see where they sit. Off: they match the other strips.')}
+        ${R('patchMin', 'Shortest patch', 3, 12, 1, 6, v => v + '"', 'The shortest rib-to-rib piece worth cutting. Ribs sit 8 to 16 inches apart, so most patches are one span.')}
+        </div>
         ${R('stripSeed', 'Strip layout (re-roll)', 1, 40, 1, 11, v => v, 'Changes where the strips start and stop.')}
         ${R('stripEdgeTol', 'Edge-bend tolerance', 0.25, 3, 0.25, 1, v => (+v).toFixed(2) + '"', 'Flat bar cannot bend in its own plane. Strips are cut shorter wherever the path curves sideways more than this away from a straight line.')}
         ${R('stripTwistLim', 'Hand-twist limit', 5, 60, 1, 20, v => v + '°/ft', 'Strips twisting faster than this are marked and need to be pre-rolled. About 20 to 30°/ft is the elastic limit for 2" × 1/8" aluminum.')}
@@ -2822,6 +2827,7 @@ function buildPanel() {
     </div>
     <div id="flareSlotStock"><div id="flareBox"><div class="sub" id="flareSub" style="display:none">Flare</div>
     <div class="row2">${N_('distalOd', 'Far-end OD (in, 0 = no flare)', 0, 0, 48, 0.125)}<div></div></div>
+    <div id="g_flareWhole">${C_('flareWhole', 'Far-end OD is the whole truss', true, 'On: the far-end size you set is the outside of the whole truss at its widest point, tubes and ribs included. Only the ring of tubes opens up; the tubes and ribs keep their size. Off: the older rule, which sets the ring and then adds the tubes and ribs on top, so the far end comes out smaller than the number.')}</div>
     <div class="info" id="flareInfo">Grows the profile as the path moves away from the center, out to this outside diameter at the farthest points.</div></div></div>
     <div class="sub">Bend marking</div>
     ${R('bendFactor', 'Roller comfort radius (× ID / width)', 0.5, 8, 0.25, 1.5, v => (+v).toFixed(2) + '×', 'Turns tighter than this are marked amber. They are buildable with extra roller work or kerf bending.')}
@@ -2837,11 +2843,15 @@ function buildPanel() {
     <div id="g_trussColors">
     <div class="sub">Truss and strip colors</div>
     ${S_('trussFinish', 'Truss finish', [['metal', 'Bare metal (brushed)'], ['paint', 'Painted (truss color)'], ['surface', 'Use the surface color above']], 'metal')}
-    <div id="g_trussColor"><label class="lbl" for="trussColor"><span>Truss color (tubes, ribs, posts)</span></label>
+    <div id="g_trussColor"><label class="lbl" for="trussColor"><span>Truss color (tubes and ribs)</span></label>
     <input type="color" id="trussColor" value="#ff6a13" aria-label="Truss color"></div>
     <div id="g_stripColor"><label class="lbl" for="stripColor"><span>Strip color</span></label>
     <input type="color" id="stripColor" value="#f4f4f1" aria-label="Strip color"></div>
+    <div id="g_patchColor"><label class="lbl" for="patchColor"><span>Patch color</span></label>
+    <input type="color" id="patchColor" value="#ffd27a" aria-label="Patch color"></div>
     </div>
+    <div id="g_postColor"><div class="sub">Lift posts</div><label class="lbl" for="postColor"><span>Post color</span></label>
+    <input type="color" id="postColor" value="#8d8780" aria-label="Post color"></div>
     ${C_('showKinks', 'Mark tight bends (amber)', true)}
     ${C_('enableWireframe', 'Wireframe', false)}`;
 
@@ -2901,7 +2911,7 @@ function updateVisibility() {
   { const inForm = prof === 'strand' || prof === 'truss', box = $('flareBox'), slot = $(inForm ? 'flareSlotForm' : 'flareSlotStock'); if (box && slot && box.parentNode !== slot) slot.appendChild(box); $('flareSub').style.display = inForm ? '' : 'none'; }   // flare sits under Stock for a single pipe, under Form for bundles and trusses
   show('g_strandS40', $('strandStockType').value === 'sched40'); show('g_strandTub', $('strandStockType').value === 'tubing');
   show('g_trussS40', $('trussStockType').value === 'sched40'); show('g_trussTub', $('trussStockType').value === 'tubing');
-  show('g_seed', $('trussDistribution').value === 'irregular'); show('g_wood', chk('woodOn')); show('g_fill', chk('woodOn')); { const tr = prof === 'truss', fin = $('trussFinish').value; show('g_trussColors', tr); show('g_trussColor', tr && fin === 'paint'); show('g_stripColor', tr && chk('stripOn')); show('g_surface', !tr || fin === 'surface'); } { const ro = $('ribOutside'); if (chk('stripOn')) ro.checked = true; ro.disabled = chk('stripOn'); } show('g_strip', chk('stripOn')); show('c_ribSpacing', !chk('ribAuto')); show('g_ribAuto', chk('ribAuto'));
+  show('g_seed', $('trussDistribution').value === 'irregular'); show('g_wood', chk('woodOn')); show('g_fill', chk('woodOn')); { const tr = prof === 'truss', fin = $('trussFinish').value; show('g_trussColors', tr); show('g_trussColor', tr && fin === 'paint'); show('g_stripColor', tr && chk('stripOn')); show('g_patchColor', tr && chk('stripOn') && chk('patchOn') && chk('patchShow')); show('g_postColor', chk('postsOn')); show('g_patch', chk('patchOn')); show('g_flareWhole', prof === 'truss'); show('g_surface', !tr || fin === 'surface'); } { const ro = $('ribOutside'); if (chk('stripOn')) ro.checked = true; ro.disabled = chk('stripOn'); } show('g_strip', chk('stripOn')); show('c_ribSpacing', !chk('ribAuto')); show('g_ribAuto', chk('ribAuto'));
   $('detail').disabled = chk('lenOn'); $('pathLen').disabled = !chk('lenOn'); $('c_detail').style.opacity = chk('lenOn') ? .5 : 1; $('c_pathLen').style.opacity = chk('lenOn') ? 1 : .6; $('lenGrow').disabled = !chk('lenOn');
   show('g_plane', planeOn); show('g_found', chk('foundOn') && !chk('postsOn')); show('g_susp', !planeOn); show('g_posts', chk('postsOn')); show('g_plates', chk('plateOn')); show('c_planeFt', !chk('postsOn'));
   $('exportRibs').disabled = prof !== 'truss';
@@ -2943,7 +2953,7 @@ function getStock() {
     { const seed = parseInt($('trussSeed').value), irr = $('trussDistribution').value === 'irregular', rc = od / 2 + sp.od / 2;
       const angs = Array.from({ length: n }, (_, m) => (((m / n) * TAU + (irr ? Math.sin(m * 2.3 + seed) * Math.min(0.45, 0.22 * TAU / n) : 0)) % TAU + TAU) % TAU).sort((a, b) => a - b);
       let gap = n >= 2 ? 0 : TAU; for (let i = 0; i < n && n >= 2; i++) gap = Math.max(gap, (i + 1 < n ? angs[i + 1] : angs[0] + TAU) - angs[i]);
-      st.contactOdIn = 2 * (gap < Math.PI ? rc * Math.cos(gap / 2) : 0) + sp.od; }
+      st.contactOdIn = 2 * (gap < Math.PI ? rc * Math.cos(gap / 2) : 0) + sp.od; st.contactGrowIn = gap < Math.PI ? od * Math.cos(gap / 2) : 0; }
   }
   st.odIn = st.outerExtentIn * 2;
   st.minCenterIn = st.minInsideIn + st.outerExtentIn;
@@ -2983,9 +2993,15 @@ function csvUnit(P, fair) {
   if (chk('csvShape') && (P.rx || P.ry || P.rz)) pts = rotateEuler(pts, P.rx * D2R, P.ry * D2R, P.rz * D2R);
   return fair > 0 ? fairClosed(pts, Math.round(fair)) : pts;
 }
-function flareMult(odIn) { const d = num('distalOd'); return odIn > 0 && d > odIn + 1e-6 ? d / odIn : 1; }   // the far-end OD in inches is what is set; the growth factor follows from the pipe
+function flareMult(odIn) {
+  const d = num('distalOd'); if (!(odIn > 0 && d > odIn + 1e-6)) return 1;
+  if ($('profileType').value === 'truss' && chk('flareWhole')) { const ring = num('trussOD'); return ring > 0 ? Math.max(1, (d - (odIn - ring)) / ring) : 1; }   // only the ring of tubes opens up: the tubes and ribs keep their size, so the far end is set on the whole truss
+  return d / odIn;
+}
+// inches of overall OD that grow with each unit of flare (the whole pipe, except on a truss, where only the ring of tubes opens up)
+function odGrowIn(st) { return st.profile === 'truss' ? st.ringOD : st.odIn; }   // the far-end OD in inches is what is set; the growth factor follows from the pipe
 function computeAll() {
-  const st = getStock(), P = gatherParams(), odFt = st.odIn / 12, cOdFt = (st.contactOdIn || st.odIn) / 12;
+  const st = getStock(), P = gatherParams(), odFt = st.odIn / 12, cOdFt = (st.contactOdIn || st.odIn) / 12, cGrowFt = (st.contactGrowIn ?? (st.contactOdIn || st.odIn)) / 12;
   let base = [num('dimW'), num('dimD'), num('dimH')];
   if (state.disp && ['dimW', 'dimD', 'dimH'].every((id, i) => $(id).value === state.disp.vals[i])) base = state.disp.base;   // inputs are showing a grown size; the base is what the user set
   const [W, D, H] = base;
@@ -3015,10 +3031,10 @@ function computeAll() {
   const contactsEligible = ['round_smooth', 'corrugated', 'square', 'strand', 'truss'].includes($('profileType').value);
   if (contactsEligible) {
     if (chk('contactsOn') && !state.csvPoints) {
-      const sc = shapeContacts(f0.lap, cOdFt, { minTouches: num('minTouches'), overlapIn: num('touchOverlap'), maxPct: num('maxOverlapPct') / 100, flare: chk('flareTouch') ? flareMult(st.odIn) : 1 }, Math.min(o.limitFt, solved.r) * 0.98);
+      const sc = shapeContacts(f0.lap, cOdFt, { minTouches: num('minTouches'), overlapIn: num('touchOverlap'), maxPct: num('maxOverlapPct') / 100, flare: chk('flareTouch') ? flareMult(st.odIn) : 1, grow: cGrowFt }, Math.min(o.limitFt, solved.r) * 0.98);
       f0 = Object.assign({}, f0, { lap: sc.lap, pieces: f0.pieces.map((pc, i) => i === 0 ? Object.assign({}, pc, { pts: sc.lap, raw: Object.assign({}, pc.raw, { pts: sc.lap }) }) : pc) });
       contacts = sc.contacts; contactNotes = sc.notes;
-    } else contacts = findContacts(f0.lap, cOdFt, { flare: chk('flareTouch') ? flareMult(st.odIn) : 1 }).contacts;
+    } else contacts = findContacts(f0.lap, cOdFt, { flare: chk('flareTouch') ? flareMult(st.odIn) : 1, grow: cGrowFt }).contacts;
   }
   const cen = [0, 0, 0]; f0.lap.forEach(p => { for (let k = 0; k < 3; k++) cen[k] += p[k] / f0.lap.length; });
   const rotated = f0.lap.map(p => p.slice()); const rot = (pts) => (P.rx || P.ry || P.rz) ? rotateEuler(pts.map(p => [p[0] - cen[0], p[1] - cen[1], p[2] - cen[2]]), P.rx * D2R, P.ry * D2R, P.rz * D2R).map(p => [p[0] + cen[0], p[1] + cen[1], p[2] + cen[2]]) : pts;
@@ -3027,7 +3043,7 @@ function computeAll() {
   if (postsOn) {                                                // clear height is measured to the underside of the pipe, flare included
     const fl = flareMult(st.odIn), cn = [0, 0, 0]; lapR.forEach(p => { for (let k = 0; k < 3; k++) cn[k] += p[k] / lapR.length; });
     let md = 0.001; lapR.forEach(p => { md = Math.max(md, Math.hypot(p[0] - cn[0], p[1] - cn[1], p[2] - cn[2])); });
-    let under = 1e9; lapR.forEach(p => { const d = Math.hypot(p[0] - cn[0], p[1] - cn[1], p[2] - cn[2]), fac = 1 + (fl - 1) * Math.pow(Math.min(1, d / md), 2.5); under = Math.min(under, p[1] - odFt / 2 * fac); });
+    let under = 1e9; lapR.forEach(p => { const d = Math.hypot(p[0] - cn[0], p[1] - cn[1], p[2] - cn[2]), fac = 1 + (fl - 1) * Math.pow(Math.min(1, d / md), 2.5); under = Math.min(under, p[1] - (odFt + (fac - 1) * odGrowIn(st) / 12) / 2); });
     dyBase = num('postClear') - under;
   }
   const dy0 = dyBase, orient = (pts) => rot(pts).map(p => [p[0], p[1] + dy0, p[2]]);   // rigid: the form itself never changes
@@ -3568,10 +3584,13 @@ function buildStrips(X) {
   const A = X.A, draft = X.qMul < 1;
   const O = { w: num('stripW') / 12, th: parseFloat($('stripT').value) / 12, stock: parseFloat($('stripStock').value),
     minLen: num('stripMinLen'), maxLen: num('stripMaxLen'), butt: num('stripGap') / 12, skip: num('stripSkip') / 100, gaps: num('stripGaps') / 100, tol: num('stripEdgeTol') / 12,
-    twLim: num('stripTwistLim') * Math.PI / 180, tone: num('stripTone') / 100, every: Math.max(1, parseInt($('rivetEvery').value)), rivets: chk('stripRivets'), showTw: chk('stripShowTwist'), flat: false };
+    twLim: num('stripTwistLim') * Math.PI / 180, tone: num('stripTone') / 100, every: Math.max(1, parseInt($('rivetEvery').value)), rivets: chk('stripRivets'), showTw: chk('stripShowTwist'), flat: false,
+    patch: chk('patchOn'), patchShow: chk('patchShow'), patchMin: num('patchMin') / 12 };
   O.maxLen = Math.min(O.maxLen, O.stock - 0.5); O.minLen = Math.min(O.minLen, O.maxLen);
   let seed = (parseInt($('stripSeed').value) * 7919 + 13) % 4294967296;
   const rnd = () => { seed = (seed * 1664525 + 1013904223) % 4294967296; return seed / 4294967296; }, rr = (a, b) => a + (b - a) * rnd();
+  let pseed = (parseInt($('stripSeed').value) * 104729 + 7) % 4294967296; const prnd = () => { pseed = (pseed * 1664525 + 1013904223) % 4294967296; return pseed / 4294967296; };   // patches draw from their own sequence, so turning them on never reshuffles the rest of the skin
+  const patchBase = new THREE.Color($('patchColor').value);
   const stride = draft ? 6 : 3, base = new THREE.Color($('stripColor').value), tmpC = new THREE.Color();
   const pos = [], col = [], idx = [], rpos = [], ridx = [];
   const addQuad = (a, b, c2, d2, cc) => { const b0 = pos.length / 3; [a, b, c2, d2].forEach(p => { pos.push(p.x, p.y, p.z); col.push(cc.r, cc.g, cc.b); }); idx.push(b0, b0 + 1, b0 + 2, b0, b0 + 2, b0 + 3); };
@@ -3593,7 +3612,7 @@ function buildStrips(X) {
       for (const q of nearTubes(tmp)) { const vx = tmp.x - q[0], vy = tmp.y - q[1], vz = tmp.z - q[2], vn = vx * sp.nm.x + vy * sp.nm.y + vz * sp.nm.z, v2 = vx * vx + vy * vy + vz * vz;
         if (v2 < g * g) lift = Math.max(lift, -vn + Math.sqrt(Math.max(0, g * g - (v2 - vn * vn)))); } }
     return lift; };
-  const SS = { count: 0, lengthened: 0, dropped: 0, totalFt: 0, maxTw: 0, over: 0, minEdgeR: 1e9, forced: 0, rivets: 0, minFlatR: 1e9, maxLift: 0, blocked: 0, lanes: A.stripLanes.length };
+  const SS = { count: 0, lengthened: 0, dropped: 0, totalFt: 0, maxTw: 0, over: 0, minEdgeR: 1e9, forced: 0, rivets: 0, minFlatR: 1e9, maxLift: 0, blocked: 0, patched: 0, patchFt: 0, patchOpen: 0, lanes: A.stripLanes.length };
   const groups = [...new Set(A.stripLanes.map(l => l.group))];
   groups.forEach(g => {
     const lanes = A.stripLanes.filter(l => l.group === g), closedG = !!lanes[0].closed, N = lanes[0].cnt * (closedG ? 2 : 1), nF = lanes[0].nF, Lp = lanes[0].L, ribsG = A.ribs.filter(r => r.group === g);
@@ -3650,18 +3669,17 @@ function buildStrips(X) {
         if (dev(i0, i1) > O.tol) forced = true;
         plan.push({ rA, rb, forced, keep: i1 - i0 >= 2 && (ribF[rb] - ribF[rA]) * sp - O.butt >= 0.5 && rnd() >= O.skip });
       }
-      plan.forEach((pl, qi) => {
-        const { rA, rb, forced } = pl; if (!pl.keep) return;
-        const lastQ = plan.length - 1, nextShares = !!(plan[qi + 1] && plan[qi + 1].keep && plan[qi + 1].rA === rb) || (closedG && qi === lastQ && plan[0].keep && plan[0].rA + nR === rb),
-          prevShares = !!(qi > 0 && plan[qi - 1].keep && plan[qi - 1].rb === rA) || (closedG && qi === 0 && plan[lastQ].keep && plan[lastQ].rb === rA + nR);
-        // two strips butted on a rib each stop just inside its centerline; a strip with nothing butted to it runs the 1" a rib can safely hold, past the rib's far edge
+      const bayFt = (a, b2) => (ribF[b2] - ribF[a]) * sp - O.butt;
+      const tryStrip = (rA, rb, forced, prevShares, nextShares, mode) => {   // mode 0: a planned strip, 1: test a patch, 2: build a patch
         const ov = (ribW / 2 + 1 / 12) / sp;
         const fs = prevShares ? ribF[rA] + half : Math.max(0, ribF[rA] - ov), fe = nextShares ? ribF[rb] - half : Math.min(N - 1, ribF[rb] + ov), sLen = (fe - fs) * sp;
         const i0 = Math.ceil(fs), i1 = Math.floor(fe);
+        if (mode > 0 && (i1 - i0 < 2 || bayFt(rA, rb) < O.patchMin)) return false;
+        if (mode === 2) forced = dev(Math.ceil(ribF[rA] + half), Math.floor(ribF[rb] - half)) > O.tol;
         let twM = 0, kEM = 0, kFM = 0;
         for (let i = i0; i <= i1; i++) { twM = Math.max(twM, tw[i]); kEM = Math.max(kEM, kE[i]); kFM = Math.max(kFM, kF[i]); }
-        if (O.showTw) { const ratio = twM / O.twLim; tmpC.setHSL(0.33 * (1 - Math.max(0, Math.min(1, ratio / 1.5))), 0.75, 0.5); }
-        else { tmpC.copy(base); tmpC.offsetHSL(0, 0, (rnd() - 0.5) * O.tone); }
+        const twCol = () => { const ratio = twM / O.twLim; tmpC.setHSL(0.33 * (1 - Math.max(0, Math.min(1, ratio / 1.5))), 0.75, 0.5); };
+        if (mode === 0) { if (O.showTw) twCol(); else { tmpC.copy(base); tmpC.offsetHSL(0, 0, (rnd() - 0.5) * O.tone); } }
           const lo = Math.max(0, i0 - 1), hi = Math.min(N - 1, i1 + 1);
           const tp = new THREE.Vector3(), g = tubeR + 1 / 40, LF = new Float32Array(N);
           for (let pass = 0; pass < 3; pass++) for (let i = lo; i <= hi; i++) { let lf = 0;            // lift each station along its normal until the strip's inner face clears every tube
@@ -3675,7 +3693,9 @@ function buildStrips(X) {
           for (let i = lo; i <= hi && !blocked; i++) for (let c = -2; c <= 2 && !blocked; c++) { tp.copy(Pm[i]).addScaledVector(AC[i], c * O.w / 4).addScaledVector(NR[i], LF[i] - O.th / 2);
             for (const q of nearTubes(tp)) { const dx = tp.x - q[0], dy = tp.y - q[1], dz = tp.z - q[2]; if (dx * dx + dy * dy + dz * dz < (tubeR - 1 / 400) ** 2) { blocked = true; break; } } }
           for (let i = lo; i <= hi && !blocked; i += 2) { tp.copy(Pm[i]).addScaledVector(NR[i], LF[i]); if (inOther(tp, i)) blocked = true; }
-          if (blocked) { SS.blocked++; return; }
+          if (blocked) return false;
+          if (mode === 1) return true;
+          if (mode === 2) { if (O.showTw) twCol(); else { tmpC.copy(O.patchShow ? patchBase : base); tmpC.offsetHSL(0, 0, (prnd() - 0.5) * O.tone); } }
           for (let i = lo; i <= hi; i++) SS.maxLift = Math.max(SS.maxLift, LF[i]);
           const LFat = (f) => { const i = Math.min(N - 2, Math.max(0, Math.floor(f))); return LF[i] + (LF[i + 1] - LF[i]) * (f - i); };
           const fl = [fs]; for (let i = Math.ceil(fs); i < fe - 1e-6; i += stride) if (i > fs + 1e-6) fl.push(i); fl.push(fe);
@@ -3686,9 +3706,26 @@ function buildStrips(X) {
         const rl = []; for (let r = rA; r <= rb; r++) if ((r - rA) % O.every === 0 || r === rb) rl.push(r);
         const rf = rl.map(r => r === rA ? (prevShares ? ribF[r] + off : ribF[r]) : r === rb ? (nextShares ? ribF[r] - off : ribF[r]) : ribF[r]);
         if (O.rivets && !draft) rf.forEach(f => { const fr = frameAt(f), Pr = fr.P.addScaledVector(fr.nrm, LFat(f) + O.th / 2); addRivet(Pr, fr.nrm, fr.acr, fr.tn); });
+        if (mode === 2) { SS.patched++; SS.patchFt += sLen; }
         SS.count++; SS.totalFt += sLen; SS.maxTw = Math.max(SS.maxTw, twM); if (twM > O.twLim) SS.over++; if (forced) SS.forced++; SS.rivets += rf.length;
         if (kEM > 1e-6) SS.minEdgeR = Math.min(SS.minEdgeR, 1 / kEM); if (kFM > 1e-6) SS.minFlatR = Math.min(SS.minFlatR, 1 / kFM);
-        A.stripPieces.push({ lenFt: sLen, lane: wi, group: g, twDegFt: twM * 180 / Math.PI, over: twM > O.twLim, forced, rivets: rf.length, rivetPts: rf.map(f => { const q = frameAt(f).P; return [q.x, q.y, q.z]; }), N });
+        A.stripPieces.push({ lenFt: sLen, lane: wi, group: g, twDegFt: twM * 180 / Math.PI, over: twM > O.twLim, forced, patch: mode === 2, rivets: rf.length, rivetPts: rf.map(f => { const q = frameAt(f).P; return [q.x, q.y, q.z]; }), N });
+        return true;
+      };
+      // where a whole strip would run into another part of the truss, it is cut into patches: the longest runs of rib-to-rib spans that clear,
+      // each riveted at both ends, so the skin carries on right up to the contact; only the spans the other part actually passes through stay open
+      const patchSpan = (rA, rb, prevSh, nextSh) => {
+        const spans = []; let s = rA;
+        while (s < rb) { let hit = -1; for (let e = rb; e > s; e--) if (tryStrip(s, e, false, false, false, 1)) { hit = e; break; }
+          if (hit < 0) { SS.patchOpen++; s++; } else { spans.push([s, hit]); s = hit; } }
+        spans.forEach(([a, b2], k) => { const pS = (k > 0 && spans[k - 1][1] === a) || (a === rA && prevSh), nS = (k < spans.length - 1 && spans[k + 1][0] === b2) || (b2 === rb && nextSh); tryStrip(a, b2, false, pS, nS, 2); });
+      };
+      plan.forEach((pl, qi) => {
+        const { rA, rb, forced } = pl; if (!pl.keep) return;
+        const lastQ = plan.length - 1, nextShares = !!(plan[qi + 1] && plan[qi + 1].keep && plan[qi + 1].rA === rb) || (closedG && qi === lastQ && plan[0].keep && plan[0].rA + nR === rb),
+          prevShares = !!(qi > 0 && plan[qi - 1].keep && plan[qi - 1].rb === rA) || (closedG && qi === 0 && plan[lastQ].keep && plan[lastQ].rb === rA + nR);
+        if (tryStrip(rA, rb, forced, prevShares, nextShares, 0)) return;
+        SS.blocked++; if (O.patch) patchSpan(rA, rb, prevShares, nextShares);
       });
     });
   });
@@ -3699,6 +3736,7 @@ function buildStrips(X) {
   SS.lbFt = (O.w * 12) * (O.th * 12) * 12 * AL_LB_IN3; SS.wLb = SS.totalFt * SS.lbFt; SS.opts = { w: O.w * 12, t: O.th * 12, stock: O.stock, twLimDeg: O.twLim * 180 / Math.PI, tolIn: O.tol * 12 };
   A.stripStats = SS;
 }
+function O_patchOn() { return chk('patchOn'); }
 function stainlessMat() { return new THREE.MeshStandardMaterial({ color: 0xd2d5d9, metalness: 0.45, roughness: 0.42 }); }
 const OAK_JPG = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAkGBwgHBgkIBwgKCgkLDRYPDQwMDRsUFRAWIB0iIiAdHx8kKDQsJCYxJx8fLT0tMTU3Ojo6Iys/RD84QzQ5Ojf/2wBDAQoKCg0MDRoPDxo3JR8lNzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzf/wAARCAGAAMADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDfQkFvqKjkY7yck88flSoTgZ6kmo3HGenOa8656Ihzlc9eBUqdV+lQnlzn1BqaPlxQgYE5OPYVWY4PXvVk9vpVd0Aycd/zqWCGdmxjpT5un1NNABDcd6dJgxKcUwDP7sfWpUHySVEuDFz6VKmBvHquaA6FaX/W47H/AAqYY3qT3FRzgblYU84G1vSgB54U+xqE4Bb2PFTvj5sfWoSAXcfjQIcP9UPanJyTnutNQ4Q56gmlTh+BQMG5TJI4xTZCDjB5B/pTivyfTio8ct+FAxs33UJ9f6UYzGOadKAQB6MDTCMBQfX/ABpCGMcAbe1NYFmb1NKM8D2zTiA3PripY0RMNoXA79KaAC3TjNKw6j0JxTSPnx7kUDNjGY1Peo2wV+pyKlc/Jn2zUTZ2n8a0ZIgA3HPapEI89BUS8s3409B86N6UgHkYxn0NQSgAH61ZYc/QmoZVODjuKBEK/fcetH/LuuaBw/XtSjmA57HpR0H1CMZTFPi++B6pimJwTUiD94tAiOUfu1xzRJ/q/aiQfuT7E0o5TB6YpDHkcH3WmMPmzjtTm6D0wRUc33Aw9KYhYxyw7GlAO0N07GlT5XzSqTsYUAA5VvZjUbDDn3WpU5yPUZqOT/WY9VNIYw/cJPZz/Oh+2Omac3+rf35okHIHfFAFfB28d6Vf9Xx68U4jIX3phbDMPQZpMaEkXIz6g4qNuHH1/wAKmYk8Ad8VDLkgnkDNIDVf7mM44pjdM1IcN165qI/cX6VYhVxubHrTlyMUkf8AUUc5GfWgRO45P+e1Qv8AdTjqtTnnH0FQ/wACH2xTYIr4wRSgZRx15ziiUYz7CnDo2ehqegdRic5qRTgg9gagU4LZ9cVKTxnpzQASD5JF9/6U2M7ovwpXOVb1wKbAfkI9KBkqcqKY+fK4GcZGKWPhB9cUMMFh1yaYhUYbM+gp4IKketQxnqP9mnscBfTcP6UALEQXH+7SPgSRn3xSqAJR+IpH6p9f8aSGRv8A6on6U8jOKHAKn3/xoXqufWgCLBAUeg4/Ko5ACTjryD+VWMc8+majHXJxjd0/ChiIwepI6H+lRv8AzNTfwvTJMBVJ6ZpDL7HaM46dajOchfwqQklCCMUw8sW7YqmIEbr+FOyTz3Bpi/fbHpUi4yf96gCaNsoDUPSMezEfrT4TwR7/ANKbJ0f65oYiK4XBzSKecH0FSXHKN7VGgG4fSgYxhhGx9akb/Vk+lMIyrD6/yp7dMH0pAhP4D6bT/Oo4jwfTFTIB5fPTaahhxkj0z/OhgiXoh9jSS8c/SlHMcgHrSSY2c85FMBqD5h7g09wTH+NMiGSnr0qTqnTnNADnX5x/v5pkozt9jSufv+oalbqvuaQDF5OD2OaReQn1/pS4+Y+4FMQ4VR6GgAfiRc+hGKizlz7Gnz4UqR61C4w8n+e1JjJgMl8ntUbjKnt3pycge60Sr6elMC0MkqentTV9KFGHPPGaVBg/SmxCR96lTHPr1qOEdc+tPXhxSAdFgMR9KHA+cfT+WKQZ8wgelK+d591/kaYiOU5z7qD+lRqeR7invyFz/dxTOhU+hpDFXv8AWlbnbnutMQ8kU9+FX6EUdA6ip/qwPZhUMOMn8alT7oHo2PzFRRct+YoYE0X8YprZKKR6GlhOGb6Ghz8o+uKAGxjBH1FPXPzj/PSo1JB/CngnzWB/ug0xA/WT3Gf0H+FOkPyKfem5/eAeq/4ihz+6H1FIYN94Y4yDTFHzMCe9SE4Kn8KjX7z+nFABOOPTHNV3/wBaffNWZRkH8arN/rUHqKTGPRv3Rxxhf6mklORn/Z/rSD/Vvn+6adn5R9KYE4OVDdCacvf6dKTAGAOmaDw4z0oYhUIAb2wakHHJ6D/Go1GA3qVqVR8pH40xDMnfz/dNOY/vFz33CkH3l+pH6UMfmU+4/UUARtkqn0NMz8oJ6jBp7nagz1FMHMQ+lIYgHzZPfIqRuFX1B6fjTAT8px0alk6Hp6UAOU4XA9AaiiBD5/2jUsvyyj6VHGe/of60APT/AFmD6USHAX/eH86VT+8A9sUkg+Ue1ADTjt7ipON+fVajx85HvUijOw/7JFMQrAbl/EfrTesJB60P2Po1KB98ehpDGuTtU57imrkbyfUAfpSn/Vj2xTZPvY/2qAHS4G361WP+tjz6VYm6Z/2h/Sqrj95GR6mkwHr90r9ad/B7EDFMPByO2acRkKB6UIZaQEBaJeCCMdeaSI/Ip9qVx8wUn3/WmSObHI/D9aep6gVE4Jz+f60+Lhmz6g0dQHKBwx6bh/hUbD5T7YNSx8pz2amP0bHpn9abAhkwciliACEUyQ4PTvUidOBjBpDGN9wY9RT5T2xTcfu2pWy0gGOuKBBKcuh9VFQxng59amfBVSexIqJfu4FAEv8Ay1U5705h8pzTOQw578VJnO4epNAyI53fiKeuVjU55zUUhO0+wFSv/qCfSgQS52H2INEZy7/SlPzBvcUyP/WH3FIYH/VH2psud34g0vVG59RTZM4HuBTAJvuEe4/nUD8mLFWJj8uOOuarsf8AV/WkwEOcH12n+VPBJQD2zRyRwP4WAoBwoHoAKEMtLwuPTinNjzV9cGkXoeacwG5T3pkh/hSxjDEn2xRig5EbeoFAEg4Rj/tZqNvvD3BqQZKP/n1qInhT9aGBCx/eYPvinA9ab96TgGlB5OO60AIhwcE9RUidUJ/ziozyVPrT0BCMe60IBknAcejUijJxTrkbd3vzTV/1gPbAoAcpymaVjhVI74oTkEHs39aa3+rHtQA2TkfUVIpDIynimSAflSwnDYJ/hoAehyo9x/SkjAzu9qIR09uKIhwR6CkMQfxfX+lRyHKr/uipAcM2PTIqI/cH0I/WmA6bkdKhIwU9mqWXpx9KjPJX/epMAXIZT25oz1yKaoO8DsAaVh8zY4NCAux989M0rfe/DimqNxwadnIzimIcOcUE5Q9OVpY+g+lNTGAT6YoAch+Qn2BqMnKrT4+EH0phPyn2zQwI1A8wYpF78eooDY5GODTyMZ+tIBuMsfrmnIcs455Xmmg8FuwyKemMSAdsUAQzElFJ7rS9gR/dU0yT5lX16VIv3wMcbKOgxyHLSfXNNfsPUmlTiVvemk52n1IpiEPO33xSxffA77TTCSEB9Kchwyk+hpDJIgcZ+v8AOiPI3Z6ZpR8oX3BJoU8H60ARk/vTj0qPpGM/7VPGfNPYD/Gkb/V/nTAa/K8+uf0qJug+v9Kmckp+VRMTgfUUmAqE/Ocd6R87s+tOTox9WxTGYb/rQBfTg0KeG9jSg7SB68fjQuNh4piHpwaa3yqeOhzSp90YoPJPt1oAEOQB3yRUY+6wx7VIOGYd939KjzgnPXihgRDJjPFPJ4B7cUkfTHqKTqPcD86QCY+RlI7/ANKli5TPdlOfwpMAuAe9LGAsSY6EUwIXwCo/2qcPvL/ukUyU45PZqk7ofQkUhgmfM7cgUwnEYPoaenzMjDuDUcn3WA/vUCGZ6j6/zqVP8aiQcsPepscD/ex/OmA8nhPcH+VNbGSOexozlYz/ALWKRgfMOD2H86Bobggt7gUHBUD65pz/AHseoqMd/wDPc0gEP3D9FqMYIAPtUmRtB9h/OoxwSPSgBwwAcf3qYfvD6inAcHPrTDgk57EUIDRcYQY65FKOwP0oc/u8f560o+8Pwpkiw9MelNH3+O4/lTohj60uP3q/WmgGPxKx+hqN+PpUkp5z3Kio5MdPekMZGflPHQn+dL0IPsc0D7z/AFNKQWRcev8AOkA5QGbPoKVeYdvdW4psB7+xFKcAbh0agCrLkkgVY7Z9/wClV15J9hU5+4CD1xn8qBiRfdQn1NMkHzN9afHnCnH8VNPzH3ORQIaBy/1qYgbQfcGo9uNx9utPfhevAx/OmA2PoRnoVNOkIBJHehBjcfb+tJJzj3NIYEDcPqf6VHja498/zp7dVPvk/kKQj94PZiKAIjzHn2x+RpmB8x+pqaQARgerEVC2Pm57H+VDAcvKt9ajYZ3H6U+PJMi/jURJAHfIoQGqT8nTrSDGAT020KPlY+5oAGAD7/zpsRIvRuv3j0pF52nPTFJ1zj2oi4VsnpmmIZKcsPxFRucsSPyqRvmKn/aqN+Ax9wKQwbq+OuaXOF96Q8EmhgdvHoD/ADpAOhIIB7bjTZThVHuafGAIl+pNRsQzD2NADUX5WH1xS/wACnRDkegPNI3Dqvo1ADgeWHfrUS/fz71Ifv8AJ4K03HzNj1/pQAY4YexFDcoQewp7Dn6mmNxweMjFADm/1TY/zzQ4GVGenNJjMTH/AGaGP7xMe9AxsnCfgKc4G4H/AGs01xkH6U5jiNW9hQAyYjAH+1iq6jLHPcVNIPmHs38xUSjnI9DQwCNcSSemBUcq5Ix6VYHKgeveoT904PIFCA0hwSD3/wAKMHI/GkJyAfRqU8c+4/wpsQ5flbJ7ihejD3/pQOUDdxxSFSqH3xR0AiJ6D3BpJPuNn+9S9cn8qQjO4fjR0AD0UDqaRs5x6pQOTHnsaVv9an0IoAkxggDpz/SoVGGJ+tStn8j/AEqMdUP+elIBygbWNMkP7z6MDTmJ8s+4NMPO5uwoGSN2I9D/ADqNclm/CnucD86ZFncfcA80CJGHT65pn3iT6ZNP3A5z60wcMR9aAHY4cDplhTX+/F6Zpd2Nx/2v5ikl4YY6Z/z/ACoGJHzwf71NfIiwegHH5077pOO5psvMbew/pQA2Y4k9twzTAvDYPY0TNmTI9M/WlH3D9aAFi/1SnHeoxk7h6ipWGwAAdwcVGh+dsDimBoEcHH+f84pW/wA/nTWHzA048/pmgQD+NT68Usx+XaOuKMZYe4/lTJTlgPegBn3VIx0pBnd6cn+Y/wAaHGTxTjy3Hp/QUAMz0OelSZ/fLkfxUwAkDHUGnFcOHPTcMUAOkIAbHYioem3ngVNKMGUfSowMj8P8KQCtwAD70wD919Vp7cup7ZNM6Er2yaAEkOWAHrmnJ9//AID/AFppOccGn9Dn1FADWOFYDqP8KPuuue9NPVvcf0qZwC6emR/KjoAwDcr/AEB/So5TyPbv61OPlL59BUDEEMffFAx0p2gEdMjNNbo34j9KJiCrD6fzprEKDnsaAIyfmX6U88Rn1zUSEYz/AJ6VN12jt3/SgQ+TG/BHWoV5Cn86mcjcDUcYGxfxpgXWIwp96Ox+g/nSH/Vg/Q0/pQIROQo9CRUcwJfipsbSfc/zqBmzID270MYAfviPU0oI2jn/ADikY7WBPqKB9z8aAEj4B9QTUjD9x9CDTVHD49ac3+p+q5/WgAfkMfVRTE6c+1PPQAf3ajBPl5+lIBc4Ct23YNMcYLH34pQdy4PYg0v3uTngGgBjf6vP54+tPbHAJ4zikAyrr9aSQ/LnvxTARRyQecDNSkcqR2pqDEjeu2nDrkdhQA1myhY9xUTdGB/vCnEnym5I+Xj86b1Y+hVT+VIY2fncPUVHIQQQeo/wqSQDj6kfpUDgA7qAFTBjGKnABUfjUEX3F9cVYU/KD15x+lMQj8gk9qIgDGp+tMZc4GeStPjXbGoJ/ioAs8+X9BTweQfemr/q2/GlXlMZ5wKAJCTvGeg/pVb+Mexqy3DAk96r44bnkGhgE3HPpz/n8qXkqKD82R7j9acBwB6CmIarZLf71Of7oXv5dJjG76mhvvr6eXUjGs2ME88Ugb92femuPmwe2B+tPTlT9aBiYwOB2HSkjOT+dLjjBz90U1Mhh25/pTEP6MPTFRyZ2n2FSdUU/SlUZ3+hyOaAF/i+vH5imDO0++P5U9BuOfTFNxgn296QDM/e/Gol5PHTYcfpUh5Zsf3uaRgA644+U/yoGMb72M/xD+VQuMqccmp3GCefQ1CF4bPPJ/nTELEowPbipVH7o/XNJGvOaVRhRz1pANAJfHoKdGMgf7x/nTUOZD6c/wA6kQbV6/xH+dAyeP7hFOVtpX2bFJHwpPcUNgAk+opiHycg461GOd+KnI+b61XjAyQeeKfUQpOC5/2VP605T0/EUjr8rDuVIzSp2/OgAfoB/npQ4Hy59xSS9c4z0NJIfm9twpDIicy8dP8A69OjOFNR5/ece4qXGFOOMikAwkllpQPnz7gfzo6CP6ingc5+hoQDDxEufQU9funPr/SozzGKkGT7cA0AJGDhvf8AwpHJ3Hn+EGnnjbj/ADxULtnP+7j9aBix4y59xUbf62P6H+VPUkb8jHT+dNZT5kfs3P5UAI3Lcn+Go1/iHuaeOGORnn+lMGfMYCmIcMj60+VcKfbHemhcsvp/9aibPTPWkMbEp3Mc+lS4PHpz/Oo7dTls+wqTBwOaAJxgsffBpcfKc91pinBBPoak6qRj1FMQ9sc+1RKPmfv1/KplAOM9SKgj/wBYc/3cUxCk/q2P0xSg4Az1wKSQYQep5pzHv6g0AKxHA9RUb8Ocegp0hAK+2KbLxNj2pMaIF4fPuP1BqxwVT6CoeOTxwRUjA7cegzQA3jfHn1GKeD1H0qNx8ykdiakYYJx6cUAImCrj6mlzhh6babH8rfWlY7CM/wB2kA0n5uvANNBzIMUAZceh4pxH3R6ORTQ2EvBOO/8ATmo5eqkf3hTnPzKT0yP5U2T7h56YpARvlWNNXPmk+vSpJeeex/xqGMkuD2zTETpncnpikOTIgxn1/KnKSCvtQmTKPYUAJFwGI/vf1p/OT7dKZEeH9m/wp2Tk0ATjFPUjaDUeOD7VJEB0P97FAEmcP7YqFRiRvyqVwAxY/wB2o1OSSPY1QglHyoPrQTlV+hH6UPgD/dOadj5vakAyQZU/7tNl5kB/2TTj9z/gNI/Lxn6ikMiI+97/AOFSN1J7EY/SmDqQfWnnoB/npQAzOQB69fyp0vHHvimp/B6GllxvJ75yKQBzsB7g0krcnPTNIgyGHTJOPzpJSMkE9TQMWPgZPqaGP3/ZwaQ/Ko/KhuS3uuaYhJiQnTpTJCQG44wakkOQw9aZ94HOOVNIYyY4XOOCMVGvy4Pof60524A9gf0o6jpTETjlWx/eFJG2Zjkdqf8AdDk/Wo4T+8P0xQAq8K34n+VL/wAtMf570E4fH+y386U/fB+lAybH3vXFPi5b8QabnmliOH/AGmIkblWx3U1DEDs5qWTgGokOFwe/emIc3JYdioNO3YCk+lRK2QhP8SY/I0/rGvrtpAAAx6cGmdUB7hv6VIMEAVGuNrj2FIYwZOT6mpDyFHuKQdD7PSZ+f8aAGjgJ7N/UU9xlvw/pTJM4IHY5p38Z/wAaAEUZOc9cmonOT04yKepwVx2FMbHlsehBJpIZJwYxwOtNB5xjkLTv4SKiDYfJwOP60CF3fO31/pUeQAv04pwP78g8cCoJSQq47f40DHHBdf8AdpQ2BgDpTI8hwSc5FSHgHFMRYY5QcdR/SmQnkn/PSl3DCj2pkZzjj+IUDHtgsPfcKUcH14FGR6ep/SmqR+gxSAtbgM5FCttdM9MYNAwc+4puf9WT2ODTESv0cdeKj4KKe/H605zhME80xeUB9MmmIRVA2D+6TT48FFFNyBMPckfrTk+XHqCf50AInDJ9cUwcbvp/WpWIDYB6HNR5xKw9zSGA+6fqDSNw5PfNKpxGw9s/rQ/+tYfT+tADTy0g9aJPvD6UHIJPvSSdjQA1jhAR9KQHKjPrQ/3B36GlYbYzjtzQMV22qB7gVGTgg9etOc8NnscioHYhiAO9AEi8ylj6evvULY+UH0P86WNyDtI5zijbyMds4/M0gHDqpP8AL2p5+nrSEcD6ipAOUHuKYhM4I4PC/wBKYh4Bx/GtPmJBJ/pTYxhBnruH86AHnsPY/wAqQHL7QO1KSBt/Gmx/60Y9P6UhllcgY9iKANwP4Glxz1piDJUZ7kGmA+Y8rnn5qFwFA7kHFJOMbfrSOcHd6EUxDlwWGRnPNOJG4/gaanRT3ApucjIB4BFAiSQYcj0FQ5/ek/7Q/lUz5MgPr/hUBOXAHsc0mND0H3h+FIxHmE0gJU4z3FK3+sPvQAoALDPoaa/JIPQf4UJyQMeooY/N164oYEb9MCnH54+O4pGBMgOO9Njbao9jjFAxu4lsevFRKd0u44706RsMAKEUZUjHX+lADZBt5A5B4ojzgAnPFPdeMe1Iow4Ht09KAHsML/wIU9Sd4A7d6QjKcdyDSr1U59aBCS5KtihsrGOOjD+dMlOMjv0P5VLN/qjQMa3GOP4qSI/vAfanP/XNIoKmP1INLqBM33lx6UKMtx/eBoPKqQPUUvfPuKYCSZMYyf4qRzyV/wBn+VLMTnjoSKjLZcNjjJBoAmbIQEVIikHB7VFuIGAOmKkLd8fw5ppiY3OCAexqHGZSB1xj9afJkv8AnzTScTZHfn9BSGNBJL59Ke/L59OaZHzkfUc09+jHHOOtIBV+8f8Aepj9Rj3pR/rG9CAaZnO09sHNMBwPz++DUQ4L/wC9UkZ6n3xUfd8+tADGGScj1pYT8iZ9qT+M59O1OUEJj0oAc4OwE/hSYwyH1GKklHyY9KjwWIb0NICQLg47YoA4HsxFKeTkU1T2PqcUwI5eHOT6fyqVxmMj0Gahn5J+lSA5X6igAfqe/Gf1qV1+ZPY1CBlv+A1NIeCT+FCAUcJ06NQD8rcU4jhx75pi989z0/CgBZD8pIHQimHhGJHBYfyp8xwjAd8VGT8rjtuBH0oAc7YKg+tPJOAf9kio1G4tuPT0pxOD9GpDEkfDrj1H8qY33vw/oaac7sEnrQx+f3PT9aLgPTknnuaeeT9ahiJIY9w3SpN2Q31NMQ0HDj3Whjxx6j+tIf8AWL+IpGyV/GgY9c4OP7wqKQ7S39KfnIOPWo5cOwHsaBDQeG+lSknHHfmmAZU+hWnKfuc0MCR24buAKbJwGI7ChsHcPWkb7v1/wpDHButN3YbHvxSIMrnucfypD90HvimAknXpUiD5B9P6VHJ39lFSKcRj6f0oEKmN4/3TT25UfjTEHzKfY1IANhz2zTQH/9k=';
 let oakTex = null;
@@ -3740,7 +3778,7 @@ function buildScene(draft) {
   form.pieces.forEach((pc, i) => buildPiece(pc, i, X));
   if (c.st.profile === 'truss' && c.st.strip) { try { buildStrips(X); } catch (e) { console.error(e); } }
   if (c.postsOn && c.posts.length) {
-    const ps = postSpec(c), pm = new THREE.MeshStandardMaterial({ color: (c.st.profile === 'truss' && $('trussFinish').value === 'paint') ? $('trussColor').value : 0xb0b4b8, roughness: 0.55, metalness: 0.2 });
+    const ps = postSpec(c), pm = new THREE.MeshStandardMaterial({ color: $('postColor').value, roughness: 0.55, metalness: 0.2 });
     const pl = chk('plateOn') ? plateSpec(ps.od) : null, tF = pl ? pl.t / 12 : 0, bm = new THREE.MeshStandardMaterial({ color: 0x8e9398, roughness: 0.4, metalness: 0.6 });
     c.posts.forEach(p => {
       const h = p.yTop - tF, m = new THREE.Mesh(new THREE.CylinderGeometry(ps.od / 24, ps.od / 24, h, 32), pm); m.position.set(p.x, tF + h / 2, p.z); currentMeshGroup.add(m);
@@ -3804,7 +3842,7 @@ function updateReadouts(c, A) {
   { const fl = flareMult(st.odIn), L = form.lap; if (fl > 1.001 && L.length && vis.length) {   // the flared ends are wider than the nominal pipe, so measure the real surface
       const cn = [0, 0, 0]; L.forEach(p => { for (let k = 0; k < 3; k++) cn[k] += p[k] / L.length; }); let md = 0.001; L.forEach(p => { md = Math.max(md, Math.hypot(p[0] - cn[0], p[1] - cn[1], p[2] - cn[2])); });
       const mn = [1e9, 1e9, 1e9], mx = [-1e9, -1e9, -1e9];
-      vis.forEach(p => { const d = Math.hypot(p[0] - cn[0], p[1] - cn[1], p[2] - cn[2]), r = od / 2 * (1 + (fl - 1) * Math.pow(Math.min(1, d / md), 2.5)); for (let k = 0; k < 3; k++) { mn[k] = Math.min(mn[k], p[k] - r); mx[k] = Math.max(mx[k], p[k] + r); } });
+      vis.forEach(p => { const d = Math.hypot(p[0] - cn[0], p[1] - cn[1], p[2] - cn[2]), r = (od + (fl - 1) * Math.pow(Math.min(1, d / md), 2.5) * odGrowIn(st) / 12) / 2; for (let k = 0; k < 3; k++) { mn[k] = Math.min(mn[k], p[k] - r); mx[k] = Math.max(mx[k], p[k] + r); } });
       W = mx[0] - mn[0]; D = mx[2] - mn[2]; H = pl.active ? mx[1] : mx[1] - mn[1]; } }
   $('tbDate').textContent = (() => { const d = new Date(); return `${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}.${d.getFullYear()}`; })();
   $('tbForm').textContent = pl.active ? `ABOVE GRADE · ${cr.length / 2 | 0} ARCS` : 'CLOSED LOOP';
@@ -3834,7 +3872,7 @@ function updateReadouts(c, A) {
         si.textContent = `${S.count} strips on ${S.lanes} lanes, ${ftIn(S.totalFt)} of ${S.opts.w}" flat bar, about ${Math.round(S.wLb)} lb.\n` +
           `Twist: worst ${(S.maxTw * 180 / Math.PI).toFixed(0)}°/ft. ${S.over} strip${S.over === 1 ? '' : 's'} over the ${S.opts.twLimDeg.toFixed(0)}°/ft limit need pre-rolling.\n` +
           `Sideways (edge) bend: tightest radius ${S.minEdgeR > 1e8 ? 'none' : ftIn(S.minEdgeR)}; ${S.forced} strip${S.forced === 1 ? ' is' : 's are'} still over the ${S.opts.tolIn.toFixed(2)}" tolerance at the shortest length that reaches two ribs.\n` +
-          `Flatwise: tightest radius ${fr < 1e5 ? inch(fr) : 'none'} (${eps.toFixed(2)}% strain at the surface).\nRivets: ${S.rivets}, only at rib rings, at least 2 per strip. ${S.lengthened} strip${S.lengthened === 1 ? ' was' : 's were'} lengthened to reach a second rib${S.dropped ? '; ' + S.dropped + ' left out at lane ends' : ''}.${S.blocked ? ' ' + S.blocked + ' left out where they would cut into a tube or into another part of the truss.' : ''}${S.maxLift > 0.01 ? ' Strips are raised up to ' + inch(S.maxLift) + ' off the rings to clear the tubes.' : ''}`; } } }
+          `Flatwise: tightest radius ${fr < 1e5 ? inch(fr) : 'none'} (${eps.toFixed(2)}% strain at the surface).\nRivets: ${S.rivets}, only at rib rings, at least 2 per strip. ${S.lengthened} strip${S.lengthened === 1 ? ' was' : 's were'} lengthened to reach a second rib${S.dropped ? '; ' + S.dropped + ' left out at lane ends' : ''}.${S.blocked ? (O_patchOn() ? ' ' + S.blocked + ' ran into another part of the truss; ' + S.patched + ' patch' + (S.patched === 1 ? '' : 'es') + ' (' + ftIn(S.patchFt) + ') fill in up to the contact' + (S.patchOpen ? ', and ' + S.patchOpen + ' rib-to-rib span' + (S.patchOpen === 1 ? ' stays' : 's stay') + ' open where the other part passes through.' : '.') : ' ' + S.blocked + ' left out where they would cut into a tube or into another part of the truss.') : ''}${S.maxLift > 0.01 ? ' Strips are raised up to ' + inch(S.maxLift) + ' off the rings to clear the tubes.' : ''}`; } } }
   const fmtW = (w) => Math.round(w).toLocaleString() + ' lb', b = A.baseW * sc, ex = A.extraW * sc;
   const wm = $('tbWeightMode').value;
   if (st.profile === 'truss' && (st.alum || st.strip)) {
@@ -3847,7 +3885,7 @@ function updateReadouts(c, A) {
   const angs = cr.map(x => x.angle);
   $('tbLegs').textContent = c._liftTxt ? c._liftTxt : !pl.active ? '—' : angs.length ? angs.slice(0, 4).map(a => a.toFixed(0) + '°').join(' / ') + (angs.length > 4 ? ' …' : '') : 'none — all above grade';
 
-  { const fi = $('flareInfo'), d = num('distalOd'); if (fi) fi.textContent = d > st.odIn + 1e-6 ? `${st.odIn.toFixed(3)}" OD at the center, flaring to ${d.toFixed(3)}" OD at the farthest points (×${(d / st.odIn).toFixed(2)}).` : (d > 0 ? `Far-end OD is not larger than the ${st.odIn.toFixed(3)}" pipe, so there is no flare.` : 'Grows the profile as the path moves away from the center, out to this outside diameter at the farthest points.'); }
+  { const fi = $('flareInfo'), d = num('distalOd'); if (fi) fi.textContent = d > st.odIn + 1e-6 ? (st.profile === 'truss' && chk('flareWhole') ? `${st.odIn.toFixed(3)}" OD at the center, flaring to ${d.toFixed(3)}" OD at the farthest points. The ring of tubes opens up ×${flareMult(st.odIn).toFixed(2)}; the tubes and ribs keep their size.` : `${st.odIn.toFixed(3)}" OD at the center, flaring to ${d.toFixed(3)}" OD at the farthest points (×${(d / st.odIn).toFixed(2)}).`) : (d > 0 ? `Far-end OD is not larger than the ${st.odIn.toFixed(3)}" pipe, so there is no flare.` : 'Grows the profile as the path moves away from the center, out to this outside diameter at the farthest points.'); }
   { const si = $('strandInfo'); if (si) { const LY = st.strandLayout; si.textContent = st.profile !== 'strand' || !LY ? '—' : `${LY.n} strand${LY.n === 1 ? '' : 's'}, ${(2 * LY.E).toFixed(2)}" across at the center${new Set(LY.sp.map(q => q.od)).size > 1 ? ', every strand flush to one outer circle' : ''}.${st.strandBad && st.strandBad.length ? ' Skipped (not a size in this stock): ' + st.strandBad.join(', ') + '.' : ''}`; } }
   applyTitleOverrides();
   { const ci = $('contactInfo');
@@ -4326,6 +4364,9 @@ function collectConfig() {
   cfg.projName = $('projName').value; cfg.siteName = $('siteName').value; cfg.views = state.views || []; cfg._tb = Object.assign({}, state.tbManual); return cfg;
 }
 function applyConfig(cfg) {
+  if (cfg.postColor === undefined) cfg = Object.assign({}, cfg, { postColor: '#8d8780' });      // posts used to take the truss color; they now have their own
+  if (cfg.flareWhole === undefined) cfg = Object.assign({}, cfg, { flareWhole: false });         // older presets keep the far-end size they were drawn with
+  if (cfg.patchOn === undefined) cfg = Object.assign({}, cfg, { patchOn: false });               // older presets keep their strips as they were
   if (cfg.flareTouch === undefined) cfg = Object.assign({}, cfg, { flareTouch: !(cfg.profileType === 'truss' || cfg.profileType === 'strand') });   // older truss and strand presets keep their saved form; single pipe now counts the flare
   if (cfg.trussStainless === false && (cfg.trussFinish || 'metal') === 'metal') cfg = Object.assign({}, cfg, { trussFinish: 'surface' });      // presets from before the finish menu had a third choice
   state.tbManual = Object.assign({}, cfg._tb || {});
