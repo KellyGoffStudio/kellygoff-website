@@ -3580,9 +3580,10 @@ function buildStrips(X) {
   const SS = { count: 0, lengthened: 0, dropped: 0, totalFt: 0, maxTw: 0, over: 0, minEdgeR: 1e9, forced: 0, rivets: 0, minFlatR: 1e9, maxLift: 0, blocked: 0, lanes: A.stripLanes.length };
   const groups = [...new Set(A.stripLanes.map(l => l.group))];
   groups.forEach(g => {
-    const lanes = A.stripLanes.filter(l => l.group === g), N = lanes[0].cnt, nF = lanes[0].nF, Lp = lanes[0].L, ribsG = A.ribs.filter(r => r.group === g);
+    const lanes = A.stripLanes.filter(l => l.group === g), closedG = !!lanes[0].closed, N = lanes[0].cnt * (closedG ? 2 : 1), nF = lanes[0].nF, Lp = lanes[0].L, ribsG = A.ribs.filter(r => r.group === g);
     lanes.forEach((ln, wi) => {
-      const Pm = ln.P, Rad = ln.Rad, S = [0]; for (let i = 1; i < N; i++) S.push(S[i - 1] + Pm[i].distanceTo(Pm[i - 1]));
+      // a closed path is laid out twice around, so a strip can run across the seam where the path starts and ends
+      const Pm = closedG ? ln.P.concat(ln.P) : ln.P, Rad = closedG ? ln.Rad.concat(ln.Rad) : ln.Rad, actD = ln.act ? (closedG ? Uint8Array.from([...ln.act, ...ln.act]) : ln.act) : null, S = [0]; for (let i = 1; i < N; i++) S.push(S[i - 1] + Pm[i].distanceTo(Pm[i - 1]));
       const Lm = S[N - 1], sp = Lm / (N - 1), T = [];
       for (let i = 0; i < N; i++) T.push(Pm[Math.min(N - 1, i + 2)].clone().sub(Pm[Math.max(0, i - 2)]).normalize());
       const alpha = 0, NR = [], AC = [];
@@ -3603,18 +3604,20 @@ function buildStrips(X) {
         for (let i = a; i <= b; i += 2) { const d = Pm[i].clone().sub(P0); d.addScaledVector(e, -d.dot(e)); mx = Math.max(mx, Math.abs(d.dot(AC[i]))); } return mx; };
       // strips snap to the rib rings: a strip starts and ends on a rib (its end 1/4" past the rib's centerline, the butt gap shared with the
       // next strip on the same rib), so no strip ever hangs free past a rib; each end is riveted to the rib it stops on
-      const ribF = [...new Set(ribsG.map(r => Math.max(0, Math.min(nF, (r.station + r.w / 2) / Lp * nF))))].sort((x, y) => x - y);
+      let ribF = [...new Set(ribsG.map(r => Math.max(0, Math.min(nF, (r.station + r.w / 2) / Lp * nF))))].sort((x, y) => x - y), nR = ribF.length;
+      if (closedG) { ribF = [...new Set(ribF.map(f => +(f % nF).toFixed(6)))].sort((x, y) => x - y); nR = ribF.length; ribF = ribF.concat(ribF.map(f => f + nF)); }
       const ribW = ribsG.length ? ribsG[0].w : 1.25 / 12;
       const lerpAt = (arr, f) => { const i = Math.min(N - 2, Math.max(0, Math.floor(f))); return arr[i].clone().lerp(arr[i + 1], f - i); };
       const frameAt = (f) => ({ P: lerpAt(Pm, f), nrm: lerpAt(NR, f).normalize(), acr: lerpAt(AC, f).normalize(), tn: lerpAt(T, f).normalize() });
-      const actOk = (a, b) => { if (!ln.act) return true; for (let i = Math.max(0, Math.floor(a)); i <= Math.min(N - 1, Math.ceil(b)); i++) if (!ln.act[i]) return false; return true; };
+      const actOk = (a, b) => { if (!actD) return true; for (let i = Math.max(0, Math.floor(a)); i <= Math.min(N - 1, Math.ceil(b)); i++) if (!actD[i]) return false; return true; };
       const half = O.butt / 2 / sp, off = (O.butt / 2 + ribW / 2) / 2 / sp;            // in stations: half the gap, and where the rivet sits on the strip's half of the rib
-      let ra = 0; const plan = [];
-      while (ra < ribF.length - 1) {
+      const r0 = closedG ? Math.floor(rnd() * nR) : 0, rEnd = closedG ? r0 + nR : ribF.length - 1;       // a closed lane starts on a random rib and comes back around to it
+      let ra = r0; const plan = [];
+      while (ra < rEnd) {
         const fa = ribF[ra];
         if (!actOk(fa, fa + 1)) { ra++; continue; }
         const tgt = fa + rr(O.minLen, O.maxLen) / sp; let rb = -1, best = 1e9;
-        for (let r = ra + 1; r < ribF.length && (ribF[r] - fa) * sp - O.butt <= O.maxLen; r++) { if (!actOk(fa, ribF[r])) break; const d = Math.abs(ribF[r] - tgt); if (d < best) { best = d; rb = r; } }
+        for (let r = ra + 1; r <= rEnd && (ribF[r] - fa) * sp - O.butt <= O.maxLen; r++) { if (!actOk(fa, ribF[r])) break; const d = Math.abs(ribF[r] - tgt); if (d < best) { best = d; rb = r; } }
         if (rb < 0) { ra++; continue; }
         const idx0 = (r1, r2) => [Math.ceil(ribF[r1] + half), Math.floor(ribF[r2] - half)];
         let [i0, i1] = idx0(ra, rb), forced = false;
@@ -3625,7 +3628,8 @@ function buildStrips(X) {
       }
       plan.forEach((pl, qi) => {
         const { rA, rb, forced } = pl; if (!pl.keep) return;
-        const nextShares = !!(plan[qi + 1] && plan[qi + 1].keep && plan[qi + 1].rA === rb), prevShares = !!(qi > 0 && plan[qi - 1].keep && plan[qi - 1].rb === rA);
+        const lastQ = plan.length - 1, nextShares = !!(plan[qi + 1] && plan[qi + 1].keep && plan[qi + 1].rA === rb) || (closedG && qi === lastQ && plan[0].keep && plan[0].rA + nR === rb),
+          prevShares = !!(qi > 0 && plan[qi - 1].keep && plan[qi - 1].rb === rA) || (closedG && qi === 0 && plan[lastQ].keep && plan[lastQ].rb === rA + nR);
         // two strips butted on a rib each stop just inside its centerline; a strip with nothing butted to it runs the 1" a rib can safely hold, past the rib's far edge
         const ov = (ribW / 2 + 1 / 12) / sp;
         const fs = prevShares ? ribF[rA] + half : Math.max(0, ribF[rA] - ov), fe = nextShares ? ribF[rb] - half : Math.min(N - 1, ribF[rb] + ov), sLen = (fe - fs) * sp;
