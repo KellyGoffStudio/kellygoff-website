@@ -2650,7 +2650,13 @@ function buildPanel() {
     <canvas id="featStrip" width="680" height="132" title="Processed signals over the site data. Click to jump."></canvas>
     <div class="hint" id="stripLegend"><b style="color:var(--ink)">— loudness</b> &nbsp; <b style="color:var(--navy-soft)">— brightness</b> &nbsp; <b style="color:#8b9096">— activity</b></div>
     <div id="audioPlayerWidget"><button id="btnPlayAudio" aria-label="Play or pause">▶</button><input type="range" id="audioScrubber" min="0" max="1000" value="0" style="flex:1"><span id="audioTime">0:00 / 0:00</span></div>
-    <div class="hint" id="srcMeta"></div>`;
+    <div class="hint" id="srcMeta"></div>
+    <div class="sub">Presets</div>
+    <div class="btngrid">
+      <button class="btn" id="saveConfigBtn">Save preset</button>
+      <button class="btn" id="btnLoadPresetJson">Load preset</button>
+    </div>
+    <button class="btn wide" id="resetBtn">Reset all settings</button>`;
 
   const AXOPTS = [['pc1', 'Biggest change in the sound'], ['pc2', 'Second biggest change'], ['pc3', 'Third biggest change'], ['bright', 'Brightness (pitch)'], ['noisy', 'Hiss vs tone (noisiness)'], ['tilt', 'Bass vs treble balance'], ['loud', 'Loudness'], ['busy', 'Activity'], ['flux', 'Rate of change']];
   const form = `
@@ -2853,12 +2859,6 @@ function buildPanel() {
       <button class="btn solid" id="exportGlb" title="Pipe mesh, meters, Y up">GLB · 3D</button>
       <button class="btn solid" id="exportUsdz" title="Pipe mesh for Apple AR, meters, Y up">USDZ · AR</button>
     </div>
-    <div class="sub">Presets</div>
-    <div class="btngrid">
-      <button class="btn" id="saveConfigBtn">Save preset</button>
-      <button class="btn" id="btnLoadPresetJson">Load preset</button>
-    </div>
-    <button class="btn wide" id="resetBtn">Reset all settings</button>
     <div class="hint" id="exportNote">DXF: inches, Z-up. STEP: inches, Z-up. OBJ: inches, Y-up. GLB and USDZ: meters, Y-up. CSV: feet. Presets keep the processed site data, so a form can be rebuilt without the original file.</div>`;
 
   $('panel').innerHTML =
