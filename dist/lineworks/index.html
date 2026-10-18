@@ -2251,13 +2251,21 @@ function buildTakeoff() {
     order.groups.push({ type: 'bars', item: `${metalName === 'Stainless' ? '' : ''}${s.name}`, pcs: ps.length, net: n, order: n20, unit: "× 10' bars", wt: lb, wt20: lb20, usedIn: used, bars });
   });
   if (prof === 'truss' && A.ribs && A.ribs.length) {
-    const rl = A.ribs.map((r, i) => ({ id: 'R' + (i + 1), lenIn: Math.PI * (r.Ro + r.Ri) * 12 })); const bars = nestBars(rl, TK.flatUsableIn, TK.kerfIn), n = bars.length, n20 = Math.ceil(n * (1 + TK.extra) - 1e-9), lbFt = 0.25 * 1.25 * 12 * (st.alum ? AL_LB_IN3 : STEEL_LB_IN3);
-    order.groups.push({ type: 'bars', item: `${st.alum ? '6061 aluminum' : 'Stainless'} flat bar 1/4" × 1-1/4" — rolled into ${A.ribs.length} rib rings (${(A.ribs[0].odIn).toFixed(1)}" OD)`, pcs: A.ribs.length, net: n, order: n20, unit: "× 10' bars", wt: n * 10 * lbFt, wt20: n20 * 10 * lbFt, usedIn: rl.reduce((a, r) => a + r.lenIn, 0), bars });
+    const rl = A.ribs.map((r, i) => ({ id: 'R' + (i + 1), lenIn: Math.PI * (r.Ro + r.Ri) * 12 })); const bars = nestBars(rl, TK.flatUsableIn, TK.kerfIn), n = bars.length, n20 = Math.ceil(n * (1 + TK.extra) - 1e-9), wIn = Math.round(A.ribs[0].w * 12 * 100) / 100, wTxt = Math.abs(wIn - 1.25) < 1e-6 ? '1-1/4' : String(wIn), lbFt = 0.25 * wIn * 12 * (st.alum ? AL_LB_IN3 : STEEL_LB_IN3);
+    order.groups.push({ type: 'bars', item: `${st.alum ? '6061 aluminum' : 'Stainless'} flat bar 1/4" × ${wTxt}" — rolled into ${A.ribs.length} rib rings (${(A.ribs[0].odIn).toFixed(1)}" OD)`, pcs: A.ribs.length, net: n, order: n20, unit: "× 10' bars", wt: n * 10 * lbFt, wt20: n20 * 10 * lbFt, usedIn: rl.reduce((a, r) => a + r.lenIn, 0), bars });
   }
   if (prof === 'truss' && A.stripPieces && A.stripPieces.length && A.stripStats) {
-    const SS = A.stripStats, o = SS.opts, capIn = o.stock * 12 - 1, items = A.stripPieces.map((p, i) => ({ id: 'S' + (i + 1), lenIn: p.lenFt * 12 })),
-      bars = nestBars(items, capIn, TK.kerfIn), n = bars.length, n20 = Math.ceil(n * (1 + TK.extra) - 1e-9), lbFt = SS.lbFt, tt = Math.abs(o.t - 0.125) < 1e-4 ? '1/8' : o.t.toFixed(3);
-    order.groups.push({ type: 'strips', item: `6061 aluminum flat bar ${o.w}" × ${tt}" — ${A.stripPieces.length} slat strips, roughly ${SS.rivets} rivets`, pcs: A.stripPieces.length, net: n, order: n20, unit: `× ${o.stock}' bars`, wt: n * o.stock * lbFt, wt20: n20 * o.stock * lbFt, usedIn: items.reduce((a, r) => a + r.lenIn, 0), bars, capIn });
+    const SS = A.stripStats, o = SS.opts, items = A.stripPieces.map((p, i) => ({ id: 'S' + (i + 1), lenIn: p.lenFt * 12 })), tt = Math.abs(o.t - 0.125) < 1e-4 ? '1/8' : o.t.toFixed(3),
+      stack = o.t + 0.25, rivSz = stack <= 0.34 ? '-6' : stack <= 0.47 ? '-8' : '-10', rivTxt = `roughly ${SS.rivets} rivets (3/16" large-flange, ${rivSz} grip)`;
+    if (o.mat === 'bar') {
+      const capIn = o.stock * 12 - 1, bars = nestBars(items, capIn, TK.kerfIn), n = bars.length, n20 = Math.ceil(n * (1 + TK.extra) - 1e-9), lbFt = SS.lbFt;
+      order.groups.push({ type: 'strips', item: `6061 aluminum flat bar ${o.w}" × ${tt}" — ${A.stripPieces.length} slat strips, ${rivTxt}`, pcs: A.stripPieces.length, net: n, order: n20, unit: `× ${o.stock}' bars`, wt: n * o.stock * lbFt, wt20: n20 * o.stock * lbFt, usedIn: items.reduce((a, r) => a + r.lenIn, 0), bars, capIn });
+    } else {
+      const sheetIn = o.stock * 12, rows = Math.max(1, Math.floor((o.sheetW + TK.kerfIn) / (o.w + TK.kerfIn) + 1e-9)), bars = nestBars(items, sheetIn + TK.kerfIn, TK.kerfIn),
+        n = Math.ceil(bars.length / rows - 1e-9), n20 = Math.ceil(n * (1 + TK.extra) - 1e-9), area = sheetIn * o.sheetW / 144, used = items.reduce((a, r) => a + r.lenIn, 0),
+        szTxt = `${o.sheetW / 12} × ${o.stock} ft`, matTxt = o.mat === 'acm3' ? 'ACM 3 mm' : o.mat === 'acm4' ? 'ACM 4 mm' : `6061 aluminum sheet ${tt}"`;
+      order.groups.push({ type: 'strips', sheet: true, item: `${matTxt}, ${szTxt} sheets, cut into ${o.w}" strips — ${A.stripPieces.length} slat strips (${rows} per sheet width), ${rivTxt}`, pcs: A.stripPieces.length, net: n, order: n20, unit: `× ${szTxt} sheets`, wt: n * area * SS.psf, wt20: n20 * area * SS.psf, usedIn: used, bars, rows, offFt: (n * rows * sheetIn - used) / 12, mat: o.mat });
+    }
   }
   const wood = pieces.filter(p => p.kind === 'wood');
   if (wood.length) {
@@ -2330,14 +2338,14 @@ function makeTakeoffSVGraw() {
   const cols = [tx, tx + 330, tx + 392, tx + 500, tx + 608, tx + 692]; const heads = ['ITEM', 'PIECES', 'NET QUANTITY', 'ORDER (+20%)', 'WEIGHT NET', 'WEIGHT +20%'];
   heads.forEach((h, i) => svg += `<text x="${cols[i]}" y="${y}" class="th">${h}</text>`); y += 5; svg += `<line x1="${tx}" y1="${y}" x2="${tx + tw}" y2="${y}" stroke="${INK}" stroke-width="0.7"/>`; y += 12;
   const lb = (v) => Math.round(v).toLocaleString() + ' lb', nf = (v) => v.toFixed(1);
-  let tBars = 0, tBars20 = 0, tBf = 0, tBf20 = 0, tWt = 0, tWt20 = 0, tPcs = 0, tStr = 0, tStr20 = 0;
+  const strSheet = T.order.groups.some(g => g.type === 'strips' && g.sheet); let tBars = 0, tBars20 = 0, tBf = 0, tBf20 = 0, tWt = 0, tWt20 = 0, tPcs = 0, tStr = 0, tStr20 = 0;
   const wrap = (t, n) => { const w = t.split(' '), lines = []; let cur = ''; w.forEach(x => { if ((cur + ' ' + x).trim().length > n) { lines.push(cur.trim()); cur = x; } else cur += ' ' + x; }); lines.push(cur.trim()); return lines; };
   T.order.groups.forEach(g => {
     const lines = wrap(g.item, 62); lines.forEach((l, i) => svg += `<text x="${cols[0]}" y="${y + i * 10}" class="row">${esc(l)}</text>`);
     const isBar = g.type === 'bars' || g.type === 'strips', net = isBar ? `${g.net} ${g.unit}` : `${nf(g.net)} ${g.unit}`, ord = isBar ? `${g.order} ${g.unit}` : `${nf(g.order)} ${g.unit}`;
     svg += `<text x="${cols[1]}" y="${y}" class="row">${g.pcs}</text><text x="${cols[2]}" y="${y}" class="row">${net}</text><text x="${cols[3]}" y="${y}" class="rowb">${ord}</text><text x="${cols[4]}" y="${y}" class="row">${lb(g.wt)}</text><text x="${cols[5]}" y="${y}" class="row">${lb(g.wt20)}</text>`;
     if (g.type === 'wood' && g.byLen) svg += `<text x="${cols[0]}" y="${y + lines.length * 10}" class="tn">${Object.keys(g.byLen).sort((a, b) => a - b).map(kk => `${g.byLen[kk]} × ${kk}'`).join('   ')}  ·  gross board feet incl. 3" trim per piece</text>`;
-    else if (g.type === 'strips') svg += `<text x="${cols[0]}" y="${y + lines.length * 10}" class="tn">${fi(g.usedIn)} of cut strips on ${g.net} bars (${((g.net * g.capIn - g.usedIn) / 12).toFixed(1)}' of offcut)</text>`;
+    else if (g.type === 'strips') svg += `<text x="${cols[0]}" y="${y + lines.length * 10}" class="tn">${g.sheet ? `${fi(g.usedIn)} of cut strips on ${g.net} sheets (${g.offFt.toFixed(0)}' of offcut in ${g.rows} strip lanes per sheet)` : `${fi(g.usedIn)} of cut strips on ${g.net} bars (${((g.net * g.capIn - g.usedIn) / 12).toFixed(1)}' of offcut)`}</text>`;
     else svg += `<text x="${cols[0]}" y="${y + lines.length * 10}" class="tn">${g.usedIn ? `${fi(g.usedIn)} of cut pieces on ${g.net} bars (${(g.net * 96 - g.usedIn / 1 > 0 ? ((g.net * 96 - g.usedIn) / 12).toFixed(1) : 0)}' of usable offcut)` : ''}</text>`;
     y += lines.length * 10 + 14; tPcs += g.pcs; tWt += g.wt; tWt20 += g.wt20;
     if (g.type === 'bars') { tBars += g.net; tBars20 += g.order; } else if (g.type === 'strips') { tStr += g.net; tStr20 += g.order; } else { tBf += g.net; tBf20 += g.order; }
@@ -2347,7 +2355,7 @@ function makeTakeoffSVGraw() {
   if (metalSub.length) { const w1 = metalSub.reduce((a, g) => a + g.wt, 0), w2 = metalSub.reduce((a, g) => a + g.wt20, 0); svg += `<text x="${cols[0]}" y="${y}" class="rowb">SUBTOTAL — METAL STOCK</text><text x="${cols[1]}" y="${y}" class="rowb">${metalSub.reduce((a, g) => a + g.pcs, 0)}</text><text x="${cols[2]}" y="${y}" class="rowb">${tBars} × 10' bars</text><text x="${cols[3]}" y="${y}" class="rowb">${tBars20} × 10' bars</text><text x="${cols[4]}" y="${y}" class="rowb">${lb(w1)}</text><text x="${cols[5]}" y="${y}" class="rowb">${lb(w2)}</text>`; y += 13; }
   if (woodSub.length) { const g = woodSub[0]; svg += `<text x="${cols[0]}" y="${y}" class="rowb">SUBTOTAL — WOOD</text><text x="${cols[1]}" y="${y}" class="rowb">${g.pcs}</text><text x="${cols[2]}" y="${y}" class="rowb">${nf(g.net)} bd ft</text><text x="${cols[3]}" y="${y}" class="rowb">${nf(g.order)} bd ft</text><text x="${cols[4]}" y="${y}" class="rowb">${lb(g.wt)}</text><text x="${cols[5]}" y="${y}" class="rowb">${lb(g.wt20)}</text>`; y += 13; }
   svg += `<line x1="${tx}" y1="${y - 4}" x2="${tx + tw}" y2="${y - 4}" stroke="${INK}" stroke-width="0.9"/>`; y += 8;
-  svg += `<text x="${cols[0]}" y="${y}" class="rowb">TOTAL ORDER</text><text x="${cols[1]}" y="${y}" class="rowb">${tPcs}</text><text x="${cols[2]}" y="${y}" class="rowb">${[tBars ? tBars + " bars" : '', tStr ? tStr + ' flat bar' : '', tBf ? nf(tBf) + ' bd ft' : ''].filter(Boolean).join(' + ')}</text><text x="${cols[3]}" y="${y}" class="rowb">${[tBars20 ? tBars20 + " bars" : '', tStr20 ? tStr20 + ' flat bar' : '', tBf20 ? nf(tBf20) + ' bd ft' : ''].filter(Boolean).join(' + ')}</text><text x="${cols[4]}" y="${y}" class="rowb">${lb(tWt)}</text><text x="${cols[5]}" y="${y}" class="rowb">${lb(tWt20)}</text>`;
+  svg += `<text x="${cols[0]}" y="${y}" class="rowb">TOTAL ORDER</text><text x="${cols[1]}" y="${y}" class="rowb">${tPcs}</text><text x="${cols[2]}" y="${y}" class="rowb">${[tBars ? tBars + " bars" : '', tStr ? tStr + (strSheet ? ' sheets' : ' flat bar') : '', tBf ? nf(tBf) + ' bd ft' : ''].filter(Boolean).join(' + ')}</text><text x="${cols[3]}" y="${y}" class="rowb">${[tBars20 ? tBars20 + " bars" : '', tStr20 ? tStr20 + (strSheet ? ' sheets' : ' flat bar') : '', tBf20 ? nf(tBf20) + ' bd ft' : ''].filter(Boolean).join(' + ')}</text><text x="${cols[4]}" y="${y}" class="rowb">${lb(tWt)}</text><text x="${cols[5]}" y="${y}" class="rowb">${lb(tWt20)}</text>`;
   const orderBottom = y + 8;
   // ---- notes ---------------------------------------------------------
   const nx = M + tw + 30, nw = W - M - nx; let ny = by + bh + 34;
@@ -2358,7 +2366,7 @@ function makeTakeoffSVGraw() {
     "Order columns add 20% for waste and mistakes. Bars round up to whole bars.",
     T.order.groups.some(g => g.type === 'wood') ? "Oak is rounded from square blanks: diameter + 1/4\", rounded up to 1/4\". Board feet include 3\" of trim per piece. White oak weighs about 47 lb per cubic foot." : "",
     T.order.groups.some(g => /rib rings/.test(g.item)) ? "Rib rings are rolled from flat bar. Each bar loses 12\" for tool ends." : "",
-    T.order.groups.some(g => g.type === 'strips') ? "Strips are cut from flat bar sticks with 1\" trim per stick and 1/8\" kerf. Each strip crosses at least two rib rings and is riveted only at the ribs, never to the tubes. Pre-roll any strip marked for twist or tight flatwise bends before painting. Strips are not in the STEP file." : ""].filter(Boolean);
+    T.order.groups.some(g => g.type === 'strips') ? (T.order.groups.some(g => g.type === 'strips' && g.sheet) ? (T.order.groups.some(g => g.mat && g.mat !== 'sheet') ? "Strips are cut lengthwise from ACM sheet with a carbide blade, 1/8\" kerf. Seal cut edges against water; ask for spare strips from the same production lot. " : "Strips are cut lengthwise from sheet, 1/8\" kerf. ") : "Strips are cut from flat bar sticks with 1\" trim per stick and 1/8\" kerf. ") + "Each strip crosses at least two rib rings and is riveted only at the ribs, never to the tubes. Pre-roll any strip marked for twist or tight flatwise bends before painting. Strips are not in the STEP file." : ""].filter(Boolean);
   notes.forEach(n => wrap(n, 62).forEach(l => { svg += `<text x="${nx}" y="${ny}" class="tn">${esc(l)}</text>`; ny += 9.5; }) || (ny += 3));
   // member colour legend
   const mem = [...new Set(T.pieces.filter(p => p.kind === 'metal').map(p => p.group))].sort((a, b) => a - b);
@@ -2803,10 +2811,12 @@ function buildPanel() {
         ${R('ribWidth', 'Rib width', 1.25, 3, 0.25, 2, v => (+v).toFixed(2).replace(/\.?0+$/, '') + '"', 'With strips on, every strip starts and ends on a rib so none hangs free where it could be bent by hand. Two strips can butt on the same rib, so the ribs are wider: 2" leaves room for a rivet in each. A strip with nothing butted to it runs 1 inch past the far edge of the rib.')}
         ${R('stripCover', 'Coverage', 10, 100, 5, 80, v => v + '%', 'How much of the surface the strips cover, edge to edge. Strips are set by this, not by the member count. Where the form flares, extra rows of strips start so the coverage holds.')}
         ${R('stripW', 'Strip width', 1, 4, 0.25, 2, v => (+v).toFixed(2).replace(/\.?0+$/, '') + '"')}
-        ${S_('stripT', 'Strip thickness', [['0.063', '0.063" (about 16 ga)'], ['0.08', '0.080"'], ['0.1', '0.100"'], ['0.125', '1/8"'], ['0.1875', '3/16"'], ['0.25', '1/4"']], '0.125')}
-        ${S_('stripStock', 'Flat bar stock length', [['12', "12' sticks"], ['20', "20' sticks"]], '12')}
+        ${S_('stripT', 'Strip thickness', [['0.063', '0.063" (about 16 ga)'], ['0.08', '0.080"'], ['0.1', '0.100"'], ['0.125', '1/8"'], ['0.1875', '3/16"'], ['0.25', '1/4"'], ['0.118', '3 mm ACM (0.118")'], ['0.157', '4 mm ACM (0.157")']], '0.125')}
+        ${S_('stripMat', 'Strip material', [['bar', 'Aluminum flat bar sticks'], ['sheet', 'Aluminum sheet, cut into strips'], ['acm3', 'ACM, 3 mm (factory finish)'], ['acm4', 'ACM, 4 mm (factory finish)']], 'bar')}
+        <div id="g_stripBar">${S_('stripStock', 'Flat bar stock length', [['12', "12' sticks"], ['20', "20' sticks"]], '12')}</div>
+        <div id="g_stripSheet">${S_('stripSheet', 'Sheet size', [['8:48', "4 × 8 ft"], ['10:48', "4 × 10 ft"], ['10:60', "5 × 10 ft"]], '8:48')}</div>
         ${R('stripMinLen', 'Shortest strip', 1.5, 12, 0.5, 5, v => v + "'")}
-        ${R('stripMaxLen', 'Longest strip', 4, 19, 0.5, 11, v => v + "'", 'Held under the stock length, with 6" for trim.')}
+        ${R('stripMaxLen', 'Longest strip', 4, 8, 0.5, 8, v => v + "'", 'Held under the stock length, with 6" for trim on flat bar. Cut from sheet, a strip can be as long as the sheet.')}
         ${R('stripGap', 'Gap between strip ends', 0, 3, 0.25, 0.5, v => (+v).toFixed(2) + '"')}
         ${S_('stripFill', 'Extra rows on the flares', [['fine', 'Add rows as room allows (never overlapping)'], ['double', 'Double the rows']], 'fine')}
         ${R('stripGaps', 'Openings between ribs', 0, 50, 1, 8, v => v + '%', 'Share of rib-to-rib spans left with no strip, so the pipes show through in one-span windows. Strips on either side end on their rib with the usual 1 inch overhang.')}
@@ -2916,7 +2926,7 @@ function updateVisibility() {
   { const inForm = prof === 'strand' || prof === 'truss', box = $('flareBox'), slot = $(inForm ? 'flareSlotForm' : 'flareSlotStock'); if (box && slot && box.parentNode !== slot) slot.appendChild(box); $('flareSub').style.display = inForm ? '' : 'none'; }   // flare sits under Stock for a single pipe, under Form for bundles and trusses
   show('g_strandS40', $('strandStockType').value === 'sched40'); show('g_strandTub', $('strandStockType').value === 'tubing');
   show('g_trussS40', $('trussStockType').value === 'sched40'); show('g_trussTub', $('trussStockType').value === 'tubing');
-  show('g_seed', $('trussDistribution').value === 'irregular'); show('g_wood', chk('woodOn')); show('g_fill', chk('woodOn')); { const tr = prof === 'truss', fin = $('trussFinish').value; show('g_trussColors', tr); show('g_trussColor', tr && fin === 'paint'); show('g_stripColor', tr && chk('stripOn')); show('g_patchColor', tr && chk('stripOn') && chk('patchOn') && chk('patchShow')); show('g_postColor', chk('postsOn')); show('g_patch', chk('patchOn')); show('g_stepStrips', prof === 'truss' && chk('stripOn')); show('g_flareWhole', prof === 'truss'); show('g_surface', !tr || fin === 'surface'); show('g_colorMode', !tr || fin === 'surface' || chk('stripOn')); } { const ro = $('ribOutside'); if (chk('stripOn')) ro.checked = true; ro.disabled = chk('stripOn'); } show('g_strip', chk('stripOn')); show('c_ribSpacing', !chk('ribAuto')); show('g_ribAuto', chk('ribAuto'));
+  show('g_seed', $('trussDistribution').value === 'irregular'); show('g_wood', chk('woodOn')); show('g_fill', chk('woodOn')); { const tr = prof === 'truss', fin = $('trussFinish').value; show('g_trussColors', tr); show('g_trussColor', tr && fin === 'paint'); show('g_stripColor', tr && chk('stripOn')); show('g_patchColor', tr && chk('stripOn') && chk('patchOn') && chk('patchShow')); show('g_postColor', chk('postsOn')); show('g_patch', chk('patchOn')); { const mat = $('stripMat').value, acm = mat === 'acm3' || mat === 'acm4'; if (acm) { const tv = mat === 'acm3' ? '0.118' : '0.157'; if ($('stripT').value !== tv) $('stripT').value = tv; } else if ($('stripT').value === '0.118' || $('stripT').value === '0.157') $('stripT').value = '0.063'; $('stripT').disabled = acm; show('g_stripBar', mat === 'bar'); show('g_stripSheet', mat !== 'bar'); } show('g_stepStrips', prof === 'truss' && chk('stripOn')); show('g_flareWhole', prof === 'truss'); show('g_surface', !tr || fin === 'surface'); show('g_colorMode', !tr || fin === 'surface' || chk('stripOn')); } { const ro = $('ribOutside'); if (chk('stripOn')) ro.checked = true; ro.disabled = chk('stripOn'); } show('g_strip', chk('stripOn')); show('c_ribSpacing', !chk('ribAuto')); show('g_ribAuto', chk('ribAuto'));
   $('detail').disabled = chk('lenOn'); $('pathLen').disabled = !chk('lenOn'); $('c_detail').style.opacity = chk('lenOn') ? .5 : 1; $('c_pathLen').style.opacity = chk('lenOn') ? 1 : .6; $('lenGrow').disabled = !chk('lenOn');
   show('g_plane', planeOn); show('g_found', chk('foundOn') && !chk('postsOn')); show('g_susp', !planeOn); show('g_posts', chk('postsOn')); show('g_plates', chk('plateOn')); show('c_planeFt', !chk('postsOn'));
   $('exportRibs').disabled = prof !== 'truss';
@@ -3594,7 +3604,7 @@ function buildPiece(piece, idx, X) {
         const rg = new THREE.ExtrudeGeometry(shape, { depth: wRib, bevelEnabled: false, curveSegments: q < 1 ? 14 : 32 });
         addVC(rg, 0xd2d5d9); const rm = new THREE.Mesh(rg, ribMat); rm.position.copy(ctr); rm.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tan); currentMeshGroup.add(rm);
         X.A.ribs.push({ piece: idx, station: u * length, odIn: Ro * 24, idIn: Ri * 24, ctr: [ctr.x, ctr.y, ctr.z], tan: [tan.x, tan.y, tan.z], w: wRib, Ro, Ri, group: idx });
-        X.A.extraW += Math.PI * (Ro * Ro - Ri * Ri) * 144 * 1.25 * 0.2836 * 0 + Math.PI * (Math.pow(Ro * 12, 2) - Math.pow(Ri * 12, 2)) * 1.25 * (st.alum ? AL_LB_IN3 : STEEL_LB_IN3);
+        X.A.extraW += Math.PI * (Ro * Ro - Ri * Ri) * 144 * 1.25 * 0.2836 * 0 + Math.PI * (Math.pow(Ro * 12, 2) - Math.pow(Ri * 12, 2)) * (wRib * 12) * (st.alum ? AL_LB_IN3 : STEEL_LB_IN3);
       }
       X.A.baseW += length * st.weightLbFt;
     }
@@ -3608,11 +3618,11 @@ function buildPiece(piece, idx, X) {
 // ---------------------------------------------------------------------
 function buildStrips(X) {
   const A = X.A, draft = X.qMul < 1;
-  const O = { w: num('stripW') / 12, th: parseFloat($('stripT').value) / 12, stock: parseFloat($('stripStock').value),
+  const O = { w: num('stripW') / 12, th: parseFloat($('stripT').value) / 12, stock: $('stripMat').value === 'bar' ? parseFloat($('stripStock').value) : parseFloat($('stripSheet').value.split(':')[0]), mat: $('stripMat').value, sheetW: $('stripMat').value === 'bar' ? 0 : parseFloat($('stripSheet').value.split(':')[1]),
     minLen: num('stripMinLen'), maxLen: num('stripMaxLen'), butt: num('stripGap') / 12, skip: num('stripSkip') / 100, gaps: num('stripGaps') / 100, tol: num('stripEdgeTol') / 12,
     twLim: num('stripTwistLim') * Math.PI / 180, tone: num('stripTone') / 100, every: Math.max(1, parseInt($('rivetEvery').value)), rivets: chk('stripRivets'), showTw: chk('stripShowTwist'), flat: false,
     patch: chk('patchOn'), patchShow: chk('patchShow'), patchMin: num('patchMin') / 12, byData: chk('stripByData') && $('colorMode').value !== 'solid', cmode: $('colorMode').value };
-  O.maxLen = Math.min(O.maxLen, O.stock - 0.5); O.minLen = Math.min(O.minLen, O.maxLen);
+  O.maxLen = Math.min(O.maxLen, O.stock - (O.mat === 'bar' ? 0.5 : 0)); O.minLen = Math.min(O.minLen, O.maxLen);
   let seed = (parseInt($('stripSeed').value) * 7919 + 13) % 4294967296;
   const rnd = () => { seed = (seed * 1664525 + 1013904223) % 4294967296; return seed / 4294967296; }, rr = (a, b) => a + (b - a) * rnd();
   let pseed = (parseInt($('stripSeed').value) * 104729 + 7) % 4294967296; const prnd = () => { pseed = (pseed * 1664525 + 1013904223) % 4294967296; return pseed / 4294967296; };   // patches draw from their own sequence, so turning them on never reshuffles the rest of the skin
@@ -3767,7 +3777,7 @@ function buildStrips(X) {
   currentMeshGroup.add(new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.42, metalness: 0.12, side: THREE.DoubleSide })));
   if (ridx.length) { const rg = new THREE.BufferGeometry(); rg.setAttribute('position', new THREE.Float32BufferAttribute(rpos, 3)); rg.setIndex(ridx); rg.computeVertexNormals();
     currentMeshGroup.add(new THREE.Mesh(rg, new THREE.MeshStandardMaterial({ color: 0xcfd3d8, roughness: 0.35, metalness: 0.55, side: THREE.DoubleSide }))); }
-  SS.lbFt = (O.w * 12) * (O.th * 12) * 12 * AL_LB_IN3; SS.wLb = SS.totalFt * SS.lbFt; SS.opts = { w: O.w * 12, t: O.th * 12, stock: O.stock, twLimDeg: O.twLim * 180 / Math.PI, tolIn: O.tol * 12 };
+  SS.psf = O.mat === 'acm3' ? 0.94 : O.mat === 'acm4' ? 1.14 : (O.th * 12) * 144 * AL_LB_IN3; SS.lbFt = O.w * SS.psf; SS.wLb = SS.totalFt * SS.lbFt; SS.opts = { w: O.w * 12, t: O.th * 12, stock: O.stock, mat: O.mat, sheetW: O.sheetW, twLimDeg: O.twLim * 180 / Math.PI, tolIn: O.tol * 12 };
   A.stripStats = SS;
 }
 function O_patchOn() { return chk('patchOn'); }
@@ -4399,8 +4409,8 @@ function exportRibs() {
   if (state.last.st.profile !== 'truss') { setStatus('The rib list is for Hollow Ribbed Truss mode.'); return; }
   const rows = ['piece,rib,station_ft,ring_od_in,ring_id_in,bar_in,flat_bar_length_in'];
   let total = 0;
-  state.lastA.ribs.forEach((r, i) => { const mean = (r.odIn + r.idIn) / 2, len = Math.PI * mean; total += len; rows.push(`${r.piece + 1},${i + 1},${(r.station).toFixed(2)},${r.odIn.toFixed(2)},${r.idIn.toFixed(2)},0.25 x 1.25,${len.toFixed(1)}`); });
-  rows.push(`# ${state.lastA.ribs.length} rings, ${(total / 12).toFixed(1)} ft of 1/4" x 1.25" flat bar before waste`);
+  state.lastA.ribs.forEach((r, i) => { const mean = (r.odIn + r.idIn) / 2, len = Math.PI * mean; total += len; rows.push(`${r.piece + 1},${i + 1},${(r.station).toFixed(2)},${r.odIn.toFixed(2)},${r.idIn.toFixed(2)},0.25 x ${+(r.w * 12).toFixed(2)},${len.toFixed(1)}`); });
+  rows.push(`# ${state.lastA.ribs.length} rings, ${(total / 12).toFixed(1)} ft of 1/4" x ${+(state.lastA.ribs[0].w * 12).toFixed(2)}" flat bar before waste`);
   saveBlob(new Blob([rows.join('\n')], { type: 'text/csv' }), slug() + '_rib_cut_list.csv'); setStatus('Rib list saved.');
 }
 
