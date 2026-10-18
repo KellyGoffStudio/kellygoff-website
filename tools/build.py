@@ -286,7 +286,12 @@ def fieldwork_page(f_, i):
     key = f'fw-{f_["slug"]}'
     ims = images_for(key, f_['title'], f'{f_["title"]}' + (f', {f_["place"]}' if f_['place'] else ''), nph=5)
     hero = ims[0]
-    gal = ''.join(f'<figure><button type="button" data-lb="{asset(im["full"])}" data-alt="{E(im["alt"])}" data-cap="{E(f_["title"])}">{img_tag(im, "(max-width:860px) 50vw, 25vw")}</button></figure>' for im in ims)
+    ai = f_.get('aside_image')      # optional: show this image (1-based) beside the text instead of in the gallery
+    aside = ''
+    if ai and 1 <= ai <= len(ims):
+        im = ims[ai - 1]
+        aside = f'<figure style="margin:22px 0 0"><button type="button" style="display:block;width:100%" data-lb="{asset(im["full"])}" data-alt="{E(im["alt"])}" data-cap="{E(f_["title"])}">{img_tag(im, "(max-width:860px) 100vw, 33vw", eager=True).replace("<img ", '<img style="width:100%;height:auto;display:block" ', 1)}</button></figure>'
+    gal = ''.join(f'<figure><button type="button" data-lb="{asset(im["full"])}" data-alt="{E(im["alt"])}" data-cap="{E(f_["title"])}">{img_tag(im, "(max-width:860px) 50vw, 25vw")}</button></figure>' for k, im in enumerate(ims) if k + 1 != ai)
     rel = ''
     for s in f_.get('related_public', []):
         p = next(x for x in PUB if x['slug'] == s); rel += f'<div class="fact"><div class="k">Related work</div><div class="v"><a href="{link(f"public-work/{s}/")}">{E(p["title"])}, {p["year"]}</a></div></div>'
@@ -307,7 +312,7 @@ def fieldwork_page(f_, i):
         return layout(f_['title'], body, f_['text'][0][:155].rsplit(' ', 1)[0] + '…', active='fieldwork/', og=None)
     body = (f'<div class="wrap page-top"><div class="crumb"><a href="{link("fieldwork/")}">Fieldwork</a></div>'
             f'<div class="row-head" style="margin-top:10px"><h1>{E(f_["title"])}</h1><span class="kicker" style="margin:0">{E(f_["date"])}</span></div>'
-            f'<div class="twocol" style="margin-top:30px"><div class="prose">{text}</div><div>{('<div class="fact"><div class="k">Place</div><div class="v">' + E(f_["place"]) + '</div></div>') if f_["place"] else ''}{rel}{lk}</div></div>'
+            f'<div class="twocol" style="margin-top:30px"><div class="prose">{text}</div><div>{('<div class="fact"><div class="k">Place</div><div class="v">' + E(f_["place"]) + '</div></div>') if f_["place"] else ''}{rel}{lk}{aside}</div></div>'
             f'<div class="grid" style="margin-top:36px;gap:16px">{gal}</div>{pager}</div>'
             f'<dialog class="lb" id="lb" aria-label="Image viewer"><div class="lb-in"><div class="stage"><img alt=""></div><div class="lb-cap"></div></div>'
             f'<button class="x" type="button">Close</button><button class="pv" type="button" aria-label="Previous image">←</button><button class="nx" type="button" aria-label="Next image">→</button></dialog>')
