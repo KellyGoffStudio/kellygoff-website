@@ -2816,6 +2816,7 @@ function buildPanel() {
         ${C_('patchShow', 'Show patches in their own color', true, 'Patches take the patch color (under Surface) so you can see where they sit. Off: they match the other strips.')}
         ${R('patchMin', 'Shortest patch', 3, 12, 1, 6, v => v + '"', 'The shortest rib-to-rib piece worth cutting. Ribs sit 8 to 16 inches apart, so most patches are one span.')}
         </div>
+        ${C_('stripByData', 'Color each strip by the Color mode', true, 'Each strip takes one color from the Color mode (the main value along the path, elevation, or spectral), read at its middle. Off: all strips use the strip color.')}
         ${R('stripSeed', 'Strip layout (re-roll)', 1, 40, 1, 11, v => v, 'Changes where the strips start and stop.')}
         ${R('stripEdgeTol', 'Edge-bend tolerance', 0.25, 3, 0.25, 1, v => (+v).toFixed(2) + '"', 'Flat bar cannot bend in its own plane. Strips are cut shorter wherever the path curves sideways more than this away from a straight line.')}
         ${R('stripTwistLim', 'Hand-twist limit', 5, 60, 1, 20, v => v + '°/ft', 'Strips twisting faster than this are marked and need to be pre-rolled. About 20 to 30°/ft is the elastic limit for 2" × 1/8" aluminum.')}
@@ -2836,7 +2837,7 @@ function buildPanel() {
 
   const surface = `
     <div id="g_surface">
-    ${S_('colorMode', 'Color mode', [['solid', 'Solid'], ['audio', 'Loudness along path'], ['height', 'Elevation'], ['stress', 'Bend radius heatmap'], ['rainbow', 'Spectral spiral']], 'solid')}
+    ${S_('colorMode', 'Color mode', [['solid', 'Solid'], ['audio', 'Main value along path'], ['height', 'Elevation'], ['stress', 'Bend radius heatmap'], ['rainbow', 'Spectral spiral']], 'solid')}
     <input type="color" id="matColor" value="#2d6fb7" aria-label="Surface color">
     ${R('matRoughness', 'Roughness', 0.05, 1, 0.05, 0.35, x2)}
     ${R('matMetalness', 'Metalness', 0, 1, 0.05, 0.05, x2)}
@@ -3476,12 +3477,15 @@ function buildPiece(piece, idx, X) {
       // strip lanes are built from the same frames and radii as the tubes and the rib rings, so they land on the rings exactly:
       // inside, a lane sits where its tube would; outside, it lies just beyond the ring, its nearest edge resting on it
       const stripP = st.strip ? { w: num('stripW') / 12, th: parseFloat($('stripT').value) / 12 } : null;
+      // a rib is a flat ring with a straight rim, so on a flare its far edge sits higher than the cone under it; strips are lifted to clear the rim across the rib's full width
+      const hRib = Math.ceil((((st.strip ? num('ribWidth') : 1.25) / 12) / 2) / (length / Math.max(1, nF))) + 1, dfm = [];
+      for (let i = 0; i < cnt; i++) { let m = 0; for (let j = Math.max(0, i - hRib); j <= Math.min(cnt - 1, i + hRib); j++) m = Math.max(m, df(j)); dfm.push(m); }
       const mkLane = (th0, act, lift = 0) => {
         const th = th0 + manual, P = [], Rad = [], Cc = [], RoA = [], outside = ribOutOn(), clr = stripP.th / 2;
         for (let i = 0; i < cnt; i++) {
           const tan = curve.getTangentAt(Math.min(1, i / nF)).normalize(), r0 = frames.normals[i].clone().multiplyScalar(Math.cos(th)).addScaledVector(frames.binormals[i], Math.sin(th));
           r0.addScaledVector(tan, -r0.dot(tan)); if (r0.length() < 1e-6) r0.copy(frames.normals[i]); r0.normalize();
-          const R = outside ? Rb * df(i) + st.memOD / 12 + 0.25 / 12 + clr + lift : Rb * df(i) + mR;
+          const R = outside ? Rb * dfm[i] + st.memOD / 12 + 0.25 / 12 + clr + lift : Rb * df(i) + mR;
           P.push(spaced[i].clone().addScaledVector(r0, R)); Rad.push(r0); Cc.push(spaced[i]); RoA.push(R + stripP.th / 2);
         }
         return { closed, group: idx, L: length, P, Rad, nF, cnt, act, th, C: Cc, Ro: RoA };
@@ -3604,12 +3608,13 @@ function buildStrips(X) {
   const O = { w: num('stripW') / 12, th: parseFloat($('stripT').value) / 12, stock: parseFloat($('stripStock').value),
     minLen: num('stripMinLen'), maxLen: num('stripMaxLen'), butt: num('stripGap') / 12, skip: num('stripSkip') / 100, gaps: num('stripGaps') / 100, tol: num('stripEdgeTol') / 12,
     twLim: num('stripTwistLim') * Math.PI / 180, tone: num('stripTone') / 100, every: Math.max(1, parseInt($('rivetEvery').value)), rivets: chk('stripRivets'), showTw: chk('stripShowTwist'), flat: false,
-    patch: chk('patchOn'), patchShow: chk('patchShow'), patchMin: num('patchMin') / 12 };
+    patch: chk('patchOn'), patchShow: chk('patchShow'), patchMin: num('patchMin') / 12, byData: chk('stripByData') && $('colorMode').value !== 'solid', cmode: $('colorMode').value };
   O.maxLen = Math.min(O.maxLen, O.stock - 0.5); O.minLen = Math.min(O.minLen, O.maxLen);
   let seed = (parseInt($('stripSeed').value) * 7919 + 13) % 4294967296;
   const rnd = () => { seed = (seed * 1664525 + 1013904223) % 4294967296; return seed / 4294967296; }, rr = (a, b) => a + (b - a) * rnd();
   let pseed = (parseInt($('stripSeed').value) * 104729 + 7) % 4294967296; const prnd = () => { pseed = (pseed * 1664525 + 1013904223) % 4294967296; return pseed / 4294967296; };   // patches draw from their own sequence, so turning them on never reshuffles the rest of the skin
   const patchBase = new THREE.Color($('patchColor').value);
+  let yLo = 1e9, yHi = -1e9; A.stripLanes.forEach(l => l.C.forEach(p => { yLo = Math.min(yLo, p.y); yHi = Math.max(yHi, p.y); }));
   const stride = draft ? 6 : 3, base = new THREE.Color($('stripColor').value), tmpC = new THREE.Color();
   const pos = [], col = [], idx = [], rpos = [], ridx = [];
   const addQuad = (a, b, c2, d2, cc) => { const b0 = pos.length / 3; [a, b, c2, d2].forEach(p => { pos.push(p.x, p.y, p.z); col.push(cc.r, cc.g, cc.b); }); idx.push(b0, b0 + 1, b0 + 2, b0, b0 + 2, b0 + 3); };
@@ -3697,8 +3702,15 @@ function buildStrips(X) {
         if (mode === 2) forced = dev(Math.ceil(ribF[rA] + half), Math.floor(ribF[rb] - half)) > O.tol;
         let twM = 0, kEM = 0, kFM = 0;
         for (let i = i0; i <= i1; i++) { twM = Math.max(twM, tw[i]); kEM = Math.max(kEM, kE[i]); kFM = Math.max(kFM, kF[i]); }
+        const dataCol = () => {       // each strip takes one color from the color mode, read at its middle
+          const mid = (i0 + i1) / 2, u = Math.max(0, Math.min(1, mid / Math.max(1, N - 1))), c = new THREE.Color();
+          if (O.cmode === 'audio' && state.feat && state.S) { const dir = state.last && state.last.P.reverse ? -1 : 1, sh = state.last ? state.last.P.shift : 0, v = (evalSeries(state.S.L, dir * (TAU * u) + TAU * sh) + 1) / 2; c.setHSL(0.62 - 0.62 * Math.max(0, Math.min(1, v)), 0.85, 0.5); }
+          else if (O.cmode === 'rainbow') c.setHSL((u * 3) % 1, 0.95, 0.5);
+          else if (O.cmode === 'height' || O.cmode === 'audio') { const y = Pm[Math.round(mid)].y; c.setHSL((1 - (y - yLo) / ((yHi - yLo) || 1)) * 0.65, 0.9, 0.5); }
+          else c.copy(base);
+          return c; };
         const twCol = () => { const ratio = twM / O.twLim; tmpC.setHSL(0.33 * (1 - Math.max(0, Math.min(1, ratio / 1.5))), 0.75, 0.5); };
-        if (mode === 0) { if (O.showTw) twCol(); else { tmpC.copy(base); tmpC.offsetHSL(0, 0, (rnd() - 0.5) * O.tone); } }
+        if (mode === 0) { if (O.showTw) twCol(); else { tmpC.copy(O.byData ? dataCol() : base); tmpC.offsetHSL(0, 0, (rnd() - 0.5) * O.tone); } }
           const lo = Math.max(0, i0 - 1), hi = Math.min(N - 1, i1 + 1);
           const tp = new THREE.Vector3(), g = tubeR + 1 / 40, LF = new Float32Array(N);
           for (let pass = 0; pass < 3; pass++) for (let i = lo; i <= hi; i++) { let lf = 0;            // lift each station along its normal until the strip's inner face clears every tube
@@ -3714,7 +3726,7 @@ function buildStrips(X) {
           for (let i = lo; i <= hi && !blocked; i += 2) { tp.copy(Pm[i]).addScaledVector(NR[i], LF[i]); if (inOther(tp, i)) blocked = true; }
           if (blocked) return false;
           if (mode === 1) return true;
-          if (mode === 2) { if (O.showTw) twCol(); else { tmpC.copy(O.patchShow ? patchBase : base); tmpC.offsetHSL(0, 0, (prnd() - 0.5) * O.tone); } }
+          if (mode === 2) { if (O.showTw) twCol(); else { tmpC.copy(O.patchShow ? patchBase : O.byData ? dataCol() : base); tmpC.offsetHSL(0, 0, (prnd() - 0.5) * O.tone); } }
           for (let i = lo; i <= hi; i++) SS.maxLift = Math.max(SS.maxLift, LF[i]);
           const LFat = (f) => { const i = Math.min(N - 2, Math.max(0, Math.floor(f))); return LF[i] + (LF[i + 1] - LF[i]) * (f - i); };
           const fl = [fs]; for (let i = Math.ceil(fs); i < fe - 1e-6; i += stride) if (i > fs + 1e-6) fl.push(i); fl.push(fe);
@@ -4404,6 +4416,7 @@ function applyConfig(cfg) {
   if (cfg.flareWhole === undefined) cfg = Object.assign({}, cfg, { flareWhole: false });         // older presets keep the far-end size they were drawn with
   if (cfg.stepStrips === undefined) cfg = Object.assign({}, cfg, { stepStrips: true });
   if (cfg.stripFill === undefined) cfg = Object.assign({}, cfg, { stripFill: 'double' });          // older presets keep the doubling rule
+  if (cfg.stripByData === undefined) cfg = Object.assign({}, cfg, { stripByData: false });         // older presets keep one strip color
   if (cfg.patchOn === undefined) cfg = Object.assign({}, cfg, { patchOn: false });               // older presets keep their strips as they were
   if (cfg.flareTouch === undefined) cfg = Object.assign({}, cfg, { flareTouch: !(cfg.profileType === 'truss' || cfg.profileType === 'strand') });   // older truss and strand presets keep their saved form; single pipe now counts the flare
   if (cfg.trussStainless === false && (cfg.trussFinish || 'metal') === 'metal') cfg = Object.assign({}, cfg, { trussFinish: 'surface' });      // presets from before the finish menu had a third choice
