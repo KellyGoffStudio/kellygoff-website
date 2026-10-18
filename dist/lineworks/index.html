@@ -2689,7 +2689,7 @@ function buildPanel() {
     ${R('touchOverlap', 'Overlap at a touch', 0.25, 6, 0.25, 1.5, v => (+v).toFixed(2) + '"')}
     ${R('maxOverlapPct', 'Deepest overlap allowed', 10, 100, 5, 50, v => v + '% of diameter')}
     ${C_('flareTouch', 'Size touch points to the flared pipe', true, 'On: overlap and the deepest-overlap limit are measured on the pipe as drawn, flare included, so a touch between two wide flared ends is judged at their real size. Off: the nominal pipe size is used, as in older versions.')}
-    ${C_('showContacts', 'Mark touch points in the view', true)}
+    ${C_('showContacts', 'Mark touch points in the view', false)}
     <div class="info" id="contactInfo" style="white-space:pre-line">—</div>
 
     <div class="sub">Title block</div>
@@ -2813,7 +2813,7 @@ function buildPanel() {
         ${R('stripSkip', 'Whole strips left out', 0, 40, 1, 0, v => v + '%', 'Share of whole strips left out, which opens a longer gap of several ribs.')}
         ${C_('patchOn', 'Patch riffles at contact points', true, 'Where a whole strip would run into another part of the truss, it is cut into patches: the longest runs of rib-to-rib spans that clear the other part, each riveted to a rib at both ends. The skin carries on right up to the contact, and only the spans the other part actually passes through stay open. Patches are counted in the strip total and the cut list.')}
         <div id="g_patch">
-        ${C_('patchShow', 'Show patches in their own color', true, 'Patches take the patch color (under Surface) so you can see where they sit. Off: they match the other strips.')}
+        ${C_('patchShow', 'Show patches in their own color', false, 'Patches take the patch color (under Surface) so you can see where they sit. Off: they match the other strips.')}
         ${R('patchMin', 'Shortest patch', 3, 12, 1, 6, v => v + '"', 'The shortest rib-to-rib piece worth cutting. Ribs sit 8 to 16 inches apart, so most patches are one span.')}
         </div>
         ${C_('stripByData', 'Color each strip by the Color mode', true, 'Each strip takes one color from the Color mode (the main value along the path, elevation, or spectral), read at its middle. Off: all strips use the strip color.')}
@@ -2836,8 +2836,10 @@ function buildPanel() {
     <div class="info" id="sigmaInfo">—</div>`;
 
   const surface = `
-    <div id="g_surface">
+    <div id="g_colorMode">
     ${S_('colorMode', 'Color mode', [['solid', 'Solid'], ['audio', 'Main value along path'], ['height', 'Elevation'], ['stress', 'Bend radius heatmap'], ['rainbow', 'Spectral spiral']], 'solid')}
+    </div>
+    <div id="g_surface">
     <input type="color" id="matColor" value="#2d6fb7" aria-label="Surface color">
     ${R('matRoughness', 'Roughness', 0.05, 1, 0.05, 0.35, x2)}
     ${R('matMetalness', 'Metalness', 0, 1, 0.05, 0.05, x2)}
@@ -2914,7 +2916,7 @@ function updateVisibility() {
   { const inForm = prof === 'strand' || prof === 'truss', box = $('flareBox'), slot = $(inForm ? 'flareSlotForm' : 'flareSlotStock'); if (box && slot && box.parentNode !== slot) slot.appendChild(box); $('flareSub').style.display = inForm ? '' : 'none'; }   // flare sits under Stock for a single pipe, under Form for bundles and trusses
   show('g_strandS40', $('strandStockType').value === 'sched40'); show('g_strandTub', $('strandStockType').value === 'tubing');
   show('g_trussS40', $('trussStockType').value === 'sched40'); show('g_trussTub', $('trussStockType').value === 'tubing');
-  show('g_seed', $('trussDistribution').value === 'irregular'); show('g_wood', chk('woodOn')); show('g_fill', chk('woodOn')); { const tr = prof === 'truss', fin = $('trussFinish').value; show('g_trussColors', tr); show('g_trussColor', tr && fin === 'paint'); show('g_stripColor', tr && chk('stripOn')); show('g_patchColor', tr && chk('stripOn') && chk('patchOn') && chk('patchShow')); show('g_postColor', chk('postsOn')); show('g_patch', chk('patchOn')); show('g_stepStrips', prof === 'truss' && chk('stripOn')); show('g_flareWhole', prof === 'truss'); show('g_surface', !tr || fin === 'surface'); } { const ro = $('ribOutside'); if (chk('stripOn')) ro.checked = true; ro.disabled = chk('stripOn'); } show('g_strip', chk('stripOn')); show('c_ribSpacing', !chk('ribAuto')); show('g_ribAuto', chk('ribAuto'));
+  show('g_seed', $('trussDistribution').value === 'irregular'); show('g_wood', chk('woodOn')); show('g_fill', chk('woodOn')); { const tr = prof === 'truss', fin = $('trussFinish').value; show('g_trussColors', tr); show('g_trussColor', tr && fin === 'paint'); show('g_stripColor', tr && chk('stripOn')); show('g_patchColor', tr && chk('stripOn') && chk('patchOn') && chk('patchShow')); show('g_postColor', chk('postsOn')); show('g_patch', chk('patchOn')); show('g_stepStrips', prof === 'truss' && chk('stripOn')); show('g_flareWhole', prof === 'truss'); show('g_surface', !tr || fin === 'surface'); show('g_colorMode', !tr || fin === 'surface' || chk('stripOn')); } { const ro = $('ribOutside'); if (chk('stripOn')) ro.checked = true; ro.disabled = chk('stripOn'); } show('g_strip', chk('stripOn')); show('c_ribSpacing', !chk('ribAuto')); show('g_ribAuto', chk('ribAuto'));
   $('detail').disabled = chk('lenOn'); $('pathLen').disabled = !chk('lenOn'); $('c_detail').style.opacity = chk('lenOn') ? .5 : 1; $('c_pathLen').style.opacity = chk('lenOn') ? 1 : .6; $('lenGrow').disabled = !chk('lenOn');
   show('g_plane', planeOn); show('g_found', chk('foundOn') && !chk('postsOn')); show('g_susp', !planeOn); show('g_posts', chk('postsOn')); show('g_plates', chk('plateOn')); show('c_planeFt', !chk('postsOn'));
   $('exportRibs').disabled = prof !== 'truss';
