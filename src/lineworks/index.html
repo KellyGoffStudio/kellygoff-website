@@ -4538,8 +4538,8 @@ function animate() {
     labelSprites.forEach(sp => sp.scale.set(s * 1.1, s * 0.55, 1)); }
   gizmoCamera.position.copy(camera.position).sub(controls.target).setLength(5); gizmoCamera.up.copy(camera.up); gizmoCamera.lookAt(0, 0, 0);
   const w = state.recSize ? state.recSize.w : container.clientWidth, h = state.recSize ? state.recSize.h : container.clientHeight;
-  renderer.setViewport(0, 0, w, h); renderer.clear(); renderer.render(scene, camera);
-  if (!document.body.classList.contains('presenting')) { renderer.setViewport(10, 10, 96, 96); renderer.clearDepth(); renderer.render(gizmoScene, gizmoCamera); }
+  if (!state.encoding) { renderer.setViewport(0, 0, w, h); renderer.clear(); renderer.render(scene, camera); }
+  if (!state.encoding && !document.body.classList.contains('presenting')) { renderer.setViewport(10, 10, 96, 96); renderer.clearDepth(); renderer.render(gizmoScene, gizmoCamera); }
 }
 
 
@@ -4655,7 +4655,7 @@ function recPose(base, ang) {
   const v = base.p.clone().sub(base.t), c = Math.cos(-ang), sn = Math.sin(-ang);
   camera.position.set(base.t.x + v.x * c + v.z * sn, base.p.y, base.t.z - v.x * sn + v.z * c); camera.lookAt(base.t); controls.target.copy(base.t);
 }
-function recButtons(label, which) { ['presClip', 'presGif'].forEach(id => { const b = $(id); b.disabled = !!label; if (label && id === which) b.textContent = label; else if (!label) b.textContent = id === 'presClip' ? '● Clip' : '● GIF'; }); wakePres(); }
+function recButtons(label, which) { ['presQuick', 'presClip', 'presGif'].forEach(id => { const b = $(id); b.disabled = !!label; if (label && id === which) b.textContent = label; else if (!label) b.textContent = id === 'presClip' ? '● Render' : id === 'presQuick' ? '● Quick' : '● GIF'; }); wakePres(); }
 function saveBlob(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000); }
 function recName(ext) { return ((($('projName').value || 'lineworks').trim().replace(/[^\w\-]+/g, '_')) || 'lineworks') + '_turntable.' + ext; }
 // ---- smooth clips: every frame is drawn at its exact angle, then encoded (WebCodecs, H.264), so a slow computer makes a longer wait, not a choppy turn
@@ -4690,32 +4690,40 @@ async function clipCodec(w, h, fps, bps) {
   for (const c of list) { try { const o = Object.assign({ codec: c.codec, width: w, height: h, bitrate: bps, framerate: fps, latencyMode: 'quality' }, c.avc ? { avc: c.avc } : {}); const r = await VideoEncoder.isConfigSupported(o); if (r.supported) return Object.assign({}, c, { opts: o }); } catch (e) { } }
   return null;
 }
-async function encodeClip(cc, N, span, base, w, h, fps) {
+async function encodeClip(cc, N, span, base, w, h, fps, ss, label) {
   const cvs = renderer.domElement, samples = []; let cfg = null, err = null;
+  const out = document.createElement('canvas'); out.width = w; out.height = h; const ox = out.getContext('2d'); ox.imageSmoothingEnabled = true; ox.imageSmoothingQuality = 'high';
   const enc = new VideoEncoder({ output: (ch, meta) => { const d = new Uint8Array(ch.byteLength); ch.copyTo(d); if (meta && meta.decoderConfig && meta.decoderConfig.description && !cfg) cfg = new Uint8Array(meta.decoderConfig.description); samples.push({ data: d, key: ch.type === 'key' }); }, error: (e) => { err = e; } });
-  enc.configure(cc.opts);
-  for (let i = 0; i < N; i++) {
-    if (err) throw err;
-    recPose(base, (i / N) * span); renderer.setViewport(0, 0, w, h); renderer.clear(); renderer.render(scene, camera);
-    const fr = new VideoFrame(cvs, { timestamp: Math.round(i * 1e6 / fps), duration: Math.round(1e6 / fps) });
-    enc.encode(fr, { keyFrame: i % 30 === 0 }); fr.close();
-    recButtons(`Frame ${i + 1}/${N}`, 'presClip');
-    while (enc.encodeQueueSize > 6) await new Promise(r => setTimeout(r, 4));
-    if (i % 4 === 0) await new Promise(r => setTimeout(r, 0));
-  }
-  await enc.flush(); enc.close(); if (err) throw err;
+  enc.configure(cc.opts); state.encoding = true; const W = Math.round(w * ss), H = Math.round(h * ss), t0 = performance.now();
+  try {
+    for (let i = 0; i < N; i++) {
+      if (err) throw err;
+      recPose(base, (i / N) * span); renderer.setViewport(0, 0, W, H); renderer.clear(); renderer.render(scene, camera);
+      let src = cvs; if (ss !== 1) { ox.drawImage(cvs, 0, 0, W, H, 0, 0, w, h); src = out; }        // drawn larger, then scaled down: smooth edges, no crawling pixels
+      const fr = new VideoFrame(src, { timestamp: Math.round(i * 1e6 / fps), duration: Math.round(1e6 / fps) });
+      enc.encode(fr, { keyFrame: i % fps === 0 }); fr.close();
+      const el = (performance.now() - t0) / 1000, eta = i > 2 ? Math.round(el / (i + 1) * (N - i - 1)) : null;
+      recButtons(`${label} ${Math.round((i + 1) / N * 100)}%${eta !== null ? ' · ' + (eta >= 60 ? Math.floor(eta / 60) + ' min ' + (eta % 60) + ' s' : eta + ' s') : ''}`, state.recBtn);
+      while (enc.encodeQueueSize > 6) await new Promise(r => setTimeout(r, 4));
+      if (i % 3 === 0) await new Promise(r => setTimeout(r, 0));
+    }
+    await enc.flush(); enc.close(); if (err) throw err;
+  } finally { state.encoding = false; }
   if (cc.cfgType === 'vpcC') cfg = Uint8Array.from([1, 0, 0, 0, 0, 40, 0x82, 2, 2, 2, 0, 0]);
   if (!cfg) throw new Error('The encoder gave no codec details.');
   return mp4Mux(samples, { w, h, fps, fourcc: cc.fourcc, cfgType: cc.cfgType, cfg });
 }
-async function recordClip() {
+async function recordClip(mode = 'render') {
   if (state.rec) return;
-  const [turnDeg, secs] = ($('presLen') ? $('presLen').value : '360:30').split(':').map(Number), span = turnDeg * Math.PI / 180, DUR = secs * 1000, FPS = 30, N = secs * FPS;
+  const quick = mode === 'quick', K = state.clipScale || 1;
+  const [turnDeg, secs] = ($('presLen') ? $('presLen').value : '90:30').split(':').map(Number), span = turnDeg * Math.PI / 180, DUR = secs * 1000, FPS = quick ? 30 : 60, N = secs * FPS;
+  state.recBtn = quick ? 'presQuick' : 'presClip';
   const saved = { p: camera.position.clone(), t: controls.target.clone(), up: camera.up.clone() };
   const shape = $('presShape') ? $('presShape').value : 'window', ev = (n) => Math.max(2, Math.floor(n / 2) * 2);
-  const dim = shape === 'portrait' ? { w: 1080, h: 1920 } : shape === 'landscape' ? { w: 1920, h: 1080 } : { w: ev(container.clientWidth * Math.min(2, renderer.getPixelRatio())), h: ev(container.clientHeight * Math.min(2, renderer.getPixelRatio())) };
+  const q = (quick ? 2 / 3 : 1) * K, dim = shape === 'portrait' ? { w: ev(1080 * q), h: ev(1920 * q) } : shape === 'landscape' ? { w: ev(1920 * q), h: ev(1080 * q) } : { w: ev(container.clientWidth * Math.min(2, renderer.getPixelRatio()) * q), h: ev(container.clientHeight * Math.min(2, renderer.getPixelRatio()) * q) };
+  const maxT = renderer.capabilities.maxTextureSize || 4096, ss = quick ? 1 : Math.max(1, Math.min(2, Math.floor(maxT / Math.max(dim.w, dim.h) * 10) / 10));
   const cvs = renderer.domElement, savedPR = renderer.getPixelRatio();
-  const cc = await clipCodec(dim.w, dim.h, FPS, 6e6);
+  const cc = await clipCodec(dim.w, dim.h, FPS, quick ? 4e6 : 14e6);
   let mime = '', ext = 'mp4';
   if (!cc) {          // no frame-by-frame encoder here: fall back to recording the screen live
     if (!window.MediaRecorder || !renderer.domElement.captureStream) { setStatus('This browser cannot record video from the page. Use the GIF button, or try Chrome or Safari.'); return; }
@@ -4724,26 +4732,26 @@ async function recordClip() {
   state.rec = true; let base = recSetup();
   if (cc || shape !== 'window') {        // draw the clip at its own size, backing the camera off so the work still fits across a narrow frame
     const a0 = Math.max(0.2, container.clientWidth / Math.max(1, container.clientHeight)), a1 = dim.w / dim.h, f = shape === 'window' ? 1 : Math.max(1, 0.75 * a0 / a1);
-    renderer.setPixelRatio(1); renderer.setSize(dim.w, dim.h, false); state.recSize = dim;
+    const big = cc ? { w: Math.round(dim.w * ss), h: Math.round(dim.h * ss) } : dim; renderer.setPixelRatio(1); renderer.setSize(big.w, big.h, false); state.recSize = big;
     cvs.style.width = '100%'; cvs.style.height = '100%'; cvs.style.objectFit = 'contain';
     base = { p: base.t.clone().add(base.p.clone().sub(base.t).multiplyScalar(f)), t: base.t };
     if (camera.isOrthographicCamera) { const fs = (camera.userData.frustum || 40) * f; camera.left = -fs * a1 / 2; camera.right = fs * a1 / 2; camera.top = fs / 2; camera.bottom = -fs / 2; } else camera.aspect = a1;
     camera.updateProjectionMatrix();
   }
-  const restore = () => { if (state.recSize) { state.recSize = null; renderer.setPixelRatio(savedPR); cvs.style.width = ''; cvs.style.height = ''; cvs.style.objectFit = ''; resizeRenderer(); }
+  const restore = () => { state.encoding = false; if (state.recSize) { state.recSize = null; renderer.setPixelRatio(savedPR); cvs.style.width = ''; cvs.style.height = ''; cvs.style.objectFit = ''; resizeRenderer(); }
     camera.position.copy(saved.p); controls.target.copy(saved.t); camera.up.copy(saved.up); camera.lookAt(saved.t); state.rec = false; recButtons(''); };
   const nm = recName(ext).replace('_turntable.', shape === 'window' ? '_turntable.' : `_turntable_${shape}.`);
   if (cc) {
     try {
-      const bytes = await encodeClip(cc, N, span, base, dim.w, dim.h, FPS); restore();
-      saveBlob(new Blob([bytes], { type: 'video/mp4' }), nm); setStatus(`Saved ${nm} (${Math.round(turnDeg)}° in ${secs} s, ${dim.w} x ${dim.h}, ${(bytes.length / 1048576).toFixed(1)} MB, every frame drawn at its exact angle).`); return;
+      const bytes = await encodeClip(cc, N, span, base, dim.w, dim.h, FPS, ss, quick ? 'Quick' : 'Render'); restore();
+      saveBlob(new Blob([bytes], { type: 'video/mp4' }), nm); setStatus(`Saved ${nm} (${Math.round(turnDeg)}° in ${secs} s, ${dim.w} x ${dim.h} at ${FPS} fps, ${(bytes.length / 1048576).toFixed(1)} MB${quick ? ', quick clip' : ', drawn at ' + ss + 'x and scaled down'}).`); return;
     } catch (e) { restore(); setStatus('The video encoder stopped (' + (e && e.message || e) + '). Try the GIF button or another browser.'); return; }
   }
   const stream = renderer.domElement.captureStream(30), rec = new MediaRecorder(stream, Object.assign({ videoBitsPerSecond: 6e6 }, mime ? { mimeType: mime } : {})), chunks = [];
   rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
   const done = new Promise(r => { rec.onstop = r; });
   rec.start(); const t0 = performance.now();
-  await new Promise(res => { const step = () => { const k = Math.min(1, (performance.now() - t0) / DUR); recPose(base, k * span); recButtons(`Rec ${Math.round(k * 100)}%`, 'presClip'); if (k >= 1) res(); else requestAnimationFrame(step); }; step(); });
+  await new Promise(res => { const step = () => { const k = Math.min(1, (performance.now() - t0) / DUR); recPose(base, k * span); recButtons(`Rec ${Math.round(k * 100)}%`, state.recBtn); if (k >= 1) res(); else requestAnimationFrame(step); }; step(); });
   await new Promise(r => setTimeout(r, 120)); rec.stop(); await done; stream.getTracks().forEach(t => t.stop());
   restore();
   saveBlob(new Blob(chunks, { type: mime || 'video/webm' }), nm); setStatus(`Saved ${nm} (${Math.round(turnDeg)}° in ${secs} s, recorded live because this browser cannot draw it frame by frame, so a slow computer may show some stutter).`);
@@ -4808,13 +4816,13 @@ async function recordGif() {
 }
 function wirePresent() {
   const bar = document.createElement('div'); bar.id = 'presBar';
-  bar.innerHTML = '<button id="presPrev" title="Previous view (←)">◀</button><span id="presChips"></span><button id="presNext" title="Next view (→)">▶</button><span class="sep"></span><button id="presSave" title="Save the current camera as the next view">★ Save view</button><button id="presTurn" title="Turntable (Space)">Turn</button><select id="presShape" title="Shape of the video clip: as it looks on screen, landscape 16:9 (1920 x 1080), or portrait 9:16 (1080 x 1920) for phones and social posts"><option value="window">Clip: as shown</option><option value="landscape">Clip: landscape 16:9</option><option value="portrait">Clip: portrait 9:16</option></select><select id="presLen" title="How far the clip turns, and how long it runs"><option value="360:30">Full turn, 30 s</option><option value="360:15">Full turn, 15 s</option><option value="180:15">Half turn, 15 s</option></select><button id="presClip" title="Record one turn of the turntable and download it as a video clip">● Clip</button><button id="presGif" title="Record one turn of the turntable and download it as an animated GIF">● GIF</button><span class="sep"></span><button id="presTitle" title="Show or hide the title block (T)">Title</button><button id="presExit" title="Exit (Esc)">Exit</button>';
+  bar.innerHTML = '<button id="presPrev" title="Previous view (←)">◀</button><span id="presChips"></span><button id="presNext" title="Next view (→)">▶</button><span class="sep"></span><button id="presSave" title="Save the current camera as the next view">★ Save view</button><button id="presTurn" title="Turntable (Space)">Turn</button><select id="presShape" title="Shape of the video clip: as it looks on screen, landscape 16:9 (1920 x 1080), or portrait 9:16 (1080 x 1920) for phones and social posts"><option value="window">Clip: as shown</option><option value="landscape">Clip: landscape 16:9</option><option value="portrait">Clip: portrait 9:16</option></select><select id="presLen" title="How far the clip turns, and how long it runs. Slower turns look smoother."><option value="90:30">Quarter turn, 30 s</option><option value="180:30">Half turn, 30 s</option><option value="360:30">Full turn, 30 s</option><option value="180:15">Half turn, 15 s</option><option value="360:15">Full turn, 15 s</option></select><button id="presQuick" title="Quick clip: a fast, smaller 30 fps video to check the framing or send around">● Quick</button><button id="presClip" title="Render a high quality clip: 1080p at 60 frames per second, drawn at double size and scaled down for smooth edges. Takes a few minutes.">● Render</button><button id="presGif" title="Record one turn of the turntable and download it as an animated GIF">● GIF</button><span class="sep"></span><button id="presTitle" title="Show or hide the title block (T)">Title</button><button id="presExit" title="Exit (Esc)">Exit</button>';
   container.appendChild(bar);
   $('btnPresent').onclick = () => setPresent(!document.body.classList.contains('presenting'));
   $('btnTurn').onclick = () => setTurn(!state.turn); $('presTurn').onclick = () => setTurn(!state.turn);
   $('btnSaveView').onclick = saveNextView; $('presSave').onclick = saveNextView;
   $('presExit').onclick = () => setPresent(false); $('presPrev').onclick = () => nextView(-1); $('presNext').onclick = () => nextView(1);
-  $('presClip').onclick = () => recordClip(); $('presGif').onclick = () => recordGif();
+  $('presClip').onclick = () => recordClip('render'); $('presQuick').onclick = () => recordClip('quick'); $('presGif').onclick = () => recordGif();
   $('presTitle').onclick = () => document.body.classList.toggle('notitle');
   ['mousemove', 'mousedown', 'touchstart', 'wheel'].forEach(ev => container.addEventListener(ev, wakePres, { passive: true }));
   $('refFigs').addEventListener('change', buildRefs);
