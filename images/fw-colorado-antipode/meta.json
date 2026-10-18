@@ -4,8 +4,9 @@
   "caption": "A vertical laser marking the line through the planet at the center of the island's counterpart, Prowers County, Colorado"
  },
  "02.jpg": {
-  "alt": "A Facebook post by the Mayor of Lamar announcing the visit, with a satellite map of the route in yellow, two views of Île Amsterdam, and a world map of antipodes",
-  "caption": "The City of Lamar announces the project, July 29, 2021"
+  "alt": "Two Facebook posts side by side. Left, the Mayor of Lamar announcing the artist's visit to locate the dry antipode, with a route map, views of Île Amsterdam, and a world antipodes map. Right, a ranch owner's post with photos from an ATV tour of the land.",
+  "caption": "The City of Lamar's announcement, July 29, 2021, and a landowner's post after taking me around the ranch, August 3, 2021",
+  "wide": true
  },
  "03.jpg": {
   "alt": "A Bell helicopter parked on grass with its rotor at rest",
@@ -32,14 +33,10 @@
   "caption": "Following the plotted line by ATV"
  },
  "09.jpg": {
-  "alt": "A landowner's Facebook post with photos from an ATV tour of the ranch: green hills, rock outcrops, and cottonwoods",
-  "caption": "A landowner's post after taking me around the ranch, August 3, 2021"
- },
- "10.jpg": {
   "alt": "A weathered fallen cottonwood trunk arching over dry ground on the prairie",
   "caption": "A fallen cottonwood near the route"
  },
- "11.jpg": {
+ "10.jpg": {
   "alt": "A longhorn steer staring at the camera in a pasture with other cattle behind it",
   "caption": "Neighbors on the route"
  }
