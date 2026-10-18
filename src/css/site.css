@@ -216,3 +216,15 @@ dialog.lb::backdrop{background:rgba(29,31,32,.96)}
 
 .em .copy{margin-left:14px;font:600 11px var(--cond);letter-spacing:.16em;text-transform:uppercase;padding:4px 10px;border:1px solid var(--ink);background:transparent;color:var(--ink);cursor:pointer}
 .em .copy:hover{background:var(--ink);color:var(--paper)}
+
+/* wide fieldwork image: two columns by two rows, letterboxed in black so the other tiles tuck in beside it */
+@media (min-width:861px){
+  .page-top .grid>figure.fw-wide{grid-column:span 2;grid-row:span 2;min-height:0}
+  .page-top .grid>figure.fw-wide button{aspect-ratio:auto;height:100%;position:relative;background:#000}
+  .page-top .grid>figure.fw-wide button>img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+}
+@media (max-width:860px){
+  .page-top .grid>figure.fw-wide{grid-column:1/-1}
+  .page-top .grid>figure.fw-wide button{aspect-ratio:auto;background:#000}
+  .page-top .grid>figure.fw-wide button>img{height:auto;object-fit:initial}
+}

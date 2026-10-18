@@ -292,10 +292,9 @@ def fieldwork_page(f_, i):
         im = ims[ai - 1]
         aside = f'<figure style="margin:22px 0 0"><button type="button" style="display:block;width:100%" data-lb="{asset(im["full"])}" data-alt="{E(im["alt"])}" data-cap="{E(f_["title"])}">{img_tag(im, "(max-width:860px) 100vw, 33vw", eager=True).replace("<img ", '<img style="width:100%;height:auto;display:block" ', 1)}</button></figure>'
     def _fw_fig(im):
-        if im.get('wide'):      # a wide image (meta.json "wide": true) spans the whole gallery row at its own proportions
-            tag = img_tag(im, "100vw").replace("<img ", '<img style="height:auto;object-fit:initial" ', 1)
-            return (f'<figure style="grid-column:1/-1"><button type="button" style="aspect-ratio:auto" data-lb="{asset(im["full"])}" '
-                    f'data-alt="{E(im["alt"])}" data-cap="{E(f_["title"])}">{tag}</button></figure>')
+        if im.get('wide'):      # a wide image (meta.json "wide": true) spans two columns and two rows of the gallery (see .fw-wide in site.css)
+            return (f'<figure class="fw-wide"><button type="button" data-lb="{asset(im["full"])}" '
+                    f'data-alt="{E(im["alt"])}" data-cap="{E(f_["title"])}">{img_tag(im, "(max-width:860px) 100vw, 66vw")}</button></figure>')
         return f'<figure><button type="button" data-lb="{asset(im["full"])}" data-alt="{E(im["alt"])}" data-cap="{E(f_["title"])}">{img_tag(im, "(max-width:860px) 50vw, 25vw")}</button></figure>'
     gal = ''.join(_fw_fig(im) for k, im in enumerate(ims) if k + 1 != ai)
     rel = ''
