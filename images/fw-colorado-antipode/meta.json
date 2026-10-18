@@ -1,13 +1,46 @@
 {
- "01.jpg": {"alt": "A vertical green laser beam rising from a dark Colorado prairie at dusk under a storm sky", "caption": "A vertical laser marking the line through the planet at the center of the island's counterpart, Prowers County, Colorado"},
- "02.jpg": {"alt": "Satellite map of southeastern Colorado near Lamar with the route outlined in yellow", "caption": "The coastline of Île Amsterdam, transposed onto Colorado ranch land"},
- "03.jpg": {"alt": "Two views of Île Amsterdam with its coastline traced in white", "caption": "Île Amsterdam, with the coastline I plotted"},
- "04.jpg": {"alt": "A Bell helicopter parked on grass with its rotor at rest", "caption": "The helicopter for the low flight along the route"},
- "05.jpg": {"alt": "The artist in a helicopter cockpit wearing a headset and sunglasses", "caption": "Flying the route at about 80 feet"},
- "06.jpg": {"alt": "Two action cameras strapped under the helicopter's belly", "caption": "Cameras mounted under the helicopter"},
- "07.jpg": {"alt": "A tablet in the helicopter cockpit showing the loop of the route on a satellite map", "caption": "The route on the iPad, from the air"},
- "08.jpg": {"alt": "A GNSS receiver mounted on an action camera on an ATV's dashboard rail", "caption": "Sub-meter GNSS receiver and camera on the ATV"},
- "09.jpg": {"alt": "A tablet on an ATV dashboard showing a pink track and a blue route line on a satellite map", "caption": "Following the plotted line by ATV"},
- "10.jpg": {"alt": "A weathered fallen cottonwood trunk arching over dry ground on the prairie", "caption": "A fallen cottonwood near the route"},
- "11.jpg": {"alt": "A longhorn steer staring at the camera in a pasture with other cattle behind it", "caption": "Neighbors on the route"}
+ "01.jpg": {
+  "alt": "A vertical green laser beam rising from a dark Colorado prairie at dusk under a storm sky",
+  "caption": "A vertical laser marking the line through the planet at the center of the island's counterpart, Prowers County, Colorado"
+ },
+ "02.jpg": {
+  "alt": "A Facebook post by the Mayor of Lamar announcing the visit, with a satellite map of the route in yellow, two views of Île Amsterdam, and a world map of antipodes",
+  "caption": "The City of Lamar announces the project, July 29, 2021"
+ },
+ "03.jpg": {
+  "alt": "A Bell helicopter parked on grass with its rotor at rest",
+  "caption": "The helicopter for the low flight along the route"
+ },
+ "04.jpg": {
+  "alt": "The artist in a helicopter cockpit wearing a headset and sunglasses",
+  "caption": "Flying the route at about 80 feet"
+ },
+ "05.jpg": {
+  "alt": "Two action cameras strapped under the helicopter's belly",
+  "caption": "Cameras mounted under the helicopter"
+ },
+ "06.jpg": {
+  "alt": "A tablet in the helicopter cockpit showing the loop of the route on a satellite map",
+  "caption": "The route on the iPad, from the air"
+ },
+ "07.jpg": {
+  "alt": "A GNSS receiver mounted on an action camera on an ATV's dashboard rail",
+  "caption": "Sub-meter GNSS receiver and camera on the ATV"
+ },
+ "08.jpg": {
+  "alt": "A tablet on an ATV dashboard showing a pink track and a blue route line on a satellite map",
+  "caption": "Following the plotted line by ATV"
+ },
+ "09.jpg": {
+  "alt": "A landowner's Facebook post with photos from an ATV tour of the ranch: green hills, rock outcrops, and cottonwoods",
+  "caption": "A landowner's post after taking me around the ranch, August 3, 2021"
+ },
+ "10.jpg": {
+  "alt": "A weathered fallen cottonwood trunk arching over dry ground on the prairie",
+  "caption": "A fallen cottonwood near the route"
+ },
+ "11.jpg": {
+  "alt": "A longhorn steer staring at the camera in a pasture with other cattle behind it",
+  "caption": "Neighbors on the route"
+ }
 }
