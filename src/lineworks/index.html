@@ -2819,6 +2819,8 @@ function buildPanel() {
         ${R('stripMaxLen', 'Longest strip', 4, 8, 0.5, 8, v => v + "'", 'Held under the stock length, with 6" for trim on flat bar. Cut from sheet, a strip can be as long as the sheet.')}
         ${R('stripGap', 'Gap between strip ends', 0, 3, 0.25, 0.5, v => (+v).toFixed(2) + '"')}
         ${S_('stripFill', 'Extra rows on the flares', [['fine', 'Add rows as room allows (never overlapping)'], ['double', 'Double the rows']], 'fine')}
+        ${R('stripInfill', 'Infill strips', 0, 100, 1, 0, v => +v === 0 ? 'Off' : +v <= 50 ? 'Fit in: ' + Math.round(v * 2) + '%' : 'Fit in, then nudge: ' + Math.round((v - 50) * 2) + '%', 'Fits extra strips into the gaps between rows, biggest gaps first, each starting and stopping on a rib like the others. First half of the slider only uses room that is already there. Second half also lets the two neighboring rows drift sideways (up to the drift limit) so a strip fits where the gap was just too small.')}
+        <div id="g_drift">${R('stripDrift', 'Most a row may drift', 0.125, 1, 0.125, 0.5, v => (+v).toFixed(3).replace(/0+$/, '').replace(/\.$/, '') + '"', 'How far a row may slide sideways from its lane to make room for an infill strip. A plain shift, not a bend.')}</div>
         ${R('stripGaps', 'Openings between ribs', 0, 50, 1, 8, v => v + '%', 'Share of rib-to-rib spans left with no strip, so the pipes show through in one-span windows. Strips on either side end on their rib with the usual 1 inch overhang.')}
         ${R('stripSkip', 'Whole strips left out', 0, 40, 1, 0, v => v + '%', 'Share of whole strips left out, which opens a longer gap of several ribs.')}
         ${C_('patchOn', 'Patch riffles at contact points', true, 'Where a whole strip would run into another part of the truss, it is cut into patches: the longest runs of rib-to-rib spans that clear the other part, each riveted to a rib at both ends. The skin carries on right up to the contact, and only the spans the other part actually passes through stay open. Patches are counted in the strip total and the cut list.')}
@@ -2926,6 +2928,7 @@ function updateVisibility() {
   { const inForm = prof === 'strand' || prof === 'truss', box = $('flareBox'), slot = $(inForm ? 'flareSlotForm' : 'flareSlotStock'); if (box && slot && box.parentNode !== slot) slot.appendChild(box); $('flareSub').style.display = inForm ? '' : 'none'; }   // flare sits under Stock for a single pipe, under Form for bundles and trusses
   show('g_strandS40', $('strandStockType').value === 'sched40'); show('g_strandTub', $('strandStockType').value === 'tubing');
   show('g_trussS40', $('trussStockType').value === 'sched40'); show('g_trussTub', $('trussStockType').value === 'tubing');
+  show('g_drift', num('stripInfill') > 50);
   show('g_seed', $('trussDistribution').value === 'irregular'); show('g_wood', chk('woodOn')); show('g_fill', chk('woodOn')); { const tr = prof === 'truss', fin = $('trussFinish').value; show('g_trussColors', tr); show('g_trussColor', tr && fin === 'paint'); show('g_stripColor', tr && chk('stripOn')); show('g_patchColor', tr && chk('stripOn') && chk('patchOn') && chk('patchShow')); show('g_postColor', chk('postsOn')); show('g_patch', chk('patchOn')); { const mat = $('stripMat').value, acm = mat === 'acm3' || mat === 'acm4'; if (acm) { const tv = mat === 'acm3' ? '0.118' : '0.157'; if ($('stripT').value !== tv) $('stripT').value = tv; } else if ($('stripT').value === '0.118' || $('stripT').value === '0.157') $('stripT').value = '0.063'; $('stripT').disabled = acm; show('g_stripBar', mat === 'bar'); show('g_stripSheet', mat !== 'bar'); } show('g_stepStrips', prof === 'truss' && chk('stripOn')); show('g_flareWhole', prof === 'truss'); show('g_surface', !tr || fin === 'surface'); show('g_colorMode', !tr || fin === 'surface' || chk('stripOn')); } { const ro = $('ribOutside'); if (chk('stripOn')) ro.checked = true; ro.disabled = chk('stripOn'); } show('g_strip', chk('stripOn')); show('c_ribSpacing', !chk('ribAuto')); show('g_ribAuto', chk('ribAuto'));
   $('detail').disabled = chk('lenOn'); $('pathLen').disabled = !chk('lenOn'); $('c_detail').style.opacity = chk('lenOn') ? .5 : 1; $('c_pathLen').style.opacity = chk('lenOn') ? 1 : .6; $('lenGrow').disabled = !chk('lenOn');
   show('g_plane', planeOn); show('g_found', chk('foundOn') && !chk('postsOn')); show('g_susp', !planeOn); show('g_posts', chk('postsOn')); show('g_plates', chk('plateOn')); show('c_planeFt', !chk('postsOn'));
@@ -3493,15 +3496,15 @@ function buildPiece(piece, idx, X) {
       // a rib is a flat ring with a straight rim, so on a flare its far edge sits higher than the cone under it; strips are lifted to clear the rim across the rib's full width
       const hRib = Math.ceil((((st.strip ? num('ribWidth') : 1.25) / 12) / 2) / (length / Math.max(1, nF))) + 1, dfm = [];
       for (let i = 0; i < cnt; i++) { let m = 0; for (let j = Math.max(0, i - hRib); j <= Math.min(cnt - 1, i + hRib); j++) m = Math.max(m, df(j)); dfm.push(m); }
-      const mkLane = (th0, act, lift = 0) => {
+      const mkLane = (th0, act, lift = 0, shF = null) => {      // shF: optional sideways drift in feet at every station (infill)
         const th = th0 + manual, P = [], Rad = [], Cc = [], RoA = [], outside = ribOutOn(), clr = stripP.th / 2;
         for (let i = 0; i < cnt; i++) {
-          const tan = curve.getTangentAt(Math.min(1, i / nF)).normalize(), r0 = frames.normals[i].clone().multiplyScalar(Math.cos(th)).addScaledVector(frames.binormals[i], Math.sin(th));
+          const R = outside ? Rb * dfm[i] + st.memOD / 12 + 0.25 / 12 + clr + lift : Rb * df(i) + mR, thi = shF ? th + shF[i] / R : th;
+          const tan = curve.getTangentAt(Math.min(1, i / nF)).normalize(), r0 = frames.normals[i].clone().multiplyScalar(Math.cos(thi)).addScaledVector(frames.binormals[i], Math.sin(thi));
           r0.addScaledVector(tan, -r0.dot(tan)); if (r0.length() < 1e-6) r0.copy(frames.normals[i]); r0.normalize();
-          const R = outside ? Rb * dfm[i] + st.memOD / 12 + 0.25 / 12 + clr + lift : Rb * df(i) + mR;
           P.push(spaced[i].clone().addScaledVector(r0, R)); Rad.push(r0); Cc.push(spaced[i]); RoA.push(R + stripP.th / 2);
         }
-        return { closed, group: idx, L: length, P, Rad, nF, cnt, act, th, C: Cc, Ro: RoA };
+        return { closed, group: idx, L: length, P, Rad, nF, cnt, act, th, th0, C: Cc, Ro: RoA };
       };
       let woodVolIn3 = 0, woodPieces = [];
       for (let m = 0; m < n; m++) {
@@ -3574,6 +3577,101 @@ function buildPiece(piece, idx, X) {
             const e = L === 0 ? 0 : ((Math.imul(k + 1, 2654435761) ^ Math.imul(L, 40503) ^ Math.imul(parseInt($('stripSeed').value) + 1, 97)) >>> 0) % (Emax + 1);
             X.A.stripLanes.push(mkLane(L === 0 ? TAU * k / N0 : TAU * (2 * k + 1) / (N0 * Math.pow(2, L)), L === 0 ? null : erode(act, e)));
           }
+        }
+
+        // INFILL. After the rows are laid out, more rows are fitted into the gaps that remain between them, the biggest openings first.
+        // First half of the slider: only room that is already there. Second half: the two neighboring rows may also drift sideways (up to the drift limit)
+        // so a strip fits where the gap was just too small. A new row starts and stops on ribs like every other strip, 1" past the rib.
+        X.A.infill = null;
+        const infillV = num('stripInfill');
+        if (infillV > 0) {
+          const dmax = num('stripDrift') / 12, sub2 = Math.max(1, Math.floor(cnt / 100)), idxs2 = []; for (let i = 0; i < cnt; i += sub2) idxs2.push(i);
+          const nS = idxs2.length, ds = length / Math.max(1, nF), ftPer2 = ds * sub2;
+          const rS = idxs2.map(i => Rb * df(i) + st.memOD / 12 + 0.25 / 12 + stripP.th / 2), wA = rS.map(r => stripP.w * 1.01 / r);
+          const bayFt = (chk('ribAuto') ? num('ribMax') : parseFloat($('ribSpacing').value)) / 12;
+          const eStn = Math.ceil(((num('ribWidth') / 2 + 1) / 12) / ds) + 1, minRun = Math.max(3, Math.ceil(1.5 * bayFt / ftPer2)), Wn = Math.max(2, Math.ceil(0.3 / ftPer2));
+          const nrm = (a) => { a %= TAU; return a < 0 ? a + TAU : a; }, wk = (k) => closed ? ((k % nS) + nS) % nS : Math.max(0, Math.min(nS - 1, k));
+          const angOf = (l, k) => l.th0 + l.sh[k] / rS[k], on = (l, k) => !l.act || l.act[idxs2[k]] === 1;
+          const cloneS = (S) => S.map(l => ({ th0: l.th0, act: l.act, sh: Float32Array.from(l.sh), old: l.old }));
+          const sorted = (S) => { const o = []; for (let k = 0; k < nS; k++) { const a = []; S.forEach((l, i) => { if (on(l, k)) a.push({ t: nrm(angOf(l, k)), i }); }); a.sort((x, y) => x.t - y.t); o.push(a); } return o; };
+          const covOf = (S) => { let c = 0; for (let k = 0; k < nS; k++) S.forEach(l => { if (on(l, k)) c += wA[k]; }); return c / (nS * TAU); };
+          // every pair of neighbors that involves a new or drifted row must keep a full strip width between centers, and no row may drift past the limit
+          const verify = (S, changed) => {       // returns the stations where something is wrong (empty = fine)
+            const bad = [];
+            for (let k = 0; k < nS; k++) {
+              let ok = true; for (const i of changed) if (Math.abs(S[i].sh[k]) > dmax + 1e-6) ok = false;
+              const a = []; S.forEach((l, i) => { if (on(l, k)) a.push({ t: nrm(angOf(l, k)), i }); }); a.sort((x, y) => x.t - y.t);
+              for (let j = 0; j < a.length && a.length > 1 && ok; j++) { const b = a[(j + 1) % a.length], gap = j + 1 < a.length ? b.t - a[j].t : b.t + TAU - a[j].t;
+                if ((changed.has(a[j].i) || changed.has(b.i)) && gap < wA[k] * 0.9999) ok = false; }
+              if (!ok) bad.push(k); }
+            return bad; };
+          const evalCand = (a, ord, stage2) => {
+            const feas = new Uint8Array(nS), reqs = new Array(nS);
+            for (let k = 0; k < nS; k++) {
+              const o = ord[k], m = o.length; if (!m) { feas[k] = 1; continue; }
+              let p = 0; while (p < m && o[p].t <= a) p++;
+              const R1 = o[p % m], L1 = o[(p - 1 + m) % m], w = wA[k], dR = nrm(R1.t - a), dL = nrm(a - L1.t), nL = Math.max(0, w - dL), nR = Math.max(0, w - dR);
+              if (nL === 0 && nR === 0) { feas[k] = 1; continue; }
+              if (!stage2 || m < 3 || L1.i === R1.i) continue;
+              const fL = nL * rS[k], fR = nR * rS[k];
+              if (fL > dmax + ord.S[L1.i].sh[k] + 1e-9 || fR > dmax - ord.S[R1.i].sh[k] + 1e-9) continue;
+              const L2 = o[(p - 2 + 2 * m) % m], R2 = o[(p + 1) % m];                                  // the neighbors' own far neighbors must still have room
+              if (nL > 0 && nrm(L1.t - L2.t) - nL < w - 1e-9) continue;
+              if (nR > 0 && nrm(R2.t - R1.t) - nR < w - 1e-9) continue;
+              feas[k] = 1; reqs[k] = [L1.i, -fL, R1.i, fR];
+            }
+            const keep = new Uint8Array(nS); let k = 0;
+            while (k < nS) { if (!feas[k]) { k++; continue; } let e = k; while (e + 1 < nS && feas[e + 1]) e++; if (e - k + 1 >= minRun) for (let j = k; j <= e; j++) keep[j] = 1; k = e + 1; }
+            const mask = new Uint8Array(cnt); for (let i = 0; i < cnt; i++) mask[i] = keep[Math.min(nS - 1, Math.round(i / sub2))];
+            const act = erode(mask, eStn); let sc = 0; for (let q = 0; q < nS; q++) if (act[idxs2[q]]) sc++;
+            return sc >= minRun ? { act, sc, reqs } : null;
+          };
+          const smoothD = (arr) => { const mag = arr.map(Math.abs), mx = new Float32Array(nS), out = new Float32Array(nS); let sg = 1; arr.forEach(v => { if (v) sg = Math.sign(v); });
+            for (let k = 0; k < nS; k++) { let m = 0; for (let j = -Wn; j <= Wn; j++) m = Math.max(m, mag[wk(k + j)]); mx[k] = m; }
+            for (let k = 0; k < nS; k++) { let t = 0; for (let j = -Wn; j <= Wn; j++) t += mx[wk(k + j)]; out[k] = sg * t / (2 * Wn + 1); }
+            return out; };
+          const tryApply = (S, c, a, stage2) => {
+            let act = Uint8Array.from(c.act);
+            for (let it = 0; it < 8; it++) {
+              const T = cloneS(S), nl = { th0: a, act, sh: new Float32Array(nS), old: null }, delta = new Map(), changed = new Set([T.length]);
+              if (stage2) for (let k = 0; k < nS; k++) { if (!act[idxs2[k]] || !c.reqs[k]) continue; const r = c.reqs[k];
+                for (const [i, d] of [[r[0], r[1]], [r[2], r[3]]]) { if (!d) continue; let arr = delta.get(i); if (!arr) delta.set(i, arr = new Float32Array(nS));
+                  if (arr[k] !== 0 && Math.sign(arr[k]) !== Math.sign(d)) return null; arr[k] = Math.abs(d) > Math.abs(arr[k]) ? d : arr[k]; } }
+              delta.forEach((arr, i) => { const sm = smoothD(arr); for (let k = 0; k < nS; k++) T[i].sh[k] += sm[k]; changed.add(i); });
+              T.push(nl);
+              const bad = verify(T, changed); if (!bad.length) return T;
+              if (!stage2) return null;
+              // where a drifting row's ramp would crowd its far neighbor, the new row gives up that stretch (and the strip it would have carried)
+              for (const k of bad) for (let j = Math.max(0, k - 2 * Wn - 1); j <= Math.min(nS - 1, k + 2 * Wn + 1); j++) act[idxs2[j]] = 0;
+              for (let k = 0; k < nS; k++) if (act[idxs2[k]]) { let e = k; while (e + 1 < nS && act[idxs2[e + 1]]) e++; if (e - k + 1 < minRun) for (let j = k; j <= e; j++) act[idxs2[j]] = 0; k = e; }
+              for (let i = 0; i < cnt; i++) { const k = Math.min(nS - 1, Math.round(i / sub2)); if (!act[idxs2[k]]) act[i] = 0; }
+              let any = 0; for (let k = 0; k < nS; k++) any += act[idxs2[k]]; if (any < minRun) return null;
+            }
+            return null;
+          };
+          const run = (S0, stage2, limit) => {
+            let S = cloneS(S0), n = 0;
+            while (n < Math.min(limit, 80)) {
+              const ord = sorted(S); ord.S = S; const cands = [];
+              for (let c = 0; c < 360; c++) { const a = TAU * (c + 0.5) / 360, r = evalCand(a, ord, stage2); if (r) cands.push({ a, r }); }
+              cands.sort((x, y) => y.r.sc - x.r.sc);
+              let done = false;
+              for (let q = 0; q < Math.min(cands.length, 12) && !done; q++) { const T = tryApply(S, cands[q].r, cands[q].a, stage2); if (T) { S = T; n++; done = true; } }
+              if (!done) break;
+            }
+            return { S, n };
+          };
+          const base = X.A.stripLanes.filter(l => l.group === idx).map(l => ({ th0: l.th0, act: l.act, sh: new Float32Array(nS), old: l }));
+          const A1 = run(base, false, Infinity), f1 = Math.min(1, infillV / 50), f2 = Math.max(0, (infillV - 50) / 50), n1 = Math.ceil(A1.n * f1 - 1e-9);
+          let fin, rows1, rows2 = 0;
+          if (infillV <= 50) { fin = n1 >= A1.n ? A1 : run(base, false, n1); rows1 = fin.n; }
+          else { const B = run(A1.S, true, Infinity), n2 = Math.ceil(B.n * f2 - 1e-9); fin = n2 >= B.n ? B : run(A1.S, true, n2); rows1 = A1.n; rows2 = fin.n; }
+          const interp = (sh) => { const o = new Float32Array(cnt); for (let i = 0; i < cnt; i++) { const t = i / sub2, k0 = Math.min(nS - 1, Math.floor(t)), k1 = closed ? (k0 + 1) % nS : Math.min(nS - 1, k0 + 1), f = Math.min(1, t - k0); o[i] = sh[k0] + (sh[k1] - sh[k0]) * f; } return o; };
+          let moved = 0;
+          fin.S.forEach(l => { const mv = l.sh.some(v => Math.abs(v) > 1e-5);
+            if (l.old) { if (mv) { moved++; X.A.stripLanes[X.A.stripLanes.indexOf(l.old)] = mkLane(l.th0, l.act, 0, interp(l.sh)); } }
+            else X.A.stripLanes.push(mkLane(l.th0, l.act, 0, mv ? interp(l.sh) : null)); });
+          X.A.infill = { rows1, rows2, moved, covBefore: covOf(base), covAfter: covOf(fin.S), stage1Total: A1.n };
         }
       }
       X.A.woodW = (X.A.woodW || 0) + woodVolIn3 * 0.0272; X.A.woodPieces = (X.A.woodPieces || []).concat(woodPieces);
@@ -3916,6 +4014,7 @@ function updateReadouts(c, A) {
         si.textContent = `${S.count} strips on ${S.lanes} lanes, ${ftIn(S.totalFt)} of ${S.opts.w}" flat bar, about ${Math.round(S.wLb)} lb.\n` +
           `Twist: worst ${(S.maxTw * 180 / Math.PI).toFixed(0)}°/ft. ${S.over} strip${S.over === 1 ? '' : 's'} over the ${S.opts.twLimDeg.toFixed(0)}°/ft limit need pre-rolling.\n` +
           `Sideways (edge) bend: tightest radius ${S.minEdgeR > 1e8 ? 'none' : ftIn(S.minEdgeR)}; ${S.forced} strip${S.forced === 1 ? ' is' : 's are'} still over the ${S.opts.tolIn.toFixed(2)}" tolerance at the shortest length that reaches two ribs.\n` +
+          (A.infill ? `Infill: ${A.infill.rows1 + A.infill.rows2} added row${A.infill.rows1 + A.infill.rows2 === 1 ? '' : 's'} (${A.infill.rows1} fitted in${A.infill.rows2 ? ', ' + A.infill.rows2 + ' with drift; ' + A.infill.moved + ' row' + (A.infill.moved === 1 ? '' : 's') + ' nudged' : ''}); circumference covered ${(A.infill.covBefore * 100).toFixed(0)}% → ${(A.infill.covAfter * 100).toFixed(0)}%.\n` : '') +
           `Flatwise: tightest radius ${fr < 1e5 ? inch(fr) : 'none'} (${eps.toFixed(2)}% strain at the surface).\nRivets: ${S.rivets}, only at rib rings, at least 2 per strip. ${S.lengthened} strip${S.lengthened === 1 ? ' was' : 's were'} lengthened to reach a second rib${S.dropped ? '; ' + S.dropped + ' left out at lane ends' : ''}.${S.blocked ? (O_patchOn() ? ' ' + S.blocked + ' ran into another part of the truss; ' + S.patched + ' patch' + (S.patched === 1 ? '' : 'es') + ' (' + ftIn(S.patchFt) + ') fill in up to the contact' + (S.patchOpen ? ', and ' + S.patchOpen + ' rib-to-rib span' + (S.patchOpen === 1 ? ' stays' : 's stay') + ' open where the other part passes through.' : '.') : ' ' + S.blocked + ' left out where they would cut into a tube or into another part of the truss.') : ''}${S.maxLift > 0.01 ? ' Strips are raised up to ' + inch(S.maxLift) + ' off the rings to clear the tubes.' : ''}`; } } }
   const fmtW = (w) => Math.round(w).toLocaleString() + ' lb', b = A.baseW * sc, ex = A.extraW * sc;
   const wm = $('tbWeightMode').value;
@@ -4428,6 +4527,7 @@ function applyConfig(cfg) {
   if (cfg.postColor === undefined) cfg = Object.assign({}, cfg, { postColor: '#8d8780' });      // posts used to take the truss color; they now have their own
   if (cfg.flareWhole === undefined) cfg = Object.assign({}, cfg, { flareWhole: false });         // older presets keep the far-end size they were drawn with
   if (cfg.stepStrips === undefined) cfg = Object.assign({}, cfg, { stepStrips: true });
+  if (cfg.stripInfill === undefined) cfg = Object.assign({}, cfg, { stripInfill: 0, stripDrift: 0.5 });          // older presets have no infill
   if (cfg.stripFill === undefined) cfg = Object.assign({}, cfg, { stripFill: 'double' });          // older presets keep the doubling rule
   if (cfg.stripByData === undefined) cfg = Object.assign({}, cfg, { stripByData: false });         // older presets keep one strip color
   if (cfg.patchOn === undefined) cfg = Object.assign({}, cfg, { patchOn: false });               // older presets keep their strips as they were
