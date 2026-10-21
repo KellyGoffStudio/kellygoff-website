@@ -115,6 +115,10 @@ input[type=checkbox] { accent-color: var(--ink); width: 13px; height: 13px; curs
 #rulerHUD button { font: 700 10px var(--cond); letter-spacing: .12em; padding: 3px 8px; border: 1px solid var(--ink); background: transparent; cursor: pointer; }
 #rulerHUD button:hover { background: var(--ink); color: var(--paper); }
 
+#buildLegend { position: absolute; left: 14px; bottom: 14px; z-index: 10; background: var(--paper); border: 1px solid var(--ink); padding: 8px 10px; font: 600 11px var(--cond); letter-spacing: .08em; text-transform: uppercase; line-height: 1.7; display: none; }
+#buildLegend .sw { display: inline-block; width: 12px; height: 12px; border: 1px solid var(--ink); vertical-align: -2px; margin-right: 7px; } #buildLegend .n { float: right; margin-left: 18px; font-weight: 400; letter-spacing: 0; text-transform: none; }
+#buildLegend .h { font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--muted, #555); }
+body.presenting #buildLegend { transform: scale(1.3); transform-origin: left bottom; left: 28px; bottom: 28px; }
 #titleBlock {
   position: absolute; right: 14px; bottom: 14px; width: 392px; border: 1px solid var(--ink); background: var(--paper); z-index: 10;
 }
@@ -199,6 +203,7 @@ body.presenting #presBar.show { opacity: 1; pointer-events: auto; }
       <span class="reg" style="right:4px; bottom:2px;">+</span>
       <div id="rulerHUD"><span id="rulerStatus">Click point A to start measuring</span><button id="btnClearRuler">Clear</button></div>
 
+      <div id="buildLegend"></div>
       <div id="titleBlock">
         <div class="tb-row r1"><div class="tb-cell">
           <span class="tbl">Project</span>
@@ -2255,17 +2260,22 @@ function buildTakeoff() {
     order.groups.push({ type: 'bars', item: `${st.alum ? '6061 aluminum' : 'Stainless'} flat bar 1/4" × ${wTxt}" — rolled into ${A.ribs.length} rib rings (${(A.ribs[0].odIn).toFixed(1)}" OD)`, pcs: A.ribs.length, net: n, order: n20, unit: "× 10' bars", wt: n * 10 * lbFt, wt20: n20 * 10 * lbFt, usedIn: rl.reduce((a, r) => a + r.lenIn, 0), bars });
   }
   if (prof === 'truss' && A.stripPieces && A.stripPieces.length && A.stripStats) {
-    const SS = A.stripStats, o = SS.opts, items = A.stripPieces.map((p, i) => ({ id: 'S' + (i + 1), lenIn: p.lenFt * 12 })), tt = Math.abs(o.t - 0.125) < 1e-4 ? '1/8' : o.t.toFixed(3),
+    const SS = A.stripStats, o = SS.opts, tt = Math.abs(o.t - 0.125) < 1e-4 ? '1/8' : o.t.toFixed(3),
       stack = o.t + 0.25, rivSz = stack <= 0.34 ? '-6' : stack <= 0.47 ? '-8' : '-10', rivTxt = `roughly ${SS.rivets} rivets (3/16" large-flange, ${rivSz} grip)`;
-    if (o.mat === 'bar') {
-      const capIn = o.stock * 12 - 1, bars = nestBars(items, capIn, TK.kerfIn), n = bars.length, n20 = Math.ceil(n * (1 + TK.extra) - 1e-9), lbFt = SS.lbFt;
-      order.groups.push({ type: 'strips', item: `6061 aluminum flat bar ${o.w}" × ${tt}" — ${A.stripPieces.length} slat strips, ${rivTxt}`, pcs: A.stripPieces.length, net: n, order: n20, unit: `× ${o.stock}' bars`, wt: n * o.stock * lbFt, wt20: n20 * o.stock * lbFt, usedIn: items.reduce((a, r) => a + r.lenIn, 0), bars, capIn });
-    } else {
-      const sheetIn = o.stock * 12, rows = Math.max(1, Math.floor((o.sheetW + TK.kerfIn) / (o.w + TK.kerfIn) + 1e-9)), bars = nestBars(items, sheetIn + TK.kerfIn, TK.kerfIn),
-        n = Math.ceil(bars.length / rows - 1e-9), n20 = Math.ceil(n * (1 + TK.extra) - 1e-9), area = sheetIn * o.sheetW / 144, used = items.reduce((a, r) => a + r.lenIn, 0),
-        szTxt = `${o.sheetW / 12} × ${o.stock} ft`, matTxt = o.mat === 'acm3' ? 'ACM 3 mm' : o.mat === 'acm4' ? 'ACM 4 mm' : `6061 aluminum sheet ${tt}"`;
-      order.groups.push({ type: 'strips', sheet: true, item: `${matTxt}, ${szTxt} sheets, cut into ${o.w}" strips — ${A.stripPieces.length} slat strips (${rows} per sheet width), ${rivTxt}`, pcs: A.stripPieces.length, net: n, order: n20, unit: `× ${szTxt} sheets`, wt: n * area * SS.psf, wt20: n20 * area * SS.psf, usedIn: used, bars, rows, offFt: (n * rows * sheetIn - used) / 12, mat: o.mat });
-    }
+    const widths = [...new Set(A.stripPieces.map(p => Math.round((p.w || o.w) * 1000) / 1000))].sort((x, y) => y - x);
+    widths.forEach(wIn => {
+      const pcsW = A.stripPieces.map((p, i) => ({ p, i })).filter(r => Math.abs((r.p.w || o.w) - wIn) < 1e-3), items = pcsW.map(r => ({ id: 'S' + (r.i + 1), lenIn: r.p.lenFt * 12 })), wTxt = (+wIn).toFixed(3).replace(/0+$/, '').replace(/\.$/, ''),
+        cnt = pcsW.length, rivNote = widths.length === 1 ? `, ${rivTxt}` : wIn === widths[0] ? `, ${rivTxt} for all widths` : '';
+      if (o.mat === 'bar') {
+        const capIn = o.stock * 12 - 1, bars = nestBars(items, capIn, TK.kerfIn), n = bars.length, n20 = Math.ceil(n * (1 + TK.extra) - 1e-9), lbFt = wIn / 12 * SS.psf;
+        order.groups.push({ type: 'strips', item: `6061 aluminum flat bar ${wTxt}" × ${tt}" — ${cnt} slat strips${rivNote}`, pcs: cnt, net: n, order: n20, unit: `× ${o.stock}' bars`, wt: n * o.stock * lbFt, wt20: n20 * o.stock * lbFt, usedIn: items.reduce((a, r) => a + r.lenIn, 0), bars, capIn });
+      } else {
+        const sheetIn = o.stock * 12, rows = Math.max(1, Math.floor((o.sheetW + TK.kerfIn) / (wIn + TK.kerfIn) + 1e-9)), bars = nestBars(items, sheetIn + TK.kerfIn, TK.kerfIn),
+          n = Math.ceil(bars.length / rows - 1e-9), n20 = Math.ceil(n * (1 + TK.extra) - 1e-9), area = sheetIn * o.sheetW / 144, used = items.reduce((a, r) => a + r.lenIn, 0),
+          szTxt = `${o.sheetW / 12} × ${o.stock} ft`, matTxt = o.mat === 'acm3' ? 'ACM 3 mm' : o.mat === 'acm4' ? 'ACM 4 mm' : `6061 aluminum sheet ${tt}"`;
+        order.groups.push({ type: 'strips', sheet: true, item: `${matTxt}, ${szTxt} sheets, cut into ${wTxt}" strips — ${cnt} slat strips (${rows} per sheet width)${rivNote}`, pcs: cnt, net: n, order: n20, unit: `× ${szTxt} sheets`, wt: n * area * SS.psf, wt20: n20 * area * SS.psf, usedIn: used, bars, rows, offFt: (n * rows * sheetIn - used) / 12, mat: o.mat });
+      }
+    });
   }
   const wood = pieces.filter(p => p.kind === 'wood');
   if (wood.length) {
@@ -2821,6 +2831,8 @@ function buildPanel() {
         ${S_('stripFill', 'Extra rows on the flares', [['fine', 'Add rows as room allows (never overlapping)'], ['double', 'Double the rows']], 'fine')}
         ${R('stripInfill', 'Infill strips', 0, 100, 1, 0, v => +v === 0 ? 'Off' : +v <= 50 ? 'Fit in: ' + Math.round(v * 2) + '%' : 'Fit in, then nudge: ' + Math.round((v - 50) * 2) + '%', 'Fits extra strips into the gaps between rows, biggest gaps first, each starting and stopping on a rib like the others. First half of the slider only uses room that is already there. Second half also lets the two neighboring rows drift sideways (up to the drift limit) so a strip fits where the gap was just too small.')}
         ${R('stripLouvre', 'Louvre tilt (max)', 0, 60, 5, 30, v => +v === 0 ? 'Off' : v + '°', 'Tilts each strip about its own length so its face leans into the bend, the way a flat strip curls around an arc more easily when one edge is allowed to lift. Turns hard-way (edge) bending into easy-way bending, so tight curves need far less rolling. The strip rests on the rib by its low edge and the other edge stands off the form, and the rivet is placed near the low edge. Costs a little twist and standoff.')}
+        ${R('stripNarrowR', 'Narrow strips where bends are tight', 0, 60, 5, 20, v => +v === 0 ? 'Off' : 'Under ' + v + ' ft', 'Cuts a strip narrower wherever its sideways (edge) bend would be tighter than this radius. Edge strain goes with strip width over radius, so a narrower strip takes a tighter curve with the same strain: a strip 1.25" wide handles about 60% of the radius a 2" strip does. The narrow ones leave a thin gap beside them. Off keeps every strip full width.')}
+        <div id="g_narrowW">${R('stripNarrowW', 'Narrow strip width', 0.75, 2, 0.125, 1.25, v => (+v).toFixed(3).replace(/0+$/, '').replace(/\.$/, '') + '"', 'Width of the narrow strips. Only used where a strip would otherwise bend sideways tighter than the radius above.')}</div>
         <div id="g_louvR">${R('stripLouvreR', 'Tilt only as needed: edge radius', 0, 60, 5, 20, v => +v === 0 ? 'Full tilt' : 'Reach ' + v + ' ft', 'Instead of tilting every strip all the way, tilt each one only far enough that its sideways (edge) bend is no tighter than this radius. Strips on easy curves stay flat or nearly so, which saves standoff and twist. Set it to the tightest radius your roller can do the hard way. Strips that cannot reach it even at full tilt are counted in the strip panel. Full tilt turns this off.')}</div>
         <div id="g_drift">${R('stripDrift', 'Most a row may drift', 0.125, 1, 0.125, 0.5, v => (+v).toFixed(3).replace(/0+$/, '').replace(/\.$/, '') + '"', 'How far a row may slide sideways from its lane to make room for an infill strip. A plain shift, not a bend.')}</div>
         ${R('stripGaps', 'Openings between ribs', 0, 50, 1, 8, v => v + '%', 'Share of rib-to-rib spans left with no strip, so the pipes show through in one-span windows. Strips on either side end on their rib with the usual 1 inch overhang.')}
@@ -2836,6 +2848,8 @@ function buildPanel() {
         ${R('stripTwistLim', 'Hand-twist limit', 5, 60, 1, 20, v => v + '°/ft', 'Strips twisting faster than this are marked and need to be pre-rolled. About 20 to 30°/ft is the elastic limit for 2" × 1/8" aluminum.')}
         ${R('stripTone', 'Batch variation', 0, 30, 1, 10, v => v + '%', 'Small lightness changes from strip to strip.')}
         ${C_('stripShowTwist', 'Color strips by twist (green, amber, red)', false)}
+        ${C_('stripBuild', 'Buildability check: form white, strips colored by how they can be made', false)}
+        ${R('stripBendR', 'Tightest edge radius I can bend', 5, 60, 1, 28, v => v + ' ft', 'Used by the buildability check. A 2" strip bent sideways to this radius (or looser) is called fine, and the same strain in any other width counts as fine too. Up to twice as tight is marginal (amber); tighter than that needs an arc-cut strip or a pre-bend (red). Blue marks strips twisting faster than the hand-twist limit. 28 ft is about 0.35% edge strain on 2" bar, near the elastic limit of 6061. Set it from your own bending tests.')}
         ${C_('stripRivets', 'Show rivets', true)}
         ${S_('rivetEvery', 'Rivet at', [['1', 'Every rib'], ['2', 'Every second rib'], ['3', 'Every third rib']], '2')}
         <div class="info" id="stripInfo">—</div>
@@ -2932,6 +2946,7 @@ function updateVisibility() {
   show('g_trussS40', $('trussStockType').value === 'sched40'); show('g_trussTub', $('trussStockType').value === 'tubing');
   show('g_drift', num('stripInfill') > 50);
   show('g_louvR', num('stripLouvre') > 0);
+  show('g_narrowW', num('stripNarrowR') > 0);
   show('g_seed', $('trussDistribution').value === 'irregular'); show('g_wood', chk('woodOn')); show('g_fill', chk('woodOn')); { const tr = prof === 'truss', fin = $('trussFinish').value; show('g_trussColors', tr); show('g_trussColor', tr && fin === 'paint'); show('g_stripColor', tr && chk('stripOn')); show('g_patchColor', tr && chk('stripOn') && chk('patchOn') && chk('patchShow')); show('g_postColor', chk('postsOn')); show('g_patch', chk('patchOn')); { const mat = $('stripMat').value, acm = mat === 'acm3' || mat === 'acm4'; if (acm) { const tv = mat === 'acm3' ? '0.118' : '0.157'; if ($('stripT').value !== tv) $('stripT').value = tv; } else if ($('stripT').value === '0.118' || $('stripT').value === '0.157') $('stripT').value = '0.063'; $('stripT').disabled = acm; show('g_stripBar', mat === 'bar'); show('g_stripSheet', mat !== 'bar'); } show('g_stepStrips', prof === 'truss' && chk('stripOn')); show('g_flareWhole', prof === 'truss'); show('g_surface', !tr || fin === 'surface'); show('g_colorMode', !tr || fin === 'surface' || chk('stripOn')); } { const ro = $('ribOutside'); if (chk('stripOn')) ro.checked = true; ro.disabled = chk('stripOn'); } show('g_strip', chk('stripOn')); show('c_ribSpacing', !chk('ribAuto')); show('g_ribAuto', chk('ribAuto'));
   $('detail').disabled = chk('lenOn'); $('pathLen').disabled = !chk('lenOn'); $('c_detail').style.opacity = chk('lenOn') ? .5 : 1; $('c_pathLen').style.opacity = chk('lenOn') ? 1 : .6; $('lenGrow').disabled = !chk('lenOn');
   show('g_plane', planeOn); show('g_found', chk('foundOn') && !chk('postsOn')); show('g_susp', !planeOn); show('g_posts', chk('postsOn')); show('g_plates', chk('plateOn')); show('c_planeFt', !chk('postsOn'));
@@ -3340,6 +3355,7 @@ function vertexU(geo, i) {
 }
 const AMBER = new THREE.Color(0xf59e0b), CLEAR = new THREE.Color(0xd9480f);
 function applyColor(mesh, geo, bend, flags) {
+  if (chk('stripOn') && chk('stripBuild')) { mesh.material = new THREE.MeshStandardMaterial({ color: 0xb9bec4, roughness: 0.8, metalness: 0, wireframe: chk('enableWireframe') }); return; }      // buildability check: the form goes grey
   const stain = flags && flags.stain, own = flags && flags.col, mode = own ? 'solid' : $('colorMode').value, base = new THREE.Color(own ? own : stain ? 0xd2d5d9 : $('matColor').value), rough = own ? flags.rough : stain ? 0.42 : num('matRoughness'), metal = own ? flags.metal : stain ? 0.45 : num('matMetalness'), wire = chk('enableWireframe');
   if (flags && flags.shade !== undefined && !stain) { const hsl = {}; base.getHSL(hsl); if (!(hsl.l > 0.93 && hsl.s < 0.15)) base.setHSL(hsl.h, hsl.s, Math.max(0.1, Math.min(0.9, hsl.l + flags.shade * 0.15))); }   // a color other than white: each size gets its own shade, the largest darkest
   const marks = (chk('showKinks') && bend && bend.minFt > 0) || (chk('showClear') && bend && bend.hasLow);
@@ -3681,7 +3697,7 @@ function buildPiece(piece, idx, X) {
       // flat-bar rib rings every 12"
       const nRibs = Math.max(2, Math.floor(length / (num('ribSpacing') / 12))), tRib = 0.25 / 12, wRib = (st.strip ? num('ribWidth') : 1.25) / 12, ribOut = ribOutOn(), ribAuto = chk('ribAuto');
       X.ribOutside = ribOut;
-      const ribMat = paint ? new THREE.MeshStandardMaterial({ color: paintHex, roughness: 0.42, metalness: 0.1 }) : $('trussFinish').value === 'metal' ? stainlessMat() : new THREE.MeshStandardMaterial({ color: $('matColor').value, roughness: num('matRoughness'), metalness: num('matMetalness') }), last = closed ? nRibs - 1 : nRibs;      // same finish as the pipes in all three cases
+      const ribMat = chk('stripOn') && chk('stripBuild') ? new THREE.MeshStandardMaterial({ color: 0xb9bec4, roughness: 0.8, metalness: 0 }) : paint ? new THREE.MeshStandardMaterial({ color: paintHex, roughness: 0.42, metalness: 0.1 }) : $('trussFinish').value === 'metal' ? stainlessMat() : new THREE.MeshStandardMaterial({ color: $('matColor').value, roughness: num('matRoughness'), metalness: num('matMetalness') }), last = closed ? nRibs - 1 : nRibs;      // same finish as the pipes in all three cases
       // rib stations as fractions of the path: even, or placed by the form (closest in the flares, farthest where it is skinny and straight)
       const ribU = [];
       if (ribAuto) {
@@ -3721,7 +3737,7 @@ function buildStrips(X) {
   const A = X.A, draft = X.qMul < 1;
   const O = { w: num('stripW') / 12, th: parseFloat($('stripT').value) / 12, stock: $('stripMat').value === 'bar' ? parseFloat($('stripStock').value) : parseFloat($('stripSheet').value.split(':')[0]), mat: $('stripMat').value, sheetW: $('stripMat').value === 'bar' ? 0 : parseFloat($('stripSheet').value.split(':')[1]),
     minLen: num('stripMinLen'), maxLen: num('stripMaxLen'), butt: num('stripGap') / 12, skip: num('stripSkip') / 100, gaps: num('stripGaps') / 100, tol: num('stripEdgeTol') / 12,
-    twLim: num('stripTwistLim') * Math.PI / 180, louv: num('stripLouvre') * Math.PI / 180, louvR: num('stripLouvreR'), tone: num('stripTone') / 100, every: Math.max(1, parseInt($('rivetEvery').value)), rivets: chk('stripRivets'), showTw: chk('stripShowTwist'), flat: false,
+    twLim: num('stripTwistLim') * Math.PI / 180, louv: num('stripLouvre') * Math.PI / 180, louvR: num('stripLouvreR'), build: chk('stripBuild'), bendR: num('stripBendR'), nR: num('stripNarrowR'), wN: num('stripNarrowW') / 12, tone: num('stripTone') / 100, every: Math.max(1, parseInt($('rivetEvery').value)), rivets: chk('stripRivets'), showTw: chk('stripShowTwist'), flat: false,
     patch: chk('patchOn'), patchShow: chk('patchShow'), patchMin: num('patchMin') / 12, byData: chk('stripByData') && $('colorMode').value !== 'solid', cmode: $('colorMode').value };
   O.maxLen = Math.min(O.maxLen, O.stock - (O.mat === 'bar' ? 0.5 : 0)); O.minLen = Math.min(O.minLen, O.maxLen);
   let seed = (parseInt($('stripSeed').value) * 7919 + 13) % 4294967296;
@@ -3750,7 +3766,7 @@ function buildStrips(X) {
       for (const q of nearTubes(tmp)) { const vx = tmp.x - q[0], vy = tmp.y - q[1], vz = tmp.z - q[2], vn = vx * sp.nm.x + vy * sp.nm.y + vz * sp.nm.z, v2 = vx * vx + vy * vy + vz * vz;
         if (v2 < g * g) lift = Math.max(lift, -vn + Math.sqrt(Math.max(0, g * g - (v2 - vn * vn)))); } }
     return lift; };
-  const SS = { underTgt: 0, louvN: 0, maxTilt: 0, inUp: 0, inDn: 0, count: 0, lengthened: 0, dropped: 0, totalFt: 0, maxTw: 0, over: 0, minEdgeR: 1e9, forced: 0, rivets: 0, minFlatR: 1e9, maxLift: 0, blocked: 0, patched: 0, patchFt: 0, patchOpen: 0, lanes: A.stripLanes.length };
+  const SS = { bl: [0, 0, 0, 0], bc: [0, 0, 0, 0], narrowStill: 0, narrowN: 0, narrowFt: 0, maxEdgeStrain: 0, wFtIn: 0, underTgt: 0, louvN: 0, maxTilt: 0, inUp: 0, inDn: 0, count: 0, lengthened: 0, dropped: 0, totalFt: 0, maxTw: 0, over: 0, minEdgeR: 1e9, forced: 0, rivets: 0, minFlatR: 1e9, maxLift: 0, blocked: 0, patched: 0, patchFt: 0, patchOpen: 0, lanes: A.stripLanes.length };
   const groups = [...new Set(A.stripLanes.map(l => l.group))];
   groups.forEach(g => {
     const lanes = A.stripLanes.filter(l => l.group === g), closedG = !!lanes[0].closed, N = lanes[0].cnt * (closedG ? 2 : 1), nF = lanes[0].nF, Lp = lanes[0].L, ribsG = A.ribs.filter(r => r.group === g);
@@ -3830,6 +3846,7 @@ function buildStrips(X) {
         if (mode === 2) forced = dev(Math.ceil(ribF[rA] + half), Math.floor(ribF[rb] - half)) > O.tol;
         let twM = 0, kEM = 0, kFM = 0;
         for (let i = i0; i <= i1; i++) { twM = Math.max(twM, tw[i]); kEM = Math.max(kEM, kE[i]); kFM = Math.max(kFM, kF[i]); }
+        const wS = O.nR > 0 && O.wN < O.w && kEM > 1 / O.nR ? O.wN : O.w;           // narrow where the edge bend is tight: edge strain goes with width over radius
         const dataCol = () => {       // each strip takes one color from the color mode, read at its middle
           const mid = (i0 + i1) / 2, u = Math.max(0, Math.min(1, mid / Math.max(1, N - 1))), c = new THREE.Color();
           if (O.cmode === 'audio' && state.feat && state.S) { const dir = state.last && state.last.P.reverse ? -1 : 1, sh = state.last ? state.last.P.shift : 0, v = (evalSeries(state.S.L, dir * (TAU * u) + TAU * sh) + 1) / 2; c.setHSL(0.62 - 0.62 * Math.max(0, Math.min(1, v)), 0.85, 0.5); }
@@ -3842,15 +3859,15 @@ function buildStrips(X) {
           const lo = Math.max(0, i0 - 1), hi = Math.min(N - 1, i1 + 1);
           const tp = new THREE.Vector3(), g = tubeR + 1 / 40, LF = new Float32Array(N);
           for (let pass = 0; pass < 3; pass++) for (let i = lo; i <= hi; i++) { let lf = 0;            // lift each station along its normal until the strip's inner face clears every tube
-            for (let c = -2; c <= 2; c++) { tp.copy(Pm[i]).addScaledVector(AC[i], c * O.w / 4).addScaledVector(NR[i], LF[i] - O.th / 2);
+            for (let c = -2; c <= 2; c++) { tp.copy(Pm[i]).addScaledVector(AC[i], c * wS / 4).addScaledVector(NR[i], LF[i] - O.th / 2);
               for (const q of nearTubes(tp)) { const vx = tp.x - q[0], vy = tp.y - q[1], vz = tp.z - q[2], vn = vx * NR[i].x + vy * NR[i].y + vz * NR[i].z, v2 = vx * vx + vy * vy + vz * vz;
                 if (v2 < g * g) lf = Math.max(lf, -vn + Math.sqrt(Math.max(0, g * g - (v2 - vn * vn)))); } }
             LF[i] += lf; }
           { const W = 6, mx = new Float32Array(N); for (let i = lo; i <= hi; i++) { let m = 0; for (let k = Math.max(lo, i - W); k <= Math.min(hi, i + W); k++) m = Math.max(m, LF[k]); mx[i] = m; }
             for (let i = lo; i <= hi; i++) { let s = 0, c = 0; for (let k = Math.max(lo, i - W); k <= Math.min(hi, i + W); k++) { s += mx[k]; c++; } LF[i] = Math.max(LF[i], s / c); } }
-          if (O.louv > 0) for (let i = lo; i <= hi; i++) LF[i] += (O.w / 2) * Math.abs(Math.sin(alphaL[i]));        // tilted about its low edge: the strip stands off by half its width times the tilt
+          if (O.louv > 0) for (let i = lo; i <= hi; i++) LF[i] += (wS / 2) * Math.abs(Math.sin(alphaL[i]));        // tilted about its low edge: the strip stands off by half its width times the tilt
           let blocked = false;            // still cutting a tube after lifting (a strip crossing the tight inside of a curl): leave it out
-          for (let i = lo; i <= hi && !blocked; i++) for (let c = -2; c <= 2 && !blocked; c++) { tp.copy(Pm[i]).addScaledVector(AC[i], c * O.w / 4).addScaledVector(NR[i], LF[i] - O.th / 2);
+          for (let i = lo; i <= hi && !blocked; i++) for (let c = -2; c <= 2 && !blocked; c++) { tp.copy(Pm[i]).addScaledVector(AC[i], c * wS / 4).addScaledVector(NR[i], LF[i] - O.th / 2);
             for (const q of nearTubes(tp)) { const dx = tp.x - q[0], dy = tp.y - q[1], dz = tp.z - q[2]; if (dx * dx + dy * dy + dz * dz < (tubeR - 1 / 400) ** 2) { blocked = true; break; } } }
           for (let i = lo; i <= hi && !blocked; i += 2) { tp.copy(Pm[i]).addScaledVector(NR[i], LF[i]); if (inOther(tp, i)) blocked = true; }
           if (blocked) return false;
@@ -3859,20 +3876,27 @@ function buildStrips(X) {
           for (let i = lo; i <= hi; i++) SS.maxLift = Math.max(SS.maxLift, LF[i]);
           const LFat = (f) => { const i = Math.min(N - 2, Math.max(0, Math.floor(f))); return LF[i] + (LF[i + 1] - LF[i]) * (f - i); };
           const fl = [fs]; for (let i = Math.ceil(fs); i < fe - 1e-6; i += stride) if (i > fs + 1e-6) fl.push(i); fl.push(fe);
-          const ring = fl.map(f => { const fr = frameAt(f), Pc = fr.P.addScaledVector(fr.nrm, LFat(f)); return [-1, 1, 1, -1].map((sa, k) => Pc.clone().addScaledVector(fr.acr, sa * O.w / 2).addScaledVector(fr.nrm, (k < 2 ? -1 : 1) * O.th / 2)); });
-          for (let i = 0; i < ring.length - 1; i++) { const A0 = ring[i], B0 = ring[i + 1]; for (let k = 0; k < 4; k++) { const k2 = (k + 1) % 4; addQuad(A0[k], A0[k2], B0[k2], B0[k], tmpC); } }
-          addQuad(ring[0][3], ring[0][2], ring[0][1], ring[0][0], tmpC); const e = ring.length - 1; addQuad(ring[e][0], ring[e][1], ring[e][2], ring[e][3], tmpC);
+          const ring = fl.map(f => { const fr = frameAt(f), Pc = fr.P.addScaledVector(fr.nrm, LFat(f)); return [-1, 1, 1, -1].map((sa, k) => Pc.clone().addScaledVector(fr.acr, sa * wS / 2).addScaledVector(fr.nrm, (k < 2 ? -1 : 1) * O.th / 2)); });
+          // buildability: each stretch is fine, marginal, or too tight to bend sideways (edge strain = half the width over the radius), or twists too fast
+          const lim = (O.w / 2) / O.bendR, secCls = [];
+          for (let i = 0; i < ring.length - 1; i++) { const j = Math.max(0, Math.min(N - 1, Math.round((fl[i] + fl[i + 1]) / 2))), eps = (wS / 2) * kE[j];
+            const c = eps > 2 * lim ? 3 : eps > lim ? 2 : tw[j] > O.twLim ? 1 : 0; secCls.push(c); SS.bl[c] += (fl[i + 1] - fl[i]) * sp; }
+          { let worst = 0; secCls.forEach(c => { if (c === 1 ? worst === 0 : c > worst) worst = c; }); SS.bc[worst]++; }
+          const BC = O.build ? [new THREE.Color(0xfafafa), new THREE.Color(0x2f80ed), new THREE.Color(0xf5a300), new THREE.Color(0xd7263d)] : null;
+          for (let i = 0; i < ring.length - 1; i++) { const A0 = ring[i], B0 = ring[i + 1], cc = BC ? BC[secCls[i]] : tmpC; for (let k = 0; k < 4; k++) { const k2 = (k + 1) % 4; addQuad(A0[k], A0[k2], B0[k2], B0[k], cc); } }
+          addQuad(ring[0][3], ring[0][2], ring[0][1], ring[0][0], BC ? BC[secCls[0]] : tmpC); const e = ring.length - 1; addQuad(ring[e][0], ring[e][1], ring[e][2], ring[e][3], BC ? BC[secCls[e - 1]] : tmpC);
         // rivets: each strip end is riveted to the rib it stops on, the ones between at the rib's middle
         const rl = []; for (let r = rA; r <= rb; r++) if ((r - rA) % O.every === 0 || r === rb) rl.push(r);
         const rf = rl.map(r => r === rA ? (prevShares ? ribF[r] + off : ribF[r]) : r === rb ? (nextShares ? ribF[r] - off : ribF[r]) : ribF[r]);
-        const pinOff = (f) => { const a = alphaL[Math.max(0, Math.min(N - 1, Math.round(f)))]; return Math.abs(a) > 0.087 ? Math.sign(a) * (O.w / 2 - 0.4 / 12) : 0; };      // rivet cheated to the low edge, 0.4" in from it
+        const pinOff = (f) => { const a = alphaL[Math.max(0, Math.min(N - 1, Math.round(f)))]; return Math.abs(a) > 0.087 ? Math.sign(a) * (wS / 2 - 0.4 / 12) : 0; };      // rivet cheated to the low edge, 0.4" in from it
         if (O.rivets && !draft) rf.forEach(f => { const fr = frameAt(f), Pr = fr.P.addScaledVector(fr.nrm, LFat(f) + O.th / 2).addScaledVector(fr.acr, pinOff(f)); addRivet(Pr, fr.nrm, fr.acr, fr.tn); });
         if (mode === 2) { SS.patched++; SS.patchFt += sLen; }
         { let mxA = 0; for (let i = i0; i <= i1; i++) { const a = Math.abs(alphaL[i]); mxA = Math.max(mxA, a); if (a > 0.087) { if (alphaL[i] * ekRaw[i] < 0) SS.inUp++; else SS.inDn++; } } if (mxA > 0.087) SS.louvN++; SS.maxTilt = Math.max(SS.maxTilt, mxA); }
         if (O.louv > 0 && O.louvR > 0 && kEM > 1 / O.louvR) SS.underTgt++;
+        if (wS < O.w - 1e-6) { SS.narrowN++; SS.narrowFt += sLen; } SS.maxEdgeStrain = Math.max(SS.maxEdgeStrain, (wS / 2) * kEM); SS.wFtIn += sLen * wS; if (O.nR > 0 && (wS / 2) * kEM > (O.w / 2) / O.nR * 1.001) SS.narrowStill++;
         SS.count++; SS.totalFt += sLen; SS.maxTw = Math.max(SS.maxTw, twM); if (twM > O.twLim) SS.over++; if (forced) SS.forced++; SS.rivets += rf.length;
         if (kEM > 1e-6) SS.minEdgeR = Math.min(SS.minEdgeR, 1 / kEM); if (kFM > 1e-6) SS.minFlatR = Math.min(SS.minFlatR, 1 / kFM);
-        A.stripPieces.push({ lenFt: sLen, lane: wi, group: g, twDegFt: twM * 180 / Math.PI, over: twM > O.twLim, forced, patch: mode === 2, secs: ring.map(rg => rg.map(v => [v.x, v.y, v.z])), riv: rf.map(f => { const fr = frameAt(f), q = fr.P.addScaledVector(fr.nrm, LFat(f) + O.th / 2).addScaledVector(fr.acr, pinOff(f)); return { p: [q.x, q.y, q.z], n: [fr.nrm.x, fr.nrm.y, fr.nrm.z] }; }), col: '#' + tmpC.getHexString(), rivets: rf.length, rivetPts: rf.map(f => { const q = frameAt(f).P; return [q.x, q.y, q.z]; }), N });
+        A.stripPieces.push({ w: wS * 12, lenFt: sLen, lane: wi, group: g, twDegFt: twM * 180 / Math.PI, over: twM > O.twLim, forced, patch: mode === 2, secs: ring.map(rg => rg.map(v => [v.x, v.y, v.z])), riv: rf.map(f => { const fr = frameAt(f), q = fr.P.addScaledVector(fr.nrm, LFat(f) + O.th / 2).addScaledVector(fr.acr, pinOff(f)); return { p: [q.x, q.y, q.z], n: [fr.nrm.x, fr.nrm.y, fr.nrm.z] }; }), col: '#' + tmpC.getHexString(), rivets: rf.length, rivetPts: rf.map(f => { const q = frameAt(f).P; return [q.x, q.y, q.z]; }), N });
         return true;
       };
       // where a whole strip would run into another part of the truss, it is cut into patches: the longest runs of rib-to-rib spans that clear,
@@ -3896,7 +3920,7 @@ function buildStrips(X) {
   currentMeshGroup.add(new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.42, metalness: 0.12, side: THREE.DoubleSide })));
   if (ridx.length) { const rg = new THREE.BufferGeometry(); rg.setAttribute('position', new THREE.Float32BufferAttribute(rpos, 3)); rg.setIndex(ridx); rg.computeVertexNormals();
     currentMeshGroup.add(new THREE.Mesh(rg, new THREE.MeshStandardMaterial({ color: 0xcfd3d8, roughness: 0.35, metalness: 0.55, side: THREE.DoubleSide }))); }
-  SS.psf = O.mat === 'acm3' ? 0.94 : O.mat === 'acm4' ? 1.14 : (O.th * 12) * 144 * AL_LB_IN3; SS.lbFt = O.w * SS.psf; SS.wLb = SS.totalFt * SS.lbFt; SS.opts = { louvR: O.louvR, w: O.w * 12, t: O.th * 12, stock: O.stock, mat: O.mat, sheetW: O.sheetW, twLimDeg: O.twLim * 180 / Math.PI, tolIn: O.tol * 12 };
+  SS.psf = O.mat === 'acm3' ? 0.94 : O.mat === 'acm4' ? 1.14 : (O.th * 12) * 144 * AL_LB_IN3; SS.lbFt = O.w * SS.psf; SS.wLb = SS.wFtIn * SS.psf; SS.opts = { bendR: O.bendR, nR: O.nR, wN: O.wN * 12, louvR: O.louvR, w: O.w * 12, t: O.th * 12, stock: O.stock, mat: O.mat, sheetW: O.sheetW, twLimDeg: O.twLim * 180 / Math.PI, tolIn: O.tol * 12 };
   A.stripStats = SS;
 }
 function O_patchOn() { return chk('patchOn'); }
@@ -4029,12 +4053,17 @@ function updateReadouts(c, A) {
       const g = {}; A.ribs.forEach(r => (g[r.group] = g[r.group] || []).push(r.station)); let mn = 1e9, mx = 0;
       Object.values(g).forEach(a => { a.sort((x, y) => x - y); for (let i = 1; i < a.length; i++) { const d = (a[i] - a[i - 1]) * 12; mn = Math.min(mn, d); mx = Math.max(mx, d); } });
       ri.textContent = `${A.ribs.length} ribs, ${mn < 1e8 ? mn.toFixed(0) + '" to ' + mx.toFixed(0) + '" apart' : 'one ring'}, ${ribOutOn() ? 'outside' : 'inside'} the tubes.`; } } }
+  { const bl = $('buildLegend'), S0 = A.stripStats, pc = $('presCheck'); if (pc) pc.classList.toggle('active', chk('stripBuild'));
+    if (bl) { if (st.strip && S0 && chk('stripBuild')) { const T = Math.max(1e-9, S0.bl[0] + S0.bl[1] + S0.bl[2] + S0.bl[3]), pct = (i) => Math.round(100 * S0.bl[i] / T) + '%', row = (col, name, i) => `<div><span class="sw" style="background:${col}"></span>${name}<span class="n">${S0.bc[i]} strips · ${pct(i)}</span></div>`;
+        bl.innerHTML = `<div class="h">Can it be built with bar and no pre-bend? Edge limit ${S0.opts.bendR} ft.</div>` + row('#fafafa', 'Fine', 0) + row('#f5a300', 'Marginal', 2) + row('#d7263d', 'Arc-cut or pre-bend', 3) + row('#2f80ed', 'Twist over limit', 1); bl.style.display = 'block'; }
+      else bl.style.display = 'none'; } }
   { const si = $('stripInfo'); if (si) { const S = A.stripStats;
       if (!st.strip || !S) si.textContent = '—';
       else { const fr = S.minFlatR * 12, eps = fr < 1e5 ? S.opts.t / 2 / fr * 100 : 0;
-        si.textContent = `${S.count} strips on ${S.lanes} lanes, ${ftIn(S.totalFt)} of ${S.opts.w}" flat bar, about ${Math.round(S.wLb)} lb.\n` +
+        si.textContent = `${S.count} strips on ${S.lanes} lanes, ${ftIn(S.totalFt)} of ${S.opts.w}" flat bar${S.narrowN ? ' (' + S.narrowN + ' of them, ' + ftIn(S.narrowFt) + ', cut ' + S.opts.wN + '" wide)' : ''}, about ${Math.round(S.wLb)} lb.\n` +
           `Twist: worst ${(S.maxTw * 180 / Math.PI).toFixed(0)}°/ft. ${S.over} strip${S.over === 1 ? '' : 's'} over the ${S.opts.twLimDeg.toFixed(0)}°/ft limit need pre-rolling.\n` +
-          `Sideways (edge) bend: tightest radius ${S.minEdgeR > 1e8 ? 'none' : ftIn(S.minEdgeR)}; ${S.forced} strip${S.forced === 1 ? ' is' : 's are'} still over the ${S.opts.tolIn.toFixed(2)}" tolerance at the shortest length that reaches two ribs.\n` +
+          `Sideways (edge) bend: tightest radius ${S.minEdgeR > 1e8 ? 'none' : ftIn(S.minEdgeR)}; worst edge strain ${(S.maxEdgeStrain * 100).toFixed(2)}% (aluminum yields near 0.3 to 0.4%);${S.opts.nR > 0 ? ' ' + S.narrowStill + ' strip' + (S.narrowStill === 1 ? ' is' : 's are') + ' still past the strain of a full-width strip at ' + S.opts.nR + ' ft, even narrowed;' : ''} ${S.forced} strip${S.forced === 1 ? ' is' : 's are'} still over the ${S.opts.tolIn.toFixed(2)}" tolerance at the shortest length that reaches two ribs.\n` +
+          `Buildability (edge limit ${S.opts.bendR} ft on a 2" strip): ${S.bc[0]} strips fine, ${S.bc[2]} marginal, ${S.bc[3]} too tight to bend sideways (${Math.round(100 * S.bl[3] / Math.max(1e-9, S.bl[0] + S.bl[1] + S.bl[2] + S.bl[3]))}% of the length: arc-cut or pre-bend those), ${S.bc[1]} over the twist limit only.\n` +
           (S.louvN ? `Louvre: ${S.louvN} of ${S.count} strips tilted, up to ${(S.maxTilt * 180 / Math.PI).toFixed(0)}°. Each rests on its low edge, pinned 0.4" in from it; the other edge stands off the form (worst standoff ${(S.maxLift * 12).toFixed(1)}"). The inside edge of the bend lifts along ${Math.round(100 * S.inUp / Math.max(1, S.inUp + S.inDn))}% of the tilted length and drops along the rest.${S.opts.louvR > 0 ? ' Tilting only as needed to reach a ' + S.opts.louvR + ' ft edge radius; ' + S.underTgt + ' strip' + (S.underTgt === 1 ? '' : 's') + ' still tighter than that at the cap.' : ''}\n` : '') +
           (A.infill ? `Infill: ${A.infill.rows1 + A.infill.rows2} added row${A.infill.rows1 + A.infill.rows2 === 1 ? '' : 's'} (${A.infill.rows1} fitted in${A.infill.rows2 ? ', ' + A.infill.rows2 + ' with drift; ' + A.infill.moved + ' row' + (A.infill.moved === 1 ? '' : 's') + ' nudged' : ''}); circumference covered ${(A.infill.covBefore * 100).toFixed(0)}% → ${(A.infill.covAfter * 100).toFixed(0)}%.\n` : '') +
           `Flatwise: tightest radius ${fr < 1e5 ? inch(fr) : 'none'} (${eps.toFixed(2)}% strain at the surface).\nRivets: ${S.rivets}, only at rib rings, at least 2 per strip. ${S.lengthened} strip${S.lengthened === 1 ? ' was' : 's were'} lengthened to reach a second rib${S.dropped ? '; ' + S.dropped + ' left out at lane ends' : ''}.${S.blocked ? (O_patchOn() ? ' ' + S.blocked + ' ran into another part of the truss; ' + S.patched + ' patch' + (S.patched === 1 ? '' : 'es') + ' (' + ftIn(S.patchFt) + ') fill in up to the contact' + (S.patchOpen ? ', and ' + S.patchOpen + ' rib-to-rib span' + (S.patchOpen === 1 ? ' stays' : 's stay') + ' open where the other part passes through.' : '.') : ' ' + S.blocked + ' left out where they would cut into a tube or into another part of the truss.') : ''}${S.maxLift > 0.01 ? ' Strips are raised up to ' + inch(S.maxLift) + ' off the rings to clear the tubes.' : ''}`; } } }
@@ -4549,6 +4578,8 @@ function applyConfig(cfg) {
   if (cfg.postColor === undefined) cfg = Object.assign({}, cfg, { postColor: '#8d8780' });      // posts used to take the truss color; they now have their own
   if (cfg.flareWhole === undefined) cfg = Object.assign({}, cfg, { flareWhole: false });         // older presets keep the far-end size they were drawn with
   if (cfg.stepStrips === undefined) cfg = Object.assign({}, cfg, { stepStrips: true });
+  if (cfg.stripBuild === undefined) cfg = Object.assign({}, cfg, { stripBuild: false, stripBendR: 28 });
+  if (cfg.stripNarrowR === undefined) cfg = Object.assign({}, cfg, { stripNarrowR: 0, stripNarrowW: 1.25 });          // older presets keep every strip full width
   if (cfg.stripLouvre === undefined) cfg = Object.assign({}, cfg, { stripLouvre: 0, stripLouvreR: 0 });          // older presets have flat strips
   if (cfg.stripInfill === undefined) cfg = Object.assign({}, cfg, { stripInfill: 0, stripDrift: 0.5 });          // older presets have no infill
   if (cfg.stripFill === undefined) cfg = Object.assign({}, cfg, { stripFill: 'double' });          // older presets keep the doubling rule
@@ -4949,7 +4980,7 @@ async function recordGif() {
 }
 function wirePresent() {
   const bar = document.createElement('div'); bar.id = 'presBar';
-  bar.innerHTML = '<button id="presPrev" title="Previous view (←)">◀</button><span id="presChips"></span><button id="presNext" title="Next view (→)">▶</button><span class="sep"></span><button id="presSave" title="Save the current camera as the next view">★ Save view</button><button id="presTurn" title="Turntable (Space)">Turn</button><select id="presShape" title="Shape of the video clip: as it looks on screen, landscape 16:9 (1920 x 1080), or portrait 9:16 (1080 x 1920) for phones and social posts"><option value="window">Clip: as shown</option><option value="landscape">Clip: landscape 16:9</option><option value="portrait">Clip: portrait 9:16</option></select><select id="presLen" title="How far the clip turns, and how long it runs. Slower turns look smoother."><option value="90:30">Quarter turn, 30 s</option><option value="180:30">Half turn, 30 s</option><option value="360:30">Full turn, 30 s</option><option value="180:15">Half turn, 15 s</option><option value="360:15">Full turn, 15 s</option></select><button id="presQuick" title="Quick clip: a fast, smaller 30 fps video to check the framing or send around">● Quick</button><button id="presClip" title="Render a high quality clip: 1080p at 60 frames per second, drawn at double size and scaled down for smooth edges. Takes a few minutes.">● Render</button><button id="presGif" title="Record one turn of the turntable and download it as an animated GIF">● GIF</button><span class="sep"></span><button id="presTitle" title="Show or hide the title block (T)">Title</button><button id="presExit" title="Exit (Esc)">Exit</button>';
+  bar.innerHTML = '<button id="presPrev" title="Previous view (←)">◀</button><span id="presChips"></span><button id="presNext" title="Next view (→)">▶</button><span class="sep"></span><button id="presSave" title="Save the current camera as the next view">★ Save view</button><button id="presTurn" title="Turntable (Space)">Turn</button><select id="presShape" title="Shape of the video clip: as it looks on screen, landscape 16:9 (1920 x 1080), or portrait 9:16 (1080 x 1920) for phones and social posts"><option value="window">Clip: as shown</option><option value="landscape">Clip: landscape 16:9</option><option value="portrait">Clip: portrait 9:16</option></select><select id="presLen" title="How far the clip turns, and how long it runs. Slower turns look smoother."><option value="90:30">Quarter turn, 30 s</option><option value="180:30">Half turn, 30 s</option><option value="360:30">Full turn, 30 s</option><option value="180:15">Half turn, 15 s</option><option value="360:15">Full turn, 15 s</option></select><button id="presQuick" title="Quick clip: a fast, smaller 30 fps video to check the framing or send around">● Quick</button><button id="presClip" title="Render a high quality clip: 1080p at 60 frames per second, drawn at double size and scaled down for smooth edges. Takes a few minutes.">● Render</button><button id="presGif" title="Record one turn of the turntable and download it as an animated GIF">● GIF</button><span class="sep"></span><button id="presCheck" title="Buildability check: the form goes grey and strips are colored by how they can be made">Check</button><button id="presTitle" title="Show or hide the title block (T)">Title</button><button id="presExit" title="Exit (Esc)">Exit</button>';
   container.appendChild(bar);
   $('btnPresent').onclick = () => setPresent(!document.body.classList.contains('presenting'));
   $('btnTurn').onclick = () => setTurn(!state.turn); $('presTurn').onclick = () => setTurn(!state.turn);
@@ -4957,6 +4988,7 @@ function wirePresent() {
   $('presExit').onclick = () => setPresent(false); $('presPrev').onclick = () => nextView(-1); $('presNext').onclick = () => nextView(1);
   $('presClip').onclick = () => recordClip('render'); $('presQuick').onclick = () => recordClip('quick'); $('presGif').onclick = () => recordGif();
   $('presTitle').onclick = () => document.body.classList.toggle('notitle');
+  $('presCheck').onclick = () => { const el = $('stripBuild'); if (!el) return; el.checked = !el.checked; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); };
   ['mousemove', 'mousedown', 'touchstart', 'wheel'].forEach(ev => container.addEventListener(ev, wakePres, { passive: true }));
   $('refFigs').addEventListener('change', buildRefs);
   $('photoBtn').onclick = () => $('photoFile').click(); $('photoFile').onchange = (e) => { if (e.target.files[0]) loadPhoto(e.target.files[0]); e.target.value = ''; };
