@@ -2877,6 +2877,7 @@ function buildPanel() {
   const surface = `
     <div id="g_colorMode">
     ${S_('colorMode', 'Color mode', [['solid', 'Solid'], ['audio', 'Main value along path'], ['height', 'Elevation'], ['stress', 'Bend radius heatmap'], ['rainbow', 'Spectral spiral']], 'solid')}
+    ${S_('colorPalette', 'Color palette', [['spectrum', 'Smooth spectrum'], ['river', 'Six steps: river to ember'], ['vermilion', 'Six steps: vermilion, pale to deep'], ['twohue', 'Six steps: cool to warm']], 'spectrum')}
     </div>
     <div id="g_surface">
     <input type="color" id="matColor" value="#2d6fb7" aria-label="Surface color">
@@ -3368,6 +3369,21 @@ function vertexU(geo, i) {
   const vps = ud.vps || 17; return Math.floor(i / vps) / Math.max(1, n / vps - 1);
 }
 const AMBER = new THREE.Color(0xf59e0b), CLEAR = new THREE.Color(0xd9480f);
+// COLOR STEPS. "Spectrum" is the smooth blue-to-red ramp; the other palettes cut the value into a few flat bands, quiet to loud.
+// Data bands are cut by rank, so each color gets about the same length of truss; elevation bands are equal heights.
+const PALETTES = {
+  river: ['#0f4c5c', '#2a8c8c', '#a8c3a0', '#e9d8a6', '#e76f51', '#9b2226'],
+  vermilion: ['#ffe3d1', '#ffc19a', '#ff8a4c', '#ff5900', '#c43d0a', '#6e2005'],
+  twohue: ['#3b4a5a', '#5b7fa6', '#b9d4e8', '#e9d8a6', '#f08a3c', '#e8431a'] };
+const palName = () => { const e = document.getElementById('colorPalette'); return e && PALETTES[e.value] ? e.value : 'spectrum'; };
+let rankCache = { S: null, arr: null };
+function dataRank(v) {
+  if (rankCache.S !== state.S) { const a = []; if (state.S) for (let k = 0; k < 400; k++) a.push((evalSeries(state.S.L, TAU * k / 400) + 1) / 2); a.sort((x, y) => x - y); rankCache = { S: state.S, arr: a }; }
+  const a = rankCache.arr; if (!a.length) return v; let lo = 0, hi = a.length; while (lo < hi) { const m = (lo + hi) >> 1; if (a[m] < v) lo = m + 1; else hi = m; } return lo / a.length;
+}
+function palPick(c, t) { const P = PALETTES[palName()]; c.set(P[Math.max(0, Math.min(P.length - 1, Math.floor(Math.max(0, Math.min(0.9999, t)) * P.length)))]); }
+function dataCol(c, v) { v = Math.max(0, Math.min(1, v)); if (palName() === 'spectrum') c.setHSL(0.62 - 0.62 * v, 0.85, 0.5); else palPick(c, dataRank(v)); }
+function heightCol(c, t) { t = Math.max(0, Math.min(1, t)); if (palName() === 'spectrum') c.setHSL((1 - t) * 0.65, 0.9, 0.5); else palPick(c, t); }
 function applyColor(mesh, geo, bend, flags) {
   if (chk('stripOn') && chk('stripBuild')) { mesh.material = new THREE.MeshStandardMaterial({ color: 0xb9bec4, roughness: 0.8, metalness: 0, wireframe: chk('enableWireframe') }); return; }      // buildability check: the form goes grey
   const stain = flags && flags.stain, own = flags && flags.col, mode = own ? 'solid' : $('colorMode').value, base = new THREE.Color(own ? own : stain ? 0xd2d5d9 : $('matColor').value), rough = own ? flags.rough : stain ? 0.42 : num('matRoughness'), metal = own ? flags.metal : stain ? 0.45 : num('matMetalness'), wire = chk('enableWireframe');
@@ -3382,8 +3398,8 @@ function applyColor(mesh, geo, bend, flags) {
     if (mode === 'solid') c.copy(base);
     else if (mode === 'audio' && state.feat) {
       const dir = state.last && state.last.P.reverse ? -1 : 1, sh = state.last ? state.last.P.shift : 0;
-      const th = (dir * (TAU * u) + TAU * sh), v = state.S ? (evalSeries(state.S.L, th) + 1) / 2 : 0.5; c.setHSL(0.62 - 0.62 * Math.max(0, Math.min(1, v)), 0.85, 0.5);
-    } else if (mode === 'audio' || mode === 'height') c.setHSL((1 - (pos.getY(i) - minY) / rangeY) * 0.65, 0.9, 0.5);
+      const th = (dir * (TAU * u) + TAU * sh), v = state.S ? (evalSeries(state.S.L, th) + 1) / 2 : 0.5; dataCol(c, v);
+    } else if (mode === 'audio' || mode === 'height') heightCol(c, (pos.getY(i) - minY) / rangeY);
     else if (mode === 'stress') { const t = bend && bend.minFt > 0 ? Math.max(0, Math.min(1, (r / bend.minFt - 1) / 2)) : 1; c.setHSL(t * 0.33, 0.9, 0.5); }
     else c.setHSL((u * 3) % 1, 0.95, 0.5);
     if (chk('showKinks') && bend && bend.minFt > 0 && mode !== 'stress' && r < bend.minFt) c.copy(AMBER);
@@ -3760,8 +3776,8 @@ function buildPiece(piece, idx, X) {
         let rMat = ribMat;
         if (ribByMode) {      // with the surface finish the rings take the color mode too, one color per ring, read at the ring's station
           const cm = $('colorMode').value, cc = new THREE.Color(), sIdx = Math.min(cnt - 1, Math.max(0, Math.round(u * (cnt - 1))));
-          if (cm === 'audio' && state.feat) { const dir = state.last && state.last.P.reverse ? -1 : 1, sh = state.last ? state.last.P.shift : 0, v = state.S ? (evalSeries(state.S.L, dir * (TAU * u) + TAU * sh) + 1) / 2 : 0.5; cc.setHSL(0.62 - 0.62 * Math.max(0, Math.min(1, v)), 0.85, 0.5); }
-          else if (cm === 'audio' || cm === 'height') cc.setHSL((1 - (ctr.y - ribYlo) / ((ribYhi - ribYlo) || 1)) * 0.65, 0.9, 0.5);
+          if (cm === 'audio' && state.feat) { const dir = state.last && state.last.P.reverse ? -1 : 1, sh = state.last ? state.last.P.shift : 0, v = state.S ? (evalSeries(state.S.L, dir * (TAU * u) + TAU * sh) + 1) / 2 : 0.5; dataCol(cc, v); }
+          else if (cm === 'audio' || cm === 'height') heightCol(cc, (ctr.y - ribYlo) / ((ribYhi - ribYlo) || 1));
           else if (cm === 'stress') { const k = Math.min(bend.radii.length - 1, Math.max(0, Math.round(u * (bend.radii.length - 1)))), t = bend && bend.minFt > 0 ? Math.max(0, Math.min(1, (bend.radii[k] / bend.minFt - 1) / 2)) : 1; cc.setHSL(t * 0.33, 0.9, 0.5); }
           else cc.setHSL((u * 3) % 1, 0.95, 0.5);
           rMat = new THREE.MeshStandardMaterial({ color: cc, roughness: num('matRoughness'), metalness: num('matMetalness') });
@@ -3964,9 +3980,9 @@ function buildStrips(X) {
         const wS = O.nR > 0 && O.wN < O.w && kEM > 1 / O.nR ? O.wN : O.w;           // narrow where the edge bend is tight: edge strain goes with width over radius
         const dataCol = () => {       // each strip takes one color from the color mode, read at its middle
           const mid = (i0 + i1) / 2, u = Math.max(0, Math.min(1, mid / Math.max(1, N - 1))), c = new THREE.Color();
-          if (O.cmode === 'audio' && state.feat && state.S) { const dir = state.last && state.last.P.reverse ? -1 : 1, sh = state.last ? state.last.P.shift : 0, v = (evalSeries(state.S.L, dir * (TAU * u) + TAU * sh) + 1) / 2; c.setHSL(0.62 - 0.62 * Math.max(0, Math.min(1, v)), 0.85, 0.5); }
+          if (O.cmode === 'audio' && state.feat && state.S) { const dir = state.last && state.last.P.reverse ? -1 : 1, sh = state.last ? state.last.P.shift : 0, v = (evalSeries(state.S.L, dir * (TAU * u) + TAU * sh) + 1) / 2; dataCol(c, v); }
           else if (O.cmode === 'rainbow') c.setHSL((u * 3) % 1, 0.95, 0.5);
-          else if (O.cmode === 'height' || O.cmode === 'audio') { const y = Pm[Math.round(mid)].y; c.setHSL((1 - (y - yLo) / ((yHi - yLo) || 1)) * 0.65, 0.9, 0.5); }
+          else if (O.cmode === 'height' || O.cmode === 'audio') { const y = Pm[Math.round(mid)].y; heightCol(c, (y - yLo) / ((yHi - yLo) || 1)); }
           else c.copy(base);
           return c; };
         const twCol = () => { const ratio = twM / O.twLim; tmpC.setHSL(0.33 * (1 - Math.max(0, Math.min(1, ratio / 1.5))), 0.75, 0.5); };
