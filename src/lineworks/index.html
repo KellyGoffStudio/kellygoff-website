@@ -2822,6 +2822,10 @@ function buildPanel() {
         <div class="sub">Riffles</div>
         ${R('ribWidth', 'Rib width', 1.25, 3, 0.25, 2, v => (+v).toFixed(2).replace(/\.?0+$/, '') + '"', 'With strips on, every strip starts and ends on a rib so none hangs free where it could be bent by hand. Two strips can butt on the same rib, so the ribs are wider: 2" leaves room for a rivet in each. A strip with nothing butted to it runs 1 inch past the far edge of the rib.')}
         ${R('stripCover', 'Coverage', 10, 130, 5, 80, v => v + '%' + (v > 100 ? ' (overlap)' : ''), 'Past 100% the rows are packed closer than a strip is wide, so neighbors overlap (the overlap is capped by the setting below). Tilted strips present less width to the surface, so about 110-115% is what it takes to close them up. How much of the surface the strips cover, edge to edge. Strips are set by this, not by the member count. Where the form flares, extra rows of strips start so the coverage holds.')}
+        ${C_('stripCoilIn', 'Coil: rings inside the pipes, strips rivet to the pipes', true, 'With the rings tucked inside the pipes, the strips lie directly on the pipes and rivet where they cross them. A strip can then start and end at any pipe crossing, not only at a ring, so it runs its full stock length however close the rings are.')}
+        ${C_('stripCoil', 'Spiral layout: strips wind around the bundle like a coil', false, 'Instead of running along the bundle, each strip winds around it, so the strip lies on the surface along a straight line of the surface and almost never has to bend edgewise, even on a tight bend. The tighter the pitch, the closer to a ring and the easier the strip is to form. Strips are cut from the full stock length and end on ribs where they cross them. Coverage sets how many strips wind side by side (starts).')}
+        ${R('stripCoilPitch', 'Coil pitch (advance per turn)', 2, 24, 0.5, 6, v => (+v).toFixed(1).replace(/\.0$/, '') + '"', 'How far along the bundle each strip advances in one full turn. Small is nearly a ring, with the least edge bending and the longest strips; large is a steeper spiral. This is the average: the data can open and close it.')}
+        ${R('stripCoilData', 'Pitch follows the data', 0, 80, 5, 40, v => +v === 0 ? 'Off' : '±' + v + '%', 'Opens and closes the pitch along the line with the data (loud tightens it, quiet opens it), so the skin reads like a groove cut by the signal. The number of strips stays the same, so coverage changes with it.')}
         ${R('stripLap', 'Most side overlap allowed', 0, 1.5, 0.125, 0.5, v => +v === 0 ? 'None' : (+v).toFixed(3).replace(/0+$/, '').replace(/\.$/, '') + '"', 'How far one strip may slide under its neighbor. Rows are packed no closer than the strip width less this, so Coverage over 100% is held to it. Where neighbors overlap, the program works out which sits on top; a pair that leans the same way nests on its own (like louvre slats), and any other pair has the top strip lifted just enough to ride over the one beneath. Rivets are kept clear of the covered edge. None keeps strips edge to edge, as before.')}
         ${R('stripLean', 'Neighbors lean the same way', 0, 50, 5, 0, v => +v === 0 ? 'Off' : 'Edge bend up to ' + v + '% tighter', 'Louvre strips nest (the high edge of one over the low edge of the next, like slats) only when neighbors lean the same way. Where a strip would lean against its neighbors, it is turned to lean with them, or laid flat, as long as its sideways bend stays within this much of the target. Costs a little edge bend where it is used; saves lifting one strip over another. Needs the overlap setting above.')}
         ${R('stripW', 'Strip width', 1, 4, 0.25, 2, v => (+v).toFixed(2).replace(/\.?0+$/, '') + '"')}
@@ -2934,7 +2938,8 @@ function buildPanel() {
     sec(6, 'Output', 'fabrication files', true, out);
 }
 
-const ribOutOn = () => $('ribOutside').checked || $('stripOn').checked;      // strips are riveted to the rings, so with strips on the rings always wrap the outside of the tubes
+const ribIn = () => !!($('stripCoil') && $('stripCoil').checked && $('stripCoilIn') && $('stripCoilIn').checked && $('stripOn').checked);
+const ribOutOn = () => !ribIn() && ($('ribOutside').checked || $('stripOn').checked);      // strips are riveted to the rings, so with strips on the rings always wrap the outside of the tubes
 function trussAutoFill() {
   if (!chk('woodOn') || state.fillManual) return;
   const stock = $('trussStockType').value, od = num('trussOD'),
@@ -3524,10 +3529,10 @@ function buildPiece(piece, idx, X) {
       // a rib is a flat ring with a straight rim, so on a flare its far edge sits higher than the cone under it; strips are lifted to clear the rim across the rib's full width
       const hRib = Math.ceil((((st.strip ? num('ribWidth') : 1.25) / 12) / 2) / (length / Math.max(1, nF))) + 1, dfm = [];
       for (let i = 0; i < cnt; i++) { let m = 0; for (let j = Math.max(0, i - hRib); j <= Math.min(cnt - 1, i + hRib); j++) m = Math.max(m, df(j)); dfm.push(m); }
-      const mkLane = (th0, act, lift = 0, shF = null) => {      // shF: optional sideways drift in feet at every station (infill)
-        const th = th0 + manual, P = [], Rad = [], Cc = [], RoA = [], outside = ribOutOn(), clr = stripP.th / 2;
+      const mkLane = (th0, act, lift = 0, shF = null, phF = null) => {      // shF: optional sideways drift in feet at every station (infill)
+        const th = th0 + manual, P = [], Rad = [], Cc = [], RoA = [], outside = ribOutOn() || ribIn(), onPipes = ribIn(), clr = stripP.th / 2;
         for (let i = 0; i < cnt; i++) {
-          const R = outside ? Rb * dfm[i] + st.memOD / 12 + 0.25 / 12 + clr + lift : Rb * df(i) + mR, thi = shF ? th + shF[i] / R : th;
+          const R = onPipes ? Rb * df(i) + st.memOD / 12 + clr + lift : outside ? Rb * dfm[i] + st.memOD / 12 + 0.25 / 12 + clr + lift : Rb * df(i) + mR, thi = (shF ? th + shF[i] / R : th) + (phF ? phF[i] : 0);
           const tan = curve.getTangentAt(Math.min(1, i / nF)).normalize(), r0 = frames.normals[i].clone().multiplyScalar(Math.cos(thi)).addScaledVector(frames.binormals[i], Math.sin(thi));
           r0.addScaledVector(tan, -r0.dot(tan)); if (r0.length() < 1e-6) r0.copy(frames.normals[i]); r0.normalize();
           P.push(spaced[i].clone().addScaledVector(r0, R)); Rad.push(r0); Cc.push(spaced[i]); RoA.push(R + stripP.th / 2);
@@ -3542,7 +3547,7 @@ function buildPiece(piece, idx, X) {
           pts.push(spaced[i].clone().addScaledVector(frames.normals[i], Math.cos(th) * rc).addScaledVector(frames.binormals[i], Math.sin(th) * rc));
         }
         const sub = new THREE.CatmullRomCurve3(pts, closed, 'centripetal', 0.25), samp = sampleMember(sub, length, closed);
-        const outStrips = st.strip && ribOutOn();          // strips go outside the rings, so no member is given up to them
+        const outStrips = st.strip && (ribOutOn() || ribIn());          // strips go outside the rings, so no member is given up to them
         if (isSteel[m] || outStrips) {
           const geo = new THREE.TubeGeometry(sub, Math.max(100, Math.ceil(cnt * (q < 1 ? 0.6 : 1))), mR, q < 1 ? 10 : 16, closed);
           geo.userData = { kind: 'tube', vps: (q < 1 ? 10 : 16) + 1 };
@@ -3574,13 +3579,35 @@ function buildPiece(piece, idx, X) {
       if (stripP) {
         // strip lanes do not belong to members: rows of strips are spread around the circumference by the coverage setting, and
         // where the bundle flares and gets wider, extra rows start between the existing ones so the coverage holds
-        const lapF = num('stripLap') / 12, cov = Math.min(num('stripCover') / 100, stripP.w / Math.max(0.05 * stripP.w, stripP.w - lapF)), pitchF = Math.min(1, 1 / Math.max(1, cov)), nreq = [];
+        const coilOn = chk('stripCoil'), lapF = num('stripLap') / 12, cov = Math.min(num('stripCover') / 100, stripP.w / Math.max(0.05 * stripP.w, stripP.w - lapF)), pitchF = Math.min(1, 1 / Math.max(1, cov)), nreq = [];
         for (let i = 0; i < cnt; i++) nreq.push(cov * TAU * (Rb * df(i) + st.memOD / 12 + 0.25 / 12 + stripP.th / 2) / stripP.w);
         const N0 = Math.max(2, Math.round(Math.min(...nreq))), lvl = nreq.map(v => Math.max(0, Math.floor(Math.log2(Math.max(1, v) / N0) + 1e-6))), maxL = Math.max(...lvl);
         const Emax = Math.max(1, Math.round(5 / (length / Math.max(1, nF))));
         const erode = (a, e) => { if (!e) return a; const pre = [0]; for (let i = 0; i < cnt; i++) pre.push(pre[i] + a[i]); const o = new Uint8Array(cnt);
           for (let i = 0; i < cnt; i++) { const lo = Math.max(0, i - e), hi = Math.min(cnt - 1, i + e); o[i] = (pre[hi + 1] - pre[lo]) === (hi - lo + 1) ? 1 : 0; } return o; };
-        const fine = $('stripFill').value === 'fine';
+        const fine = $('stripFill').value === 'fine' && !coilOn;
+        if (coilOn) {      // spiral: every strip is a lane whose angle around the bundle advances with the path, a turn per pitch; the pitch follows the data
+          const SM = 2, p0 = Math.max(2, num('stripCoilPitch')) / 12, depth = num('stripCoilData') / 100, dsF = length / Math.max(1, nF);
+          const dir = state.last && state.last.P && state.last.P.reverse ? -1 : 1, sh = state.last && state.last.P ? state.last.P.shift : 0, haveD = !!(state.feat && state.S);
+          const vAt = (i) => { const u = i / Math.max(1, cnt - 1); return haveD ? (evalSeries(state.S.L, dir * (TAU * u) + TAU * sh) + 1) / 2 : 0.5 + 0.5 * Math.sin(TAU * 3 * u); };
+          const vRaw = Float64Array.from({ length: cnt }, (_, i) => vAt(i)), hw = Math.max(1, Math.round(SM / dsF)), vS = new Float64Array(cnt);      /* the data is averaged over about SM feet so the pitch eases instead of jumping */
+          for (let i = 0; i < cnt; i++) { let a = 0, c = 0; for (let j = Math.max(0, i - hw); j <= Math.min(cnt - 1, i + hw); j++) { a += vRaw[j]; c++; } vS[i] = a / c; }
+          const ph = new Float64Array(cnt); let pMn = 1e9, pMx = 0;
+          for (let i = 1; i < cnt; i++) { const pm = Math.max(0.05, p0 * df(i) * (1 - depth * (2 * vS[i] - 1))); /* pitch grows with radius: constant winding angle down a flare */ pMn = Math.min(pMn, pm); pMx = Math.max(pMx, pm); ph[i] = ph[i - 1] + TAU * dsF / pm; }
+          if (closed && ph[cnt - 1] > 1e-6) { const k = TAU * Math.max(1, Math.round(ph[cnt - 1] / TAU)) / ph[cnt - 1]; for (let i = 0; i < cnt; i++) ph[i] *= k; }      // a loop comes back round to where it started
+          const pLoc = new Float64Array(cnt); for (let i = 1; i < cnt; i++) pLoc[i] = (ph[i] - ph[i - 1]) > 1e-9 ? TAU * dsF / (ph[i] - ph[i - 1]) : p0; pLoc[0] = pLoc[1] || p0;
+          const Sq = Array.from(pLoc, v => cov * v / stripP.w), S0 = Math.max(1, Math.round(Math.min(...Sq))), Smax = Math.max(S0, Math.round(Math.max(...Sq)));
+          const vdc = (j) => { let f = 0, b = 0.5; for (; j > 0; j >>= 1, b /= 2) if (j & 1) f += b; return f; };      /* extra strips interleave between the ones already there */
+          for (let k = 0; k < Smax; k++) {
+            const act = k < S0 ? null : Uint8Array.from(Sq, v => v >= k + 0.5 ? 1 : 0);
+            if (act && !act.some(v => v)) continue;
+            X.A.stripLanes.push(mkLane(k < S0 ? TAU * k / S0 : (() => { const e = k - S0, L = Math.floor(Math.log2(e / S0 + 1) + 1e-9), ix = e - S0 * (Math.pow(2, L) - 1); return TAU * (2 * ix + 1) / (S0 * Math.pow(2, L + 1)); })(), act, 0, null, ph));
+          }
+          if (ribIn()) X.A.stripLanes.forEach(l => { if (l.group !== idx || l.cross) return; const cr = [];
+            for (let m = 0; m < n; m++) { const am = angs[m] + manual; for (let i = 0; i + 1 < cnt; i++) { const k0 = (l.th + ph[i] - am) / TAU, k1 = (l.th + ph[i + 1] - am) / TAU, n1 = Math.floor(k1 + 1e-9); if (n1 > Math.floor(k0 + 1e-9) && k1 > k0) cr.push(i + Math.max(0, Math.min(1, (n1 - k0) / (k1 - k0)))); } }
+            l.cross = cr.sort((a, b) => a - b); });
+          X.A.coil = { starts: Smax, pMinIn: pMn * 12, pMaxIn: pMx * 12, data: haveD };
+        }
         if (fine) {      // rows are added one at a time wherever the flare leaves room for another strip, flush beside its neighbors and never overlapping them
           const N0f = Math.max(2, Math.floor(Math.min(...nreq) + 1e-6)), rStrip = (i) => Rb * df(i) + st.memOD / 12 + 0.25 / 12 + stripP.th / 2;
           const sub = Math.max(1, Math.floor(cnt / 100)), idxs = []; for (let i = 0; i < cnt; i += sub) idxs.push(i);
@@ -3597,7 +3624,7 @@ function buildPiece(piece, idx, X) {
             X.A.stripLanes.push(mkLane(best, act)); idxs.forEach((i, k) => { if (act[i]) occ[k].push(best); });
           }
         }
-        if (!fine) for (let L = 0; L <= maxL; L++) {
+        if (!fine && !coilOn) for (let L = 0; L <= maxL; L++) {
           const rowsN = L === 0 ? N0 : N0 * Math.pow(2, L - 1), act = Uint8Array.from(lvl, v => v >= L ? 1 : 0);
           for (let k = 0; k < rowsN; k++) {
             // each extra row starts and stops a little later than the flare strictly needs (never earlier, which would crowd its neighbors),
@@ -3612,7 +3639,7 @@ function buildPiece(piece, idx, X) {
         // so a strip fits where the gap was just too small. A new row starts and stops on ribs like every other strip, 1" past the rib.
         X.A.infill = null;
         const infillV = num('stripInfill');
-        if (infillV > 0) {
+        if (infillV > 0 && !coilOn) {
           const dmax = num('stripDrift') / 12, sub2 = Math.max(1, Math.floor(cnt / 100)), idxs2 = []; for (let i = 0; i < cnt; i += sub2) idxs2.push(i);
           const nS = idxs2.length, ds = length / Math.max(1, nF), ftPer2 = ds * sub2;
           const rS = idxs2.map(i => Rb * df(i) + st.memOD / 12 + 0.25 / 12 + stripP.th / 2), wA = rS.map(r => stripP.w * 1.01 / r);
@@ -3721,6 +3748,8 @@ function buildPiece(piece, idx, X) {
         }
         if (!closed) ribU.push(1);
       } else for (let r = 0; r <= last; r++) ribU.push(r / nRibs);
+      const ribByMode = $('trussFinish').value === 'surface' && $('colorMode').value !== 'solid' && !(chk('stripOn') && chk('stripBuild'));
+      let ribYlo = 1e9, ribYhi = -1e9; if (ribByMode) for (let k = 0; k <= 60; k++) { const y = curve.getPointAt(k / 60).y; ribYlo = Math.min(ribYlo, y); ribYhi = Math.max(ribYhi, y); }
       for (const u of ribU) {
         const ctr = curve.getPointAt(u), tan = curve.getTangentAt(u).normalize();
         const si = Math.min(cnt - 1, Math.floor(u * cnt)); let Ro, Ri;
@@ -3728,7 +3757,16 @@ function buildPiece(piece, idx, X) {
         const shape = new THREE.Shape(); shape.absarc(0, 0, Ro, 0, TAU, false);
         const hole = new THREE.Path(); hole.absarc(0, 0, Ri, 0, TAU, true); shape.holes.push(hole);
         const rg = new THREE.ExtrudeGeometry(shape, { depth: wRib, bevelEnabled: false, curveSegments: q < 1 ? 14 : 32 });
-        addVC(rg, 0xd2d5d9); const rm = new THREE.Mesh(rg, ribMat); rm.position.copy(ctr); rm.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tan); currentMeshGroup.add(rm);
+        let rMat = ribMat;
+        if (ribByMode) {      // with the surface finish the rings take the color mode too, one color per ring, read at the ring's station
+          const cm = $('colorMode').value, cc = new THREE.Color(), sIdx = Math.min(cnt - 1, Math.max(0, Math.round(u * (cnt - 1))));
+          if (cm === 'audio' && state.feat) { const dir = state.last && state.last.P.reverse ? -1 : 1, sh = state.last ? state.last.P.shift : 0, v = state.S ? (evalSeries(state.S.L, dir * (TAU * u) + TAU * sh) + 1) / 2 : 0.5; cc.setHSL(0.62 - 0.62 * Math.max(0, Math.min(1, v)), 0.85, 0.5); }
+          else if (cm === 'audio' || cm === 'height') cc.setHSL((1 - (ctr.y - ribYlo) / ((ribYhi - ribYlo) || 1)) * 0.65, 0.9, 0.5);
+          else if (cm === 'stress') { const k = Math.min(bend.radii.length - 1, Math.max(0, Math.round(u * (bend.radii.length - 1)))), t = bend && bend.minFt > 0 ? Math.max(0, Math.min(1, (bend.radii[k] / bend.minFt - 1) / 2)) : 1; cc.setHSL(t * 0.33, 0.9, 0.5); }
+          else cc.setHSL((u * 3) % 1, 0.95, 0.5);
+          rMat = new THREE.MeshStandardMaterial({ color: cc, roughness: num('matRoughness'), metalness: num('matMetalness') });
+        }
+        addVC(rg, 0xd2d5d9); const rm = new THREE.Mesh(rg, rMat); rm.position.copy(ctr); rm.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tan); currentMeshGroup.add(rm);
         X.A.ribs.push({ piece: idx, station: u * length, odIn: Ro * 24, idIn: Ri * 24, ctr: [ctr.x, ctr.y, ctr.z], tan: [tan.x, tan.y, tan.z], w: wRib, Ro, Ri, group: idx });
         X.A.extraW += Math.PI * (Ro * Ro - Ri * Ri) * 144 * 1.25 * 0.2836 * 0 + Math.PI * (Math.pow(Ro * 12, 2) - Math.pow(Ri * 12, 2)) * (wRib * 12) * (st.alum ? AL_LB_IN3 : STEEL_LB_IN3);
       }
@@ -3749,6 +3787,7 @@ function buildStrips(X) {
     twLim: num('stripTwistLim') * Math.PI / 180, lap: num('stripLap') / 12, lean: num('stripLean') / 100, louv: num('stripLouvre') * Math.PI / 180, louvR: num('stripLouvreR'), build: chk('stripBuild'), chord: chk('stripChord'), wedge: num('stripWedge') / 12, miterMax: num('stripMiterMax') * Math.PI / 180, bendR: num('stripBendR'), nR: num('stripNarrowR'), wN: num('stripNarrowW') / 12, tone: num('stripTone') / 100, every: Math.max(1, parseInt($('rivetEvery').value)), rivets: chk('stripRivets'), showTw: chk('stripShowTwist'), flat: false,
     patch: chk('patchOn'), patchShow: chk('patchShow'), patchMin: num('patchMin') / 12, byData: chk('stripByData') && $('colorMode').value !== 'solid', cmode: $('colorMode').value };
   O.maxLen = Math.min(O.maxLen, O.stock - (O.mat === 'bar' ? 0.5 : 0)); O.minLen = Math.min(O.minLen, O.maxLen);
+  O.coil = chk('stripCoil'); if (O.coil) { O.maxLen = O.stock - (O.mat === 'bar' ? 0.5 : 0); O.minLen = Math.min(O.minLen, 4); O.tol = 1e9; O.chord = false; }      // a coil is long by nature, and its edge bend is judged by the strain check, not by the straight-chord cutback
   let seed = (parseInt($('stripSeed').value) * 7919 + 13) % 4294967296;
   const rnd = () => { seed = (seed * 1664525 + 1013904223) % 4294967296; return seed / 4294967296; }, rr = (a, b) => a + (b - a) * rnd();
   let pseed = (parseInt($('stripSeed').value) * 104729 + 7) % 4294967296; const prnd = () => { pseed = (pseed * 1664525 + 1013904223) % 4294967296; return pseed / 4294967296; };   // patches draw from their own sequence, so turning them on never reshuffles the rest of the skin
@@ -3871,16 +3910,17 @@ function buildStrips(X) {
       const minS = Math.max(4, Math.ceil(1.5 / sp)), mRiv = Math.max(2, Math.ceil((2 / 12) / sp));
       // each ring's mid-width, where this lane passes through it
       const ribP = new Map();
-      ribsG.forEach(r => { const fi = Math.max(0, Math.min(nF, (r.station + r.w / 2) / Lp * nF)), i0 = Math.min(Math.max(0, N - 2), Math.floor(fi)), f = Math.min(1, fi - i0), j = Math.min(N - 1, Math.round(fi));
+      const ribStations = ln.cross ? ln.cross.slice() : ribsG.map(r => Math.max(0, Math.min(nF, (r.station + r.w / 2) / Lp * nF)));
+      ribStations.forEach(fi => { const i0 = Math.min(Math.max(0, N - 2), Math.floor(fi)), f = Math.min(1, fi - i0), j = Math.min(N - 1, Math.round(fi));
         if (!ribP.has(j)) ribP.set(j, Pm[i0].clone().lerp(Pm[Math.min(N - 1, i0 + 1)], f)); });
       const ribI = [...ribP.keys()].sort((a, b) => a - b), ribsIn = (a, b) => ribI.filter(i => i >= a + mRiv && i <= b - mRiv);
       const dev = (a, b) => { const P0 = Pm[a], e = Pm[b].clone().sub(P0), l = e.length(); if (l < 1e-6) return 0; e.divideScalar(l); let mx = 0;
         for (let i = a; i <= b; i += 2) { const d = Pm[i].clone().sub(P0); d.addScaledVector(e, -d.dot(e)); mx = Math.max(mx, Math.abs(d.dot(AC[i]))); } return mx; };
       // strips snap to the rib rings: a strip starts and ends on a rib (its end 1/4" past the rib's centerline, the butt gap shared with the
       // next strip on the same rib), so no strip ever hangs free past a rib; each end is riveted to the rib it stops on
-      let ribF = [...new Set(ribsG.map(r => Math.max(0, Math.min(nF, (r.station + r.w / 2) / Lp * nF))))].sort((x, y) => x - y), nR = ribF.length;
+      let ribF = [...new Set(ribStations.map(f => +f.toFixed(6)))].sort((x, y) => x - y), nR = ribF.length;
       if (closedG) { ribF = [...new Set(ribF.map(f => +(f % nF).toFixed(6)))].sort((x, y) => x - y); nR = ribF.length; ribF = ribF.concat(ribF.map(f => f + nF)); }
-      const ribW = ribsG.length ? ribsG[0].w : 1.25 / 12;
+      const ribW = ln.cross ? tubeR * 2 : ribsG.length ? ribsG[0].w : 1.25 / 12;
       const lerpAt = (arr, f) => { const i = Math.min(N - 2, Math.max(0, Math.floor(f))); return arr[i].clone().lerp(arr[i + 1], f - i); };
       const frameAt = (f) => ({ P: lerpAt(Pm, f), nrm: lerpAt(NR, f).normalize(), acr: lerpAt(AC, f).normalize(), tn: lerpAt(T, f).normalize() });
       const actOk = (a, b) => { if (!actD) return true; for (let i = Math.max(0, Math.floor(a)); i <= Math.min(N - 1, Math.ceil(b)); i++) if (!actD[i]) return false; return true; };
@@ -4015,7 +4055,7 @@ function buildStrips(X) {
   if (ridx.length) { const rg = new THREE.BufferGeometry(); rg.setAttribute('position', new THREE.Float32BufferAttribute(rpos, 3)); rg.setIndex(ridx); rg.computeVertexNormals();
     currentMeshGroup.add(new THREE.Mesh(rg, new THREE.MeshStandardMaterial({ color: 0xcfd3d8, roughness: 0.35, metalness: 0.55, side: THREE.DoubleSide }))); }
   SS.psf = O.mat === 'acm3' ? 0.94 : O.mat === 'acm4' ? 1.14 : (O.th * 12) * 144 * AL_LB_IN3; SS.lbFt = O.w * SS.psf; SS.wLb = SS.wFtIn * SS.psf; SS.opts = { lean: O.lean, lap: O.lap * 12, chord: O.chord, bendR: O.bendR, nR: O.nR, wN: O.wN * 12, louvR: O.louvR, w: O.w * 12, t: O.th * 12, stock: O.stock, mat: O.mat, sheetW: O.sheetW, twLimDeg: O.twLim * 180 / Math.PI, tolIn: O.tol * 12 };
-  A.stripStats = SS;
+  SS.coil = A.coil || null; A.stripStats = SS;
 }
 function O_patchOn() { return chk('patchOn'); }
 function stainlessMat() { return new THREE.MeshStandardMaterial({ color: 0xd2d5d9, metalness: 0.45, roughness: 0.42 }); }
@@ -4159,6 +4199,7 @@ function updateReadouts(c, A) {
           `Sideways (edge) bend: tightest radius ${S.minEdgeR > 1e8 ? 'none' : ftIn(S.minEdgeR)}; worst edge strain ${(S.maxEdgeStrain * 100).toFixed(2)}% (aluminum yields near 0.3 to 0.4%);${S.opts.nR > 0 ? ' ' + S.narrowStill + ' strip' + (S.narrowStill === 1 ? ' is' : 's are') + ' still past the strain of a full-width strip at ' + S.opts.nR + ' ft, even narrowed;' : ''} ${S.forced} strip${S.forced === 1 ? ' is' : 's are'} still over the ${S.opts.tolIn.toFixed(2)}" tolerance at the shortest length that reaches two ribs.\n` +
           `Buildability (edge limit ${S.opts.bendR} ft on a 2" strip): ${S.bc[0]} strips fine, ${S.bc[2]} marginal, ${S.bc[3]} too tight to bend sideways (${Math.round(100 * S.bl[3] / Math.max(1e-9, S.bl[0] + S.bl[1] + S.bl[2] + S.bl[3]))}% of the length: arc-cut or pre-bend those), ${S.bc[1]} over the twist limit only.\n` +
           (S.opts.chord ? `Joints (strips run straight between rivets; ${S.chord2} of ${S.count} have just two): ${S.jn[0]} fine with square ends and a wedge gap, ${S.jn[1]} need an end cut (up to ${(S.maxMiter * 180 / Math.PI).toFixed(0)}° each), ${S.jn[2]} turn too sharply for a miter, lap those. Sharpest turn ${(S.maxTurn * 180 / Math.PI).toFixed(0)}°.\n` : '') +
+          (S.coil ? `Coil: ${S.coil.starts} strip${S.coil.starts === 1 ? '' : 's'} winding side by side, pitch ${S.coil.pMinIn.toFixed(1)}" to ${S.coil.pMaxIn.toFixed(1)}" a turn${S.coil.data ? ', following the data' : ' (no site data loaded: a gentle wave stands in)'}. Strips run up to the full stock length and rivet at every rib they cross.\n` : '') +
           (S.opts.lap > 0 && S.lapFt > 0 ? `Overlap: neighbors overlap along ${S.lapFt.toFixed(0)} ft of seam, up to ${(S.maxLap * 12).toFixed(2)}"; ${S.lapLiftFt > 0 ? 'the top strip is lifted ' + (S.maxLapLift * 12).toFixed(2) + '" at most, over ' + S.lapLiftFt.toFixed(0) + ' ft, to ride over its neighbor' : 'every overlap nests without a lift'}. ${S.opts.lean > 0 ? 'Turned ' + S.leanFt.toFixed(0) + ' ft of strip to lean with its neighbors. ' : ''}${S.lapRiv ? S.lapRiv + ' rivet' + (S.lapRiv === 1 ? '' : 's') + ' have no clear spot; ' : ''}Rivets kept off covered edges.\n` : '') +
           (S.covN ? `Layout coverage (before openings): ${(100 * S.covSum / S.covN).toFixed(0)}% of the surface, seen from outside, with tilt counted.\n` : '') +
           (S.louvN ? `Louvre: ${S.louvN} of ${S.count} strips tilted, up to ${(S.maxTilt * 180 / Math.PI).toFixed(0)}°. Each rests on its low edge, pinned 0.4" in from it; the other edge stands off the form (worst standoff ${(S.maxLift * 12).toFixed(1)}"). The inside edge of the bend lifts along ${Math.round(100 * S.inUp / Math.max(1, S.inUp + S.inDn))}% of the tilted length and drops along the rest.${S.opts.louvR > 0 ? ' Tilting only as needed to reach a ' + S.opts.louvR + ' ft edge radius; ' + S.underTgt + ' strip' + (S.underTgt === 1 ? '' : 's') + ' still tighter than that at the cap.' : ''}\n` : '') +
@@ -4730,6 +4771,8 @@ function applyConfig(cfg) {
   if (cfg.stripChord === undefined) cfg = Object.assign({}, cfg, { stripChord: false, stripWedge: 0.5, stripMiterMax: 25 });          // older presets keep strips following the lane
   if (cfg.stripBuild === undefined) cfg = Object.assign({}, cfg, { stripBuild: false, stripBendR: 28 });
   if (cfg.stripNarrowR === undefined) cfg = Object.assign({}, cfg, { stripNarrowR: 0, stripNarrowW: 1.25 });          // older presets keep every strip full width
+  if (cfg.stripCoil === undefined) cfg = Object.assign({}, cfg, { stripCoil: false, stripCoilPitch: 6, stripCoilData: 40 });
+  if (cfg.stripCoilIn === undefined) cfg = Object.assign({}, cfg, { stripCoilIn: true });          // older presets run their strips along the bundle
   if (cfg.stripLean === undefined) cfg = Object.assign({}, cfg, { stripLean: 0 });          // older presets let each strip lean as its own bend wants
   if (cfg.stripLap === undefined) cfg = Object.assign({}, cfg, { stripLap: 0 });          // older presets keep strips edge to edge
   if (cfg.stripLouvre === undefined) cfg = Object.assign({}, cfg, { stripLouvre: 0, stripLouvreR: 0 });          // older presets have flat strips
