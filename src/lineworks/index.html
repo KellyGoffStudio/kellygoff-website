@@ -2001,7 +2001,11 @@ function solveSeed(F, P, o) {
   const place = (unit) => {
     if (!o.preRot) return placeForm(unit, { dimsC: o.dimsC, mode: 'suspended', hangH: o.hangH || 0 });
     // the envelope is measured in the view: find the pre-turn sizes that give exactly these view sizes once the form is turned
-    const tg = o.dimsC; let dp = tg.slice(), fit = null;
+    const tg = o.dimsC, an = state.envAnchor; let dp = tg.slice(), fit = null;
+    if (an && an.rot.every((v, i) => Math.abs(v - o.preRot[i]) < 1e-9)) {      // anchored: sizes follow the form this preset was drawn with
+      dp = anchorDp(an, tg);
+      return placeForm(rotCentered(fitToDims(unit, dp), o.preRot), { dimsC: o.dimsC, noFit: true, mode: 'suspended', hangH: o.hangH || 0 });
+    }
     const sizes = (d) => { fit = rotCentered(fitToDims(unit, d), o.preRot); return bbox(fit).size; };
     const solve3 = (A, b) => { const det = (m) => m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]), D0 = det(A); if (Math.abs(D0) < 1e-12) return null;
       return [0, 1, 2].map(c => det(A.map((row, r) => row.map((v, k) => k === c ? b[r] : v))) / D0); };
@@ -2018,6 +2022,7 @@ function solveSeed(F, P, o) {
   };
   const trial = (Kc, sig, fp) => { const fr = fp ?? fair0; const u = seedCurve(F, P, Kc, N, sig); const pl = place(fr > 0 ? fairClosed(u, fr) : u); return { pl, r: minRadius(pl.lap, true), kc: Kc, sigma: sig, fair: fr }; };
   const s0 = P.sigma ?? 1;
+  if (o.lock) { const tl = trial(o.lock.kc, o.lock.sigma, o.lock.fair); return { f: tl.pl, r: tl.r, sigma: tl.sigma, kc: tl.kc, note: 'locked', fair: tl.fair, requested: kmax, limit }; }
   let t = trial(kmax, s0), note = 'fits';
   if (limit > 0 && t.r < limit) {
     let ok = null; const kmin = P.mode === 'plot' ? 2 : Math.max(2, W);
@@ -2736,7 +2741,8 @@ function buildPanel() {
     <div class="hint">Click any value in the title block to retype it. Clear it to leave it blank. Double-click its label to go back to automatic.</div>
 
     <div class="sub">Overall envelope (ft)</div>
-    ${C_('envView', 'Envelope follows the view axes', true, 'On: W is left to right, D is front to back, and H is up, as you see them in the model, after Turn and Tilt. Off: the envelope is applied before the form is turned (how older presets were built), so the axes can differ from the view. Older presets load with this off so they stay as drawn; turning it on sets the boxes to the current size of the form, but the shape can come out a little different.')}
+    ${C_('envLock', 'Keep the solved shape when the envelope changes', true, 'For a preset that has been drawn already. On: changing the envelope scales the form you have, so the length and loops change smoothly. Off: the shape is solved again for each new size, which can flip between very different forms near a bend limit.')}
+    ${C_('envView', 'Envelope follows the view axes', true, 'On: W is left to right, D is front to back, and H is up, as you see them in the model, after Turn and Tilt. Off: the envelope is applied before the form is turned (how older presets were built), so the axes can differ from the view. Older presets are switched on automatically with the boxes set to the size they already have, so they stay as drawn.')}
     <div class="row3">${N_('dimW', 'W (x)', 10, 2, 80, 0.5)}${N_('dimD', 'D (z)', 10, 2, 80, 0.5)}${N_('dimH', 'H (y)', 10, 1, 60, 0.5)}</div>
     <div class="hint" id="dimHint">Pipe thickness is included in these dimensions.</div>
     <div id="flareSlotForm"></div>
@@ -3075,13 +3081,30 @@ const lenOnEff = () => chk('lenOn') && $('lenAdapt').value !== 'free';
 const rotCentered = (pts, r) => { const c = [0, 0, 0]; pts.forEach(p => { for (let k = 0; k < 3; k++) c[k] += p[k] / pts.length; }); return rotateEuler(pts.map(p => [p[0] - c[0], p[1] - c[1], p[2] - c[2]]), r[0], r[1], r[2]); };
 document.addEventListener('input', (e) => { if (e.target && ['dimW', 'dimD', 'dimH'].includes(e.target.id)) state.pin = e.target.id; }, true);
 // turning the view-axes option on keeps the sculpture as it is: the three boxes take the size the form has in the view right now
+function makeAnchor(c) {
+  if (!c || !c.solved || !c.solved.f || !c.solved.f.closedFit || state.csvPoints || c.o.preRot) return null;
+  const P = c.P, R = [P.rx * D2R, P.ry * D2R, P.rz * D2R], u = c.solved.f.closedFit, dp = c.o.dimsC.slice();
+  const sz = (d) => bbox(rotCentered(fitToDims(u, d), R)).size, T = sz(dp), h = 0.02, J = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+  for (let j = 0; j < 3; j++) { const d2 = dp.slice(); d2[j] *= 1 + h; const S1 = sz(d2); for (let k = 0; k < 3; k++) J[k][j] = Math.log(S1[k] / T[k]) / Math.log(1 + h); }
+  const det = J[0][0] * (J[1][1] * J[2][2] - J[1][2] * J[2][1]) - J[0][1] * (J[1][0] * J[2][2] - J[1][2] * J[2][0]) + J[0][2] * (J[1][0] * J[2][1] - J[1][1] * J[2][0]);
+  if (!isFinite(det) || Math.abs(det) < 1e-6) return null;
+  const M = [[(J[1][1] * J[2][2] - J[1][2] * J[2][1]) / det, (J[0][2] * J[2][1] - J[0][1] * J[2][2]) / det, (J[0][1] * J[1][2] - J[0][2] * J[1][1]) / det],
+             [(J[1][2] * J[2][0] - J[1][0] * J[2][2]) / det, (J[0][0] * J[2][2] - J[0][2] * J[2][0]) / det, (J[0][2] * J[1][0] - J[0][0] * J[1][2]) / det],
+             [(J[1][0] * J[2][1] - J[1][1] * J[2][0]) / det, (J[0][1] * J[2][0] - J[0][0] * J[2][1]) / det, (J[0][0] * J[1][1] - J[0][1] * J[1][0]) / det]];
+  return { rot: R, dp, T, M, od: c.odFt, lock: { kc: c.solved.kc, sigma: c.solved.sigma, fair: c.solved.fair } };
+}
+function anchorEnv(c) {      // switch the view-axes option on for a form built the old way, keeping that form exactly
+  const a = makeAnchor(c); if (!a) return false; state.envAnchor = a;
+  const v = (x) => (Math.round((x + a.od) * 1000) / 1000).toString(); $('dimW').value = v(a.T[0]); $('dimD').value = v(a.T[2]); $('dimH').value = v(a.T[1]); return true;
+}
 function envFromForm(c) {
   if (!c || !c.form || !c.form.lap || state.csvPoints) return false;
   const mn = [1e9, 1e9, 1e9], mx = [-1e9, -1e9, -1e9]; c.form.lap.forEach(p => { for (let k = 0; k < 3; k++) { mn[k] = Math.min(mn[k], p[k]); mx[k] = Math.max(mx[k], p[k]); } });
   const v = (k) => (Math.round((mx[k] - mn[k] + c.odFt) * 100) / 100).toString();
   $('dimW').value = v(0); $('dimD').value = v(2); $('dimH').value = v(1); return true;
 }
-document.addEventListener('change', (e) => { if (e.target && e.target.id === 'envView' && e.target.checked && state.lastC && !state.lastC.o.preRot) { state.pin = state.pin || 'dimH'; envFromForm(state.lastC); } }, true);
+document.addEventListener('change', (e) => { if (e.target && e.target.id === 'envView' && e.target.checked && state.lastC && !state.lastC.o.preRot) { state.pin = state.pin || 'dimH'; if (!anchorEnv(state.lastC)) envFromForm(state.lastC); } }, true);
+function anchorDp(an, tg) { const l = tg.map((v, k) => Math.log(Math.max(1e-6, v) / an.T[k])); return [0, 1, 2].map(j => an.dp[j] * Math.exp(an.M[j][0] * l[0] + an.M[j][1] * l[1] + an.M[j][2] * l[2])); }
 function computeAll() {
   const st = getStock(), P = gatherParams(), odFt = st.odIn / 12, cOdFt = (st.contactOdIn || st.odIn) / 12, cGrowFt = (st.contactGrowIn ?? (st.contactOdIn || st.odIn)) / 12;
   let base = [num('dimW'), num('dimD'), num('dimH')];
@@ -3093,13 +3116,17 @@ function computeAll() {
   const planeOn = chk('planeOn'), postsOn = chk('postsOn'), planeFt = planeOn && !postsOn ? num('planeFt') : 0, frac = 0;   // with posts, grade stays at the floor and the form is lifted
   const o = { dimsC, mode: 'suspended', hangH: planeOn ? 0 : num('hangH'), limitFt, N: 480 };
   const preRot = chk('envView') && !state.csvPoints && !!(P.rx || P.ry || P.rz); if (preRot) o.preRot = [P.rx * D2R, P.ry * D2R, P.rz * D2R];
+  const an = preRot && state.envAnchor && state.envAnchor.rot.every((v, i) => Math.abs(v - o.preRot[i]) < 1e-9) ? state.envAnchor : null;
+  const limFor = (tgv, ls) => an && !csvLit ? num('smooth') / 100 * (Math.max(...[0, 2].map(j => anchorDp(an, tgv)[j])) + odFt) : limitFt * ls;      // an anchored preset keeps the smoothness limit it was drawn with
+  if (an) o.limitFt = limFor(dimsC, 1);
+  if (an && an.lock && chk('envLock')) o.lock = an.lock;      // keep the shape the preset was solved to, so resizing scales it smoothly instead of re-solving it
   if (state.csvPoints) { o.noFit = csvLit; o.open = chk('csvOpen'); o.unitFn = (sig, fair) => csvUnit(P, fair); }
   let solved, lenInfo = null;
   const lapLen = (lap) => { let s = 0; for (let i = 0; i < lap.length; i++) { const p = lap[i], q = lap[(i + 1) % lap.length]; s += Math.hypot(q[0] - p[0], q[1] - p[1], q[2] - p[2]); } return s; };
   if (state.csvPoints) solved = solveForm(Object.assign({}, P, { rx: 0, ry: 0, rz: 0, p: 1, q: 1 }), {}, o);   // csvUnit applies the rotation itself
   else if (lenOnEff()) {
     const target = num('pathLen'), adapt = $('lenAdapt').value, pinC = { dimW: 0, dimH: 1, dimD: 2 }[state.pin] ?? 1;
-    const run = (k, s) => { const sv = Array.isArray(s) ? s : [s, s, s], ls = Math.max(W * sv[0], D * sv[2]) / Math.max(W, D); const r = solveSeed(state.feat, Object.assign({}, P, { detail: k, relaxK: k }), Object.assign({}, o, { dimsC: dimsC.map((v, i) => v * sv[i]), limitFt: limitFt * ls })); r.len = lapLen(r.f.lap); r.sv = sv; return r; };
+    const run = (k, s) => { const sv = Array.isArray(s) ? s : [s, s, s], ls = Math.max(W * sv[0], D * sv[2]) / Math.max(W, D); const r = solveSeed(state.feat, Object.assign({}, P, { detail: k, relaxK: k }), Object.assign({}, o, { dimsC: dimsC.map((v, i) => v * sv[i]), limitFt: limFor(dimsC.map((v, i) => v * sv[i]), ls) })); r.len = lapLen(r.f.lap); r.sv = sv; return r; };
     // detail the form can carry before the data's pull is eased so far that it falls back to a flat ring
     let hiK = 2, rHiK = run(2, 1);
     for (const k of [3, 4, 5, 6, 8, 10, 12, 16]) { const r = run(k, 1); if (r.sigma < 0.5 * (P.sigma || 1)) break; hiK = k; rHiK = r; }
@@ -3109,12 +3136,18 @@ function computeAll() {
     let svF = [1, 1, 1];
     if (cap && adapt !== 'cap') {
       const k = cap === 'max' ? hiK : 2, mk = (g) => { const sv = [g, g, g]; if (adapt === 'pinned') sv[pinC] = 1; return sv; };
-      grow = 1; best = run(k, mk(1));
-      for (let it = 0; it < 10 && Math.abs(best.len / target - 1) > 0.003; it++) { grow = Math.max(0.15, Math.min(6, grow * Math.pow(target / best.len, adapt === 'pinned' ? 1.25 : 1))); best = run(k, mk(grow)); }
-      svF = mk(grow);
+      // the length can jump where the bend-radius easing switches on or off, so this brackets the target by stepping, then bisects, and keeps the closest result
+      grow = 1; best = run(k, mk(1)); let bestErr = Math.abs(best.len / target - 1), bestG = 1;
+      const probe = (g) => { const r = run(k, mk(g)), e = Math.abs(r.len / target - 1); if (e < bestErr) { bestErr = e; best = r; bestG = g; } return r.len - target; };
+      if (bestErr > 0.003) {
+        const up = best.len < target; let gA = 1, fA = best.len - target, gB = null;
+        for (let st = 0; st < 16 && gB === null && bestErr > 0.003; st++) { const g = gA * (up ? 1.1 : 1 / 1.1), f = probe(g); if (Math.sign(f) !== Math.sign(fA)) { gB = g; break; } gA = g; fA = f; }
+        if (gB !== null) { let lo = gA, hi = gB, flo = fA; for (let it = 0; it < 12 && bestErr > 0.003; it++) { const m = Math.sqrt(lo * hi), f = probe(m); if (Math.sign(f) === Math.sign(flo)) { lo = m; flo = f; } else hi = m; } }
+      }
+      grow = bestG; svF = mk(bestG);
     }
     solved = best; lenInfo = { target, got: best.len, cap, grow, lo: rLo.len, hi: rHi.len, sv: svF, pinned: adapt === 'pinned' && grow !== 1 ? pinC : -1 }; if (cap && grow !== 1 && Math.abs(grow - 1) < 0.02) lenInfo.cap = null;
-    o.dimsC = dimsC.map((v, i) => v * svF[i]); o.limitFt = limitFt * Math.max(W * svF[0], D * svF[2]) / Math.max(W, D);
+    o.dimsC = dimsC.map((v, i) => v * svF[i]); o.limitFt = limFor(o.dimsC, Math.max(W * svF[0], D * svF[2]) / Math.max(W, D));
   } else solved = solveSeed(state.feat, P, o);
   let f0 = solved.f, contacts = [], contactNotes = [];            // size and bends are solved before orienting
   const contactsEligible = ['round_smooth', 'corrugated', 'square', 'strand', 'truss'].includes($('profileType').value);
@@ -4210,6 +4243,7 @@ function wireTitleBlock() {
 }
 function updateReadouts(c, A) {
   state.lastC = c;
+  if (state.envConvert) { state.envConvert = false; if (anchorEnv(c)) { $('envView').checked = true; setTimeout(() => rebuild(), 0); } }
   const st = c.st, form = c.form, od = c.odFt, limit = c.pipeLimitFt, pl = c.plane;
   const all = [].concat(...A.dense.map(d => d.pts)), vis = pl.active ? all.filter(p => p[1] >= -0.001) : all;
   const bb = vis.length ? bbox(vis) : { size: [0, 0, 0], mx: [0, 0, 0] };
@@ -4814,7 +4848,7 @@ function collectConfig() {
     if (el.type === 'file' || el.id === 'audioScrubber') return;
     cfg[el.id] = el.type === 'checkbox' ? el.checked : el.value;
   });
-  cfg.projName = $('projName').value; cfg.siteName = $('siteName').value; cfg.views = state.views || []; cfg._tb = Object.assign({}, state.tbManual); return cfg;
+  cfg.projName = $('projName').value; cfg.siteName = $('siteName').value; cfg.views = state.views || []; cfg._tb = Object.assign({}, state.tbManual); if (state.envAnchor) cfg._envAnchor = state.envAnchor; return cfg;
 }
 function applyConfig(cfg) {
   if (cfg.postColor === undefined) cfg = Object.assign({}, cfg, { postColor: '#8d8780' });      // posts used to take the truss color; they now have their own
@@ -4825,7 +4859,7 @@ function applyConfig(cfg) {
   if (cfg.stripNarrowR === undefined) cfg = Object.assign({}, cfg, { stripNarrowR: 0, stripNarrowW: 1.25 });          // older presets keep every strip full width
   if (cfg.stripCoil === undefined) cfg = Object.assign({}, cfg, { stripCoil: false, stripCoilPitch: 6, stripCoilData: 40 });
   if (cfg.lenAdapt === undefined) cfg = Object.assign({}, cfg, { lenAdapt: cfg.lenGrow === false ? 'cap' : 'all' });      // older presets scaled all three together
-  if (cfg.envView === undefined) cfg = Object.assign({}, cfg, { envView: false });      // older presets are built exactly as they were drawn; the option can be turned on by hand
+  if (cfg.envView === undefined) { cfg = Object.assign({}, cfg, { envView: false }); state.envConvert = true; }      // older presets are built as drawn first; then the view-axes option is switched on with an anchor that reproduces that form
   if (cfg.stripCoilIn === undefined) cfg = Object.assign({}, cfg, { stripCoilIn: true });          // older presets run their strips along the bundle
   if (cfg.stripLean === undefined) cfg = Object.assign({}, cfg, { stripLean: 0 });          // older presets let each strip lean as its own bend wants
   if (cfg.stripLap === undefined) cfg = Object.assign({}, cfg, { stripLap: 0 });          // older presets keep strips edge to edge
@@ -4836,7 +4870,7 @@ function applyConfig(cfg) {
   if (cfg.patchOn === undefined) cfg = Object.assign({}, cfg, { patchOn: false });               // older presets keep their strips as they were
   if (cfg.flareTouch === undefined) cfg = Object.assign({}, cfg, { flareTouch: !(cfg.profileType === 'truss' || cfg.profileType === 'strand') });   // older truss and strand presets keep their saved form; single pipe now counts the flare
   if (cfg.trussStainless === false && (cfg.trussFinish || 'metal') === 'metal') cfg = Object.assign({}, cfg, { trussFinish: 'surface' });      // presets from before the finish menu had a third choice
-  state.tbManual = Object.assign({}, cfg._tb || {});
+  state.tbManual = Object.assign({}, cfg._tb || {}); state.envAnchor = cfg._envAnchor || null;
   if (cfg.strandSizes === undefined) $('strandSizes').value = '';
   if (cfg.views) { state.views = cfg.views; refreshViewChips(); }
   Object.keys(cfg).forEach(id => {
