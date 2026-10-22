@@ -3911,8 +3911,8 @@ function buildStrips(X) {
       const bayFt = (a, b2) => (ribF[b2] - ribF[a]) * sp - O.butt;
       const tryStrip = (rA, rb, forced, prevShares, nextShares, mode) => {   // mode 0: a planned strip, 1: test a patch, 2: build a patch
         const ov = (ribW / 2 + 1 / 12) / sp;
-        const fs = prevShares ? ribF[rA] + half : Math.max(0, ribF[rA] - ov), fe = nextShares ? ribF[rb] - half : Math.min(N - 1, ribF[rb] + ov), sLen = (fe - fs) * sp;
-        const i0 = Math.ceil(fs), i1 = Math.floor(fe);
+        const fs = prevShares ? ribF[rA] + half : closedG ? Math.max(0, ribF[rA] - ov) : ribF[rA] - ov, fe = nextShares ? ribF[rb] - half : closedG ? Math.min(N - 1, ribF[rb] + ov) : ribF[rb] + ov, sLen = (fe - fs) * sp;      // on an open path a strip on an end rib runs its 1" past the rib, beyond the end of the pipes
+        const i0 = Math.max(0, Math.ceil(fs)), i1 = Math.min(N - 1, Math.floor(fe));
         if (mode > 0 && (i1 - i0 < 2 || bayFt(rA, rb) < O.patchMin)) return false;
         if (mode === 2) forced = dev(Math.ceil(ribF[rA] + half), Math.floor(ribF[rb] - half)) > O.tol;
         let twM = 0, kEM = 0, kFM = 0;
@@ -3950,7 +3950,7 @@ function buildStrips(X) {
           if (mode === 1) return true;
           if (mode === 2) { if (O.showTw) twCol(); else { tmpC.copy(O.patchShow ? patchBase : O.byData ? dataCol() : base); tmpC.offsetHSL(0, 0, (prnd() - 0.5) * O.tone); } }
           for (let i = lo; i <= hi; i++) SS.maxLift = Math.max(SS.maxLift, LF[i]);
-          const LFat = (f) => { const i = Math.min(N - 2, Math.max(0, Math.floor(f))); return LF[i] + (LF[i + 1] - LF[i]) * (f - i); };
+          const LFat = (f0) => { const f = Math.min(N - 1, Math.max(0, f0)), i = Math.min(N - 2, Math.max(0, Math.floor(f))); return LF[i] + (LF[i + 1] - LF[i]) * (f - i); };
           const fl = [fs]; for (let i = Math.ceil(fs); i < fe - 1e-6; i += stride) if (i > fs + 1e-6) fl.push(i); fl.push(fe);
           const ring = fl.map(f => { const fr = frameAt(f), Pc = cAdj(f, fr).addScaledVector(fr.nrm, LFat(f)); return [-1, 1, 1, -1].map((sa, k) => Pc.clone().addScaledVector(fr.acr, sa * wS / 2).addScaledVector(fr.nrm, (k < 2 ? -1 : 1) * O.th / 2)); });
           // buildability: each stretch is fine, marginal, or too tight to bend sideways (edge strain = half the width over the radius), or twists too fast
