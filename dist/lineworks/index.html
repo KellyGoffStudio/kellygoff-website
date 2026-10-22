@@ -1997,7 +1997,25 @@ function seedCurve(F, P, Kc, N = 480, sigma = 1) {
 // Most detail the recording can carry while every turn stays graceful: first calm the detail, then ease the sound's amplitude
 function solveSeed(F, P, o) {
   const N = o.N || 480, limit = o.limitFt || 0, fair0 = Math.round(P.fairing || 0), kmax = Math.max(2, P.detail), W = Math.max(1, Math.round(P.loops || 3));
-  const place = (unit) => placeForm(o.preRot ? rotCentered(unit, o.preRot) : unit, { dimsC: o.dimsC, mode: 'suspended', hangH: o.hangH || 0 });
+  const Rm = o.preRot ? rotateEuler([[1, 0, 0], [0, 1, 0], [0, 0, 1]], o.preRot[0], o.preRot[1], o.preRot[2]) : null;      // Rm[j] = where the unit's j-th axis ends up
+  const place = (unit) => {
+    if (!o.preRot) return placeForm(unit, { dimsC: o.dimsC, mode: 'suspended', hangH: o.hangH || 0 });
+    // the envelope is measured in the view: find the pre-turn sizes that give exactly these view sizes once the form is turned
+    const tg = o.dimsC; let dp = tg.slice(), fit = null;
+    const sizes = (d) => { fit = rotCentered(fitToDims(unit, d), o.preRot); return bbox(fit).size; };
+    const solve3 = (A, b) => { const det = (m) => m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]), D0 = det(A); if (Math.abs(D0) < 1e-12) return null;
+      return [0, 1, 2].map(c => det(A.map((row, r) => row.map((v, k) => k === c ? b[r] : v))) / D0); };
+    for (let it = 0; it < 12; it++) {
+      const S0 = sizes(dp), e = [0, 1, 2].map(k => Math.log(tg[k] / Math.max(1e-9, S0[k])));
+      if (e.every(v => Math.abs(v) < 0.0015)) break;
+      const h = 0.02, J = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];                // J[k][j]: how view size k moves with pre-turn size j (in logs)
+      for (let j = 0; j < 3; j++) { const d2 = dp.slice(); d2[j] *= 1 + h; const S1 = sizes(d2); for (let k = 0; k < 3; k++) J[k][j] = Math.log(Math.max(1e-9, S1[k]) / Math.max(1e-9, S0[k])) / Math.log(1 + h); }
+      const dx = solve3(J, e); if (!dx) break;
+      for (let j = 0; j < 3; j++) dp[j] *= Math.exp(Math.max(-0.5, Math.min(0.5, dx[j])) * 0.9);
+    }
+    sizes(dp);
+    return placeForm(fit, { dimsC: o.dimsC, noFit: true, mode: 'suspended', hangH: o.hangH || 0 });
+  };
   const trial = (Kc, sig, fp) => { const fr = fp ?? fair0; const u = seedCurve(F, P, Kc, N, sig); const pl = place(fr > 0 ? fairClosed(u, fr) : u); return { pl, r: minRadius(pl.lap, true), kc: Kc, sigma: sig, fair: fr }; };
   const s0 = P.sigma ?? 1;
   let t = trial(kmax, s0), note = 'fits';
@@ -2718,7 +2736,7 @@ function buildPanel() {
     <div class="hint">Click any value in the title block to retype it. Clear it to leave it blank. Double-click its label to go back to automatic.</div>
 
     <div class="sub">Overall envelope (ft)</div>
-    ${C_('envView', 'Envelope follows the view axes', true, 'On: W is left to right, D is front to back, and H is up, as you see them in the model, after Turn and Tilt. Off: the envelope is applied before the form is turned (how older presets were built), so the axes can differ from the view.')}
+    ${C_('envView', 'Envelope follows the view axes', true, 'On: W is left to right, D is front to back, and H is up, as you see them in the model, after Turn and Tilt. Off: the envelope is applied before the form is turned (how older presets were built), so the axes can differ from the view. Older presets load with this off so they stay as drawn; turning it on sets the boxes to the current size of the form, but the shape can come out a little different.')}
     <div class="row3">${N_('dimW', 'W (x)', 10, 2, 80, 0.5)}${N_('dimD', 'D (z)', 10, 2, 80, 0.5)}${N_('dimH', 'H (y)', 10, 1, 60, 0.5)}</div>
     <div class="hint" id="dimHint">Pipe thickness is included in these dimensions.</div>
     <div id="flareSlotForm"></div>
@@ -3056,6 +3074,14 @@ function odGrowIn(st) { return st.profile === 'truss' ? st.ringOD : st.odIn; }  
 const lenOnEff = () => chk('lenOn') && $('lenAdapt').value !== 'free';
 const rotCentered = (pts, r) => { const c = [0, 0, 0]; pts.forEach(p => { for (let k = 0; k < 3; k++) c[k] += p[k] / pts.length; }); return rotateEuler(pts.map(p => [p[0] - c[0], p[1] - c[1], p[2] - c[2]]), r[0], r[1], r[2]); };
 document.addEventListener('input', (e) => { if (e.target && ['dimW', 'dimD', 'dimH'].includes(e.target.id)) state.pin = e.target.id; }, true);
+// turning the view-axes option on keeps the sculpture as it is: the three boxes take the size the form has in the view right now
+function envFromForm(c) {
+  if (!c || !c.form || !c.form.lap || state.csvPoints) return false;
+  const mn = [1e9, 1e9, 1e9], mx = [-1e9, -1e9, -1e9]; c.form.lap.forEach(p => { for (let k = 0; k < 3; k++) { mn[k] = Math.min(mn[k], p[k]); mx[k] = Math.max(mx[k], p[k]); } });
+  const v = (k) => (Math.round((mx[k] - mn[k] + c.odFt) * 100) / 100).toString();
+  $('dimW').value = v(0); $('dimD').value = v(2); $('dimH').value = v(1); return true;
+}
+document.addEventListener('change', (e) => { if (e.target && e.target.id === 'envView' && e.target.checked && state.lastC && !state.lastC.o.preRot) { state.pin = state.pin || 'dimH'; envFromForm(state.lastC); } }, true);
 function computeAll() {
   const st = getStock(), P = gatherParams(), odFt = st.odIn / 12, cOdFt = (st.contactOdIn || st.odIn) / 12, cGrowFt = (st.contactGrowIn ?? (st.contactOdIn || st.odIn)) / 12;
   let base = [num('dimW'), num('dimD'), num('dimH')];
@@ -4183,6 +4209,7 @@ function wireTitleBlock() {
   });
 }
 function updateReadouts(c, A) {
+  state.lastC = c;
   const st = c.st, form = c.form, od = c.odFt, limit = c.pipeLimitFt, pl = c.plane;
   const all = [].concat(...A.dense.map(d => d.pts)), vis = pl.active ? all.filter(p => p[1] >= -0.001) : all;
   const bb = vis.length ? bbox(vis) : { size: [0, 0, 0], mx: [0, 0, 0] };
@@ -4798,7 +4825,7 @@ function applyConfig(cfg) {
   if (cfg.stripNarrowR === undefined) cfg = Object.assign({}, cfg, { stripNarrowR: 0, stripNarrowW: 1.25 });          // older presets keep every strip full width
   if (cfg.stripCoil === undefined) cfg = Object.assign({}, cfg, { stripCoil: false, stripCoilPitch: 6, stripCoilData: 40 });
   if (cfg.lenAdapt === undefined) cfg = Object.assign({}, cfg, { lenAdapt: cfg.lenGrow === false ? 'cap' : 'all' });      // older presets scaled all three together
-  if (cfg.envView === undefined) cfg = Object.assign({}, cfg, { envView: false });      // older presets fitted the envelope before turning the form
+  if (cfg.envView === undefined) cfg = Object.assign({}, cfg, { envView: false });      // older presets are built exactly as they were drawn; the option can be turned on by hand
   if (cfg.stripCoilIn === undefined) cfg = Object.assign({}, cfg, { stripCoilIn: true });          // older presets run their strips along the bundle
   if (cfg.stripLean === undefined) cfg = Object.assign({}, cfg, { stripLean: 0 });          // older presets let each strip lean as its own bend wants
   if (cfg.stripLap === undefined) cfg = Object.assign({}, cfg, { stripLap: 0 });          // older presets keep strips edge to edge
