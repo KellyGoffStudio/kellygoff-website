@@ -1997,7 +1997,7 @@ function seedCurve(F, P, Kc, N = 480, sigma = 1) {
 // Most detail the recording can carry while every turn stays graceful: first calm the detail, then ease the sound's amplitude
 function solveSeed(F, P, o) {
   const N = o.N || 480, limit = o.limitFt || 0, fair0 = Math.round(P.fairing || 0), kmax = Math.max(2, P.detail), W = Math.max(1, Math.round(P.loops || 3));
-  const place = (unit) => placeForm(unit, { dimsC: o.dimsC, mode: 'suspended', hangH: o.hangH || 0 });
+  const place = (unit) => placeForm(o.preRot ? rotCentered(unit, o.preRot) : unit, { dimsC: o.dimsC, mode: 'suspended', hangH: o.hangH || 0 });
   const trial = (Kc, sig, fp) => { const fr = fp ?? fair0; const u = seedCurve(F, P, Kc, N, sig); const pl = place(fr > 0 ? fairClosed(u, fr) : u); return { pl, r: minRadius(pl.lap, true), kc: Kc, sigma: sig, fair: fr }; };
   const s0 = P.sigma ?? 1;
   let t = trial(kmax, s0), note = 'fits';
@@ -2700,7 +2700,8 @@ function buildPanel() {
     ${C_('flareOneEnd', 'Flare from one end only (open path)', false, 'For an open path. On: the bundle is smallest at the start of the path and widens evenly to the far end, instead of opening at both ends. The far-end size is the one set above.')}
     ${C_('lenOn', 'Set the path length', false, 'Finds the detail that gives this length inside the envelope.')}
     ${R('pathLen', 'Path length', 10, 250, 1, 60, v => ftIn(+v), 'Centerline length of the whole line.')}
-    ${C_('lenGrow', 'Let the envelope grow if needed', true, 'If the envelope cannot hold that length at any detail, the whole form scales up or down to reach it.')}
+    ${S_('lenAdapt', 'To hold the length, adapt', [['pinned', 'The other two dimensions (the one you just edited stays)'], ['all', 'All three dimensions together'], ['cap', 'Nothing (stay inside the envelope, even if short)'], ['free', 'Nothing: let the length grow with the envelope']], 'pinned')}
+    <div class="hint" style="margin-top:-3px">With "Set the path length" on and an envelope too small or too large for that length: scale the two dimensions you did not just edit, or all three together. The last option ignores the length target, so the path grows or shrinks with the envelope you type.</div>
     <div class="info" id="lenInfo">—</div>
     <div class="info" id="seedInfo">—</div>
     <div class="sub">Touch points</div>
@@ -2717,6 +2718,7 @@ function buildPanel() {
     <div class="hint">Click any value in the title block to retype it. Clear it to leave it blank. Double-click its label to go back to automatic.</div>
 
     <div class="sub">Overall envelope (ft)</div>
+    ${C_('envView', 'Envelope follows the view axes', true, 'On: W is left to right, D is front to back, and H is up, as you see them in the model, after Turn and Tilt. Off: the envelope is applied before the form is turned (how older presets were built), so the axes can differ from the view.')}
     <div class="row3">${N_('dimW', 'W (x)', 10, 2, 80, 0.5)}${N_('dimD', 'D (z)', 10, 2, 80, 0.5)}${N_('dimH', 'H (y)', 10, 1, 60, 0.5)}</div>
     <div class="hint" id="dimHint">Pipe thickness is included in these dimensions.</div>
     <div id="flareSlotForm"></div>
@@ -2963,7 +2965,7 @@ function updateVisibility() {
   show('g_narrowW', num('stripNarrowR') > 0);
   show('g_chord', chk('stripChord'));
   show('g_seed', $('trussDistribution').value === 'irregular'); show('g_wood', chk('woodOn')); show('g_fill', chk('woodOn')); { const tr = prof === 'truss', fin = $('trussFinish').value; show('g_trussColors', tr); show('g_trussColor', tr && fin === 'paint'); show('g_stripColor', tr && chk('stripOn')); show('g_patchColor', tr && chk('stripOn') && chk('patchOn') && chk('patchShow')); show('g_postColor', chk('postsOn')); show('g_patch', chk('patchOn')); { const mat = $('stripMat').value, acm = mat === 'acm3' || mat === 'acm4'; if (acm) { const tv = mat === 'acm3' ? '0.118' : '0.157'; if ($('stripT').value !== tv) $('stripT').value = tv; } else if ($('stripT').value === '0.118' || $('stripT').value === '0.157') $('stripT').value = '0.063'; $('stripT').disabled = acm; show('g_stripBar', mat === 'bar'); show('g_stripSheet', mat !== 'bar'); } show('g_stepStrips', prof === 'truss' && chk('stripOn')); show('g_flareWhole', prof === 'truss'); show('g_surface', !tr || fin === 'surface'); show('g_colorMode', !tr || fin === 'surface' || chk('stripOn')); } { const ro = $('ribOutside'); if (chk('stripOn')) ro.checked = true; ro.disabled = chk('stripOn'); } show('g_strip', chk('stripOn')); show('c_ribSpacing', !chk('ribAuto')); show('g_ribAuto', chk('ribAuto'));
-  $('detail').disabled = chk('lenOn'); $('pathLen').disabled = !chk('lenOn'); $('c_detail').style.opacity = chk('lenOn') ? .5 : 1; $('c_pathLen').style.opacity = chk('lenOn') ? 1 : .6; $('lenGrow').disabled = !chk('lenOn');
+  { const lo = chk('lenOn') && $('lenAdapt').value !== 'free'; $('detail').disabled = lo; $('pathLen').disabled = !chk('lenOn'); $('c_detail').style.opacity = lo ? .5 : 1; $('c_pathLen').style.opacity = chk('lenOn') ? 1 : .6; $('lenAdapt').disabled = !chk('lenOn'); }
   show('g_plane', planeOn); show('g_found', chk('foundOn') && !chk('postsOn')); show('g_susp', !planeOn); show('g_posts', chk('postsOn')); show('g_plates', chk('plateOn')); show('c_planeFt', !chk('postsOn'));
   $('exportRibs').disabled = prof !== 'truss'; $('exportStruct').disabled = prof !== 'truss';
   { const hl = $('strandSizes').value.trim() !== ''; $('strandCount').disabled = hl; $('c_strandCount').style.opacity = hl ? .5 : 1; }
@@ -3051,32 +3053,42 @@ function flareMult(odIn) {
 }
 // inches of overall OD that grow with each unit of flare (the whole pipe, except on a truss, where only the ring of tubes opens up)
 function odGrowIn(st) { return st.profile === 'truss' ? st.ringOD : st.odIn; }   // the far-end OD in inches is what is set; the growth factor follows from the pipe
+const lenOnEff = () => chk('lenOn') && $('lenAdapt').value !== 'free';
+const rotCentered = (pts, r) => { const c = [0, 0, 0]; pts.forEach(p => { for (let k = 0; k < 3; k++) c[k] += p[k] / pts.length; }); return rotateEuler(pts.map(p => [p[0] - c[0], p[1] - c[1], p[2] - c[2]]), r[0], r[1], r[2]); };
+document.addEventListener('input', (e) => { if (e.target && ['dimW', 'dimD', 'dimH'].includes(e.target.id)) state.pin = e.target.id; }, true);
 function computeAll() {
   const st = getStock(), P = gatherParams(), odFt = st.odIn / 12, cOdFt = (st.contactOdIn || st.odIn) / 12, cGrowFt = (st.contactGrowIn ?? (st.contactOdIn || st.odIn)) / 12;
   let base = [num('dimW'), num('dimD'), num('dimH')];
-  if (state.disp && ['dimW', 'dimD', 'dimH'].every((id, i) => $(id).value === state.disp.vals[i])) base = state.disp.base;   // inputs are showing a grown size; the base is what the user set
+  state.disp = null;      // the three boxes always hold what you typed; the size actually used is shown in the note below them
   const [W, D, H] = base;
   const dimsC = [Math.max(1, W - odFt), Math.max(0.5, H - odFt), Math.max(1, D - odFt)];
   const csvLit = !!state.csvPoints && !chk('csvShape');   // literal points keep their size, shape and smoothness
   const pipeLimitFt = csvLit ? 0 : st.minCenterIn / 12, limitFt = csvLit ? 0 : num('smooth') / 100 * Math.max(W, D);
   const planeOn = chk('planeOn'), postsOn = chk('postsOn'), planeFt = planeOn && !postsOn ? num('planeFt') : 0, frac = 0;   // with posts, grade stays at the floor and the form is lifted
   const o = { dimsC, mode: 'suspended', hangH: planeOn ? 0 : num('hangH'), limitFt, N: 480 };
+  const preRot = chk('envView') && !state.csvPoints && !!(P.rx || P.ry || P.rz); if (preRot) o.preRot = [P.rx * D2R, P.ry * D2R, P.rz * D2R];
   if (state.csvPoints) { o.noFit = csvLit; o.open = chk('csvOpen'); o.unitFn = (sig, fair) => csvUnit(P, fair); }
   let solved, lenInfo = null;
   const lapLen = (lap) => { let s = 0; for (let i = 0; i < lap.length; i++) { const p = lap[i], q = lap[(i + 1) % lap.length]; s += Math.hypot(q[0] - p[0], q[1] - p[1], q[2] - p[2]); } return s; };
   if (state.csvPoints) solved = solveForm(Object.assign({}, P, { rx: 0, ry: 0, rz: 0, p: 1, q: 1 }), {}, o);   // csvUnit applies the rotation itself
-  else if (chk('lenOn')) {
-    const target = num('pathLen');
-    const run = (k, s) => { const r = solveSeed(state.feat, Object.assign({}, P, { detail: k, relaxK: k }), Object.assign({}, o, { dimsC: dimsC.map(v => v * s), limitFt: limitFt * s })); r.len = lapLen(r.f.lap); return r; };
+  else if (lenOnEff()) {
+    const target = num('pathLen'), adapt = $('lenAdapt').value, pinC = { dimW: 0, dimH: 1, dimD: 2 }[state.pin] ?? 1;
+    const run = (k, s) => { const sv = Array.isArray(s) ? s : [s, s, s], ls = Math.max(W * sv[0], D * sv[2]) / Math.max(W, D); const r = solveSeed(state.feat, Object.assign({}, P, { detail: k, relaxK: k }), Object.assign({}, o, { dimsC: dimsC.map((v, i) => v * sv[i]), limitFt: limitFt * ls })); r.len = lapLen(r.f.lap); r.sv = sv; return r; };
     // detail the form can carry before the data's pull is eased so far that it falls back to a flat ring
     let hiK = 2, rHiK = run(2, 1);
     for (const k of [3, 4, 5, 6, 8, 10, 12, 16]) { const r = run(k, 1); if (r.sigma < 0.5 * (P.sigma || 1)) break; hiK = k; rHiK = r; }
     let lo = 2, hi = hiK, rLo = run(2, 1), rHi = rHiK, best, cap = null, grow = 1;
     if (target <= rLo.len) { best = rLo; cap = 'min'; } else if (target >= rHi.len) { best = rHi; cap = 'max'; }
     else { for (let it = 0; it < 7; it++) { const mid = (lo + hi) / 2, r = run(mid, 1); if (r.len < target) { lo = mid; rLo = r; } else { hi = mid; rHi = r; } } best = Math.abs(rLo.len - target) < Math.abs(rHi.len - target) ? rLo : rHi; }
-    if (cap && chk('lenGrow')) { const k = cap === 'max' ? hiK : 2; grow = target / best.len; best = run(k, grow); for (let it = 0; it < 2; it++) { grow *= target / best.len; best = run(k, grow); } }
-    solved = best; lenInfo = { target, got: best.len, cap, grow, lo: rLo.len, hi: rHi.len }; if (cap && grow !== 1 && Math.abs(grow - 1) < 0.02) lenInfo.cap = null;
-    o.dimsC = dimsC.map(v => v * grow); o.limitFt = limitFt * grow;
+    let svF = [1, 1, 1];
+    if (cap && adapt !== 'cap') {
+      const k = cap === 'max' ? hiK : 2, mk = (g) => { const sv = [g, g, g]; if (adapt === 'pinned') sv[pinC] = 1; return sv; };
+      grow = 1; best = run(k, mk(1));
+      for (let it = 0; it < 10 && Math.abs(best.len / target - 1) > 0.003; it++) { grow = Math.max(0.15, Math.min(6, grow * Math.pow(target / best.len, adapt === 'pinned' ? 1.25 : 1))); best = run(k, mk(grow)); }
+      svF = mk(grow);
+    }
+    solved = best; lenInfo = { target, got: best.len, cap, grow, lo: rLo.len, hi: rHi.len, sv: svF, pinned: adapt === 'pinned' && grow !== 1 ? pinC : -1 }; if (cap && grow !== 1 && Math.abs(grow - 1) < 0.02) lenInfo.cap = null;
+    o.dimsC = dimsC.map((v, i) => v * svF[i]); o.limitFt = limitFt * Math.max(W * svF[0], D * svF[2]) / Math.max(W, D);
   } else solved = solveSeed(state.feat, P, o);
   let f0 = solved.f, contacts = [], contactNotes = [];            // size and bends are solved before orienting
   const contactsEligible = ['round_smooth', 'corrugated', 'square', 'strand', 'truss'].includes($('profileType').value);
@@ -3088,7 +3100,7 @@ function computeAll() {
     } else contacts = findContacts(f0.lap, cOdFt, { flare: chk('flareTouch') ? flareMult(st.odIn) : 1, grow: cGrowFt }).contacts;
   }
   const cen = [0, 0, 0]; f0.lap.forEach(p => { for (let k = 0; k < 3; k++) cen[k] += p[k] / f0.lap.length; });
-  const rotated = f0.lap.map(p => p.slice()); const rot = (pts) => (P.rx || P.ry || P.rz) ? rotateEuler(pts.map(p => [p[0] - cen[0], p[1] - cen[1], p[2] - cen[2]]), P.rx * D2R, P.ry * D2R, P.rz * D2R).map(p => [p[0] + cen[0], p[1] + cen[1], p[2] + cen[2]]) : pts;
+  const rotated = f0.lap.map(p => p.slice()); const rot = (pts) => (!preRot && (P.rx || P.ry || P.rz)) ? rotateEuler(pts.map(p => [p[0] - cen[0], p[1] - cen[1], p[2] - cen[2]]), P.rx * D2R, P.ry * D2R, P.rz * D2R).map(p => [p[0] + cen[0], p[1] + cen[1], p[2] + cen[2]]) : pts;
   const lapR = rot(rotated); let ymin = 1e9; lapR.forEach(p => { ymin = Math.min(ymin, p[1]); });
   let dyBase = o.hangH - ymin;
   if (postsOn) {                                                // clear height is measured to the underside of the pipe, flare included
@@ -4246,17 +4258,14 @@ function updateReadouts(c, A) {
       if (!c.contacts.length) L.push('No strands come close enough to touch. Try other axes, a larger envelope, or more loops of the line.');
       ci.textContent = L.join('\n');
     } }
-  // envelope inputs show the grown size while the length control is growing it
-  { const li = c.lenInfo, ids = ['dimW', 'dimD', 'dimH'], same = state.disp && ids.every((id, i) => $(id).value === state.disp.vals[i]);
-    if (li && li.grow !== 1) {
-      const eff = [c.o.dimsC[0] + c.odFt, c.o.dimsC[2] + c.odFt, c.o.dimsC[1] + c.odFt].map(v => v.toFixed(1));
-      ids.forEach((id, i) => { $(id).value = eff[i]; }); state.disp = { vals: eff, base: c.base };
-      $('dimHint').textContent = `Showing the grown envelope (×${li.grow.toFixed(2)}). Your own envelope was ${c.base.map(v => ftIn(v)).join(' × ')}.`;
-    } else if (state.disp) { if (same) ids.forEach((id, i) => { $(id).value = String(state.disp.base[i]); }); state.disp = null; }
+  // the boxes keep what you typed; when the length target changed the size, say what is actually used
+  { const li = c.lenInfo, eff = [c.o.dimsC[0] + c.odFt, c.o.dimsC[2] + c.odFt, c.o.dimsC[1] + c.odFt];
+    if (li && li.grow !== 1) { const nm = ['W', 'H', 'D'][li.pinned] ;
+      $('dimHint').textContent = li.pinned >= 0 ? `To hold the path length, the form is using ${ftIn(eff[0])} W × ${ftIn(eff[1])} D × ${ftIn(eff[2])} H. The ${nm} you edited stays as typed; the other two adapted (×${li.grow.toFixed(2)}).` : `To hold the path length, the form is using ${ftIn(eff[0])} W × ${ftIn(eff[1])} D × ${ftIn(eff[2])} H (all three ×${li.grow.toFixed(2)}).`; }
   }
   // path length
   { const li = c.lenInfo, ln = $('lenInfo'), nowFt = c.lenNow;
-    if (!chk('lenOn') && nowFt > 0) { $('pathLen').value = Math.max(10, Math.min(250, Math.round(nowFt))); refreshLabels(); }
+    if (!lenOnEff() && nowFt > 0) { $('pathLen').value = Math.max(10, Math.min(250, Math.round(nowFt))); refreshLabels(); }
     if (state.csvPoints) ln.textContent = 'Imported points keep their own length.';
     else if (!li) ln.textContent = `Path length is ${ftIn(nowFt)} at this envelope and detail. Turn on "Set the path length" to aim for a length.`;
     else if (!li.cap) ln.textContent = `Path length ${ftIn(li.got)} reached at detail ${c.solved.kc.toFixed(1)} inside the envelope.`;
@@ -4788,6 +4797,8 @@ function applyConfig(cfg) {
   if (cfg.stripBuild === undefined) cfg = Object.assign({}, cfg, { stripBuild: false, stripBendR: 28 });
   if (cfg.stripNarrowR === undefined) cfg = Object.assign({}, cfg, { stripNarrowR: 0, stripNarrowW: 1.25 });          // older presets keep every strip full width
   if (cfg.stripCoil === undefined) cfg = Object.assign({}, cfg, { stripCoil: false, stripCoilPitch: 6, stripCoilData: 40 });
+  if (cfg.lenAdapt === undefined) cfg = Object.assign({}, cfg, { lenAdapt: cfg.lenGrow === false ? 'cap' : 'all' });      // older presets scaled all three together
+  if (cfg.envView === undefined) cfg = Object.assign({}, cfg, { envView: false });      // older presets fitted the envelope before turning the form
   if (cfg.stripCoilIn === undefined) cfg = Object.assign({}, cfg, { stripCoilIn: true });          // older presets run their strips along the bundle
   if (cfg.stripLean === undefined) cfg = Object.assign({}, cfg, { stripLean: 0 });          // older presets let each strip lean as its own bend wants
   if (cfg.stripLap === undefined) cfg = Object.assign({}, cfg, { stripLap: 0 });          // older presets keep strips edge to edge
