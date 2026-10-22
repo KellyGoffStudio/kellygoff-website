@@ -2697,6 +2697,7 @@ function buildPanel() {
     ${C_('reverse', 'Reverse direction', false)}
     ${C_('csvShape', 'Point file: shape it with the sliders', false, 'For an imported point file. On: the file is rotated, fitted to the envelope below, and held to the smoothness limit. Off: the points stay at their true size in feet.')}
     ${C_('csvOpen', 'Point file is an open path: ends free, not a loop', false, 'For an imported point file. On: the points run from one end to the other and the ends are left open, as for a single arc. Off: the last point joins back to the first.')}
+    ${C_('flareOneEnd', 'Flare from one end only (open path)', false, 'For an open path. On: the bundle is smallest at the start of the path and widens evenly to the far end, instead of opening at both ends. The far-end size is the one set above.')}
     ${C_('lenOn', 'Set the path length', false, 'Finds the detail that gives this length inside the envelope.')}
     ${R('pathLen', 'Path length', 10, 250, 1, 60, v => ftIn(+v), 'Centerline length of the whole line.')}
     ${C_('lenGrow', 'Let the envelope grow if needed', true, 'If the envelope cannot hold that length at any detail, the whole form scales up or down to reach it.')}
@@ -3478,7 +3479,7 @@ function buildPiece(piece, idx, X) {
   } else {
     const nF = Math.max(200, Math.ceil(length * 12 * (q < 1 ? 0.5 : 1)));
     const spaced = curve.getSpacedPoints(nF), frames = curve.computeFrenetFrames(nF, closed), cnt = closed ? nF : nF + 1;
-    const df = (i) => 1 + (X.flare - 1) * Math.pow(Math.min(1, spaced[i].distanceTo(X.centroid) / X.maxDist), 2.5);
+    const oneEnd = chk('flareOneEnd') && !closed, df = (i) => 1 + (X.flare - 1) * (oneEnd ? Math.min(1, i / Math.max(1, cnt - 1)) : Math.pow(Math.min(1, spaced[i].distanceTo(X.centroid) / X.maxDist), 2.5));
     const manual = num('rotZ') * 0;
     if (st.profile === 'strand') {
       const LY = st.strandLayout, n = LY.n, layout = $('strandLayoutMode').value, sep = num('strandSeparation');
