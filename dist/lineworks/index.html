@@ -4563,8 +4563,17 @@ async function exportPng() {
   if (!needForm()) return; const W0 = container.clientWidth, H0 = container.clientHeight, big = parseInt($('pngSize').value) || 6000, k = big / Math.max(W0, H0), w = Math.round(W0 * k), h = Math.round(H0 * k);
   const cam = camera.clone(); cam.copy(camera); cam.updateMatrixWorld(); if (cam.updateProjectionMatrix) cam.updateProjectionMatrix();
   setStatus('Rendering ' + w + ' × ' + h + '…'); await new Promise(r => setTimeout(r, 30));
-  try { const url = psClean(() => psRender({ w, h, cam, bg: null, opaque: false, clipGrade: false, keepGrid: false, keepSlab: false, keepRefs: false }));
-    const blob = await (await fetch(url)).blob(); saveBlob(blob, slug() + '_transparent_' + w + 'px.png'); setStatus(`PNG saved: ${w} × ${h}, transparent background, current view.`);
+  try {   // render in tiles (<=2048 px) so no GPU/canvas size limit can clip the frame, then stitch
+    const T = 2048, out = document.createElement('canvas'); out.width = w; out.height = h; const octx = out.getContext('2d');
+    for (let y = 0; y < h; y += T) for (let x = 0; x < w; x += T) {
+      const tw = Math.min(T, w - x), th = Math.min(T, h - y);
+      cam.setViewOffset(w, h, x, y, tw, th); cam.updateProjectionMatrix();
+      const url = psClean(() => psRender({ w: tw, h: th, cam, bg: null, opaque: false, clipGrade: false, keepGrid: false, keepSlab: false, keepRefs: false }));
+      const img = new Image(); img.src = url; await img.decode(); octx.drawImage(img, x, y);
+      setStatus('Rendering ' + w + ' × ' + h + '… ' + Math.round(100 * Math.min(1, (y * w + (x + tw) * th) / (w * h))) + '%'); await new Promise(r => setTimeout(r, 0));
+    }
+    const blob = await new Promise(res => out.toBlob(res, 'image/png')); if (!blob) throw new Error('canvas too large for this browser');
+    saveBlob(blob, slug() + '_transparent_' + w + 'px.png'); setStatus(`PNG saved: ${w} × ${h}, transparent background, current view.`);
   } catch (e) { console.error(e); setStatus('PNG export failed: ' + (e.message || e) + ' Try a smaller size.'); }
 }
 let stepLegend = null;
