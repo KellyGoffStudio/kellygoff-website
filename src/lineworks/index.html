@@ -2586,8 +2586,8 @@ function svgOutline(svg) {
 // ---- clean renders: no kink (amber) or clearance warnings on any sheet image ----
 function psClean(fn) {
   const ids = ['showKinks', 'showClear'].map($).filter(e => e && e.checked);
-  if (ids.length) { ids.forEach(e => { e.checked = false; }); buildScene(true); }
-  try { return fn(); } finally { if (ids.length) { ids.forEach(e => { e.checked = true; }); buildScene(true); } }
+  if (ids.length) { ids.forEach(e => { e.checked = false; }); buildScene(false); }   // full-detail build (rivets, fine strips), not the draft
+  try { return fn(); } finally { if (ids.length) { ids.forEach(e => { e.checked = true; }); buildScene(false); } }
 }
 // ---- offscreen rendering ----
 function psRender(opts) {            // {w,h,cam,bg,clipGrade,keepRefs,keepSlab,keepGrid,opaque}
@@ -4165,7 +4165,7 @@ function buildStrips(X) {
           if (O.lap > 0) { const k = ii % cntG, hw = (wS / 2) * Math.cos(a), ub = hw - lapCv[wi][0][k] - 0.5 / 12, lb = -(hw - lapCv[wi][1][k] - 0.5 / 12);      // and kept clear of any edge a neighbor lies over
             if (lapCv[wi][0][k] > 0 || lapCv[wi][1][k] > 0) { if (ub < lb) { o = (ub + lb) / 2; SS.lapRiv++; } else o = Math.max(lb, Math.min(ub, o)); } }
           return o; };
-        if (O.rivets && !draft) rf.forEach(f => { const fr = frameAt(f), Pr = fr.P.addScaledVector(fr.nrm, LFat(f) + O.th / 2).addScaledVector(fr.acr, pinOff(f)); addRivet(Pr, fr.nrm, fr.acr, fr.tn); });
+        if (O.rivets && !draft) rf.forEach(f => { const fr = frameAt(f), Pr = fr.P.addScaledVector(fr.nrm, LFat(f) + O.th).addScaledVector(fr.acr, pinOff(f)); addRivet(Pr, fr.nrm, fr.acr, fr.tn); });
         if (mode === 2) { SS.patched++; SS.patchFt += sLen; }
         { let mxA = 0; for (let i = i0; i <= i1; i++) { const a = Math.abs(alphaL[i]); mxA = Math.max(mxA, a); if (a > 0.087) { if (alphaL[i] * ekRaw[i] < 0) SS.inUp++; else SS.inDn++; } } if (mxA > 0.087) SS.louvN++; SS.maxTilt = Math.max(SS.maxTilt, mxA); }
         if (O.louv > 0 && O.louvR > 0 && kEM > 1 / O.louvR) SS.underTgt++;
@@ -4187,7 +4187,7 @@ function buildStrips(X) {
                 paint(j.ca[1]); paint(j.cb[0]); } } };
           if (nextShares) rec(rb, 'a', dE, [sIdx0, sIdxL]); if (prevShares) rec(rA, 'b', dS, [sIdx0, sIdxL]);
         }
-        A.stripPieces.push({ arcR: pcArc, arcOff: pcOff, ci: [sIdx0, sIdxL], w: wS * 12, lenFt: sLen, lane: wi, group: g, twDegFt: twM * 180 / Math.PI, over: twM > O.twLim, forced, patch: mode === 2, secs: ring.map(rg => rg.map(v => [v.x, v.y, v.z])), riv: rf.map(f => { const fr = frameAt(f), q = fr.P.addScaledVector(fr.nrm, LFat(f) + O.th / 2).addScaledVector(fr.acr, pinOff(f)); return { p: [q.x, q.y, q.z], n: [fr.nrm.x, fr.nrm.y, fr.nrm.z] }; }), col: '#' + tmpC.getHexString(), rivets: rf.length, rivetPts: rf.map(f => { const q = frameAt(f).P; return [q.x, q.y, q.z]; }), N });
+        A.stripPieces.push({ arcR: pcArc, arcOff: pcOff, ci: [sIdx0, sIdxL], w: wS * 12, lenFt: sLen, lane: wi, group: g, twDegFt: twM * 180 / Math.PI, over: twM > O.twLim, forced, patch: mode === 2, secs: ring.map(rg => rg.map(v => [v.x, v.y, v.z])), riv: rf.map(f => { const fr = frameAt(f), q = fr.P.addScaledVector(fr.nrm, LFat(f) + O.th).addScaledVector(fr.acr, pinOff(f)); return { p: [q.x, q.y, q.z], n: [fr.nrm.x, fr.nrm.y, fr.nrm.z] }; }), col: '#' + tmpC.getHexString(), rivets: rf.length, rivetPts: rf.map(f => { const q = frameAt(f).P; return [q.x, q.y, q.z]; }), N });
         return true;
       };
       // where a whole strip would run into another part of the truss, it is cut into patches: the longest runs of rib-to-rib spans that clear,
