@@ -2287,11 +2287,11 @@ function buildTakeoff() {
       stack = o.t + 0.25, rivSz = stack <= 0.34 ? '-6' : stack <= 0.47 ? '-8' : '-10', rivTxt = `roughly ${SS.rivets} rivets (3/16" large-flange, ${rivSz} grip)`;
     const widths = [...new Set(A.stripPieces.map(p => Math.round((p.w || o.w) * 1000) / 1000))].sort((x, y) => y - x);
     widths.forEach(wIn => {
-      const pcsW = A.stripPieces.map((p, i) => ({ p, i })).filter(r => Math.abs((r.p.w || o.w) - wIn) < 1e-3), items = pcsW.map(r => ({ id: 'S' + (r.i + 1), lenIn: r.p.lenFt * 12 })), wTxt = (+wIn).toFixed(3).replace(/0+$/, '').replace(/\.$/, ''),
+      const pcsW = A.stripPieces.map((p, i) => ({ p, i })).filter(r => Math.abs((r.p.w || o.w) - wIn) < 1e-3 && !(o.mat === 'mixed' && r.p.arcR)), items = pcsW.map(r => ({ id: 'S' + (r.i + 1), lenIn: r.p.lenFt * 12 })), wTxt = (+wIn).toFixed(3).replace(/0+$/, '').replace(/\.$/, ''),
         cnt = pcsW.length, rivNote = widths.length === 1 ? `, ${rivTxt}` : wIn === widths[0] ? `, ${rivTxt} for all widths` : '';
-      if (o.mat === 'bar') {
+      if (o.mat === 'bar' || o.mat === 'mixed' || o.mat === 'roll') {
         const capIn = o.stock * 12 - 1, bars = nestBars(items, capIn, TK.kerfIn), n = bars.length, n20 = Math.ceil(n * (1 + TK.extra) - 1e-9), lbFt = wIn / 12 * SS.psf;
-        order.groups.push({ type: 'strips', item: `6061 aluminum flat bar ${wTxt}" × ${tt}" — ${cnt} slat strips${rivNote}`, pcs: cnt, net: n, order: n20, unit: `× ${o.stock}' bars`, wt: n * o.stock * lbFt, wt20: n20 * o.stock * lbFt, usedIn: items.reduce((a, r) => a + r.lenIn, 0), bars, capIn });
+        order.groups.push({ type: 'strips', item: `6061 aluminum flat bar ${wTxt}" × ${tt}" — ${cnt} slat strips${o.mat === 'roll' ? ' (rolled on edge, +6" per end for the roller flat)' : ''}${rivNote}`, pcs: cnt, net: n, order: n20, unit: `× ${o.stock}' bars`, wt: n * o.stock * lbFt, wt20: n20 * o.stock * lbFt, usedIn: items.reduce((a, r) => a + r.lenIn, 0), bars, capIn });
       } else {
         const sheetIn = o.stock * 12, rows = Math.max(1, Math.floor((o.sheetW + TK.kerfIn) / (wIn + TK.kerfIn) + 1e-9)), bars = nestBars(items, sheetIn + TK.kerfIn, TK.kerfIn),
           n = Math.ceil(bars.length / rows - 1e-9), n20 = Math.ceil(n * (1 + TK.extra) - 1e-9), area = sheetIn * o.sheetW / 144, used = items.reduce((a, r) => a + r.lenIn, 0),
@@ -2299,6 +2299,10 @@ function buildTakeoff() {
         order.groups.push({ type: 'strips', sheet: true, item: `${matTxt}, ${szTxt} sheets, cut into ${wTxt}" strips — ${cnt} slat strips (${rows} per sheet width)${rivNote}`, pcs: cnt, net: n, order: n20, unit: `× ${szTxt} sheets`, wt: n * area * SS.psf, wt20: n20 * area * SS.psf, usedIn: used, bars, rows, offFt: (n * rows * sheetIn - used) / 12, mat: o.mat });
       }
     });
+    if (o.mat === 'mixed') { const arcs = A.stripPieces.map((p, i) => ({ p, i })).filter(r => r.p.arcR);
+      if (arcs.length) { const rads = [...new Set(arcs.map(r => r.p.arcR))].sort((a, b) => a - b), used = arcs.reduce((t, r) => t + r.p.lenFt * 12, 0), area = arcs.reduce((t, r) => t + r.p.lenFt * 12 * (o.w + TK.kerfIn), 0) / 144,
+          n = Math.max(1, Math.ceil(area / (16 * 0.9) - 1e-9)), n20 = Math.ceil(n * (1 + TK.extra) - 1e-9), sa = 16;
+        order.groups.push({ type: 'strips', sheet: true, arcs: true, item: `5052-H32 aluminum sheet ${tt}", 4 × 4 ft sheets, ${arcs.length} arc pieces cut ${(+o.w).toFixed(2).replace(/\.?0+$/, '')}" wide at ${rads.join(' and ')} ft radius (nest concentric, about 90% yield)`, pcs: arcs.length, net: n, order: n20, unit: '× 4 × 4 ft sheets', wt: n * sa * SS.psf, wt20: n20 * sa * SS.psf, usedIn: used, bars: [], rows: 0, offFt: Math.max(0, n * 48 * 4 - used / 12 * 0) * 0, mat: 'sheet' }); } }
   }
   const wood = pieces.filter(p => p.kind === 'wood');
   if (wood.length) {
@@ -2378,7 +2382,7 @@ function makeTakeoffSVGraw() {
     const isBar = g.type === 'bars' || g.type === 'strips', net = isBar ? `${g.net} ${g.unit}` : `${nf(g.net)} ${g.unit}`, ord = isBar ? `${g.order} ${g.unit}` : `${nf(g.order)} ${g.unit}`;
     svg += `<text x="${cols[1]}" y="${y}" class="row">${g.pcs}</text><text x="${cols[2]}" y="${y}" class="row">${net}</text><text x="${cols[3]}" y="${y}" class="rowb">${ord}</text><text x="${cols[4]}" y="${y}" class="row">${lb(g.wt)}</text><text x="${cols[5]}" y="${y}" class="row">${lb(g.wt20)}</text>`;
     if (g.type === 'wood' && g.byLen) svg += `<text x="${cols[0]}" y="${y + lines.length * 10}" class="tn">${Object.keys(g.byLen).sort((a, b) => a - b).map(kk => `${g.byLen[kk]} × ${kk}'`).join('   ')}  ·  gross board feet incl. 3" trim per piece</text>`;
-    else if (g.type === 'strips') svg += `<text x="${cols[0]}" y="${y + lines.length * 10}" class="tn">${g.sheet ? `${fi(g.usedIn)} of cut strips on ${g.net} sheets (${g.offFt.toFixed(0)}' of offcut in ${g.rows} strip lanes per sheet)` : `${fi(g.usedIn)} of cut strips on ${g.net} bars (${((g.net * g.capIn - g.usedIn) / 12).toFixed(1)}' of offcut)`}</text>`;
+    else if (g.type === 'strips') svg += `<text x="${cols[0]}" y="${y + lines.length * 10}" class="tn">${g.arcs ? `${fi(g.usedIn)} of arc pieces on ${g.net} sheets` : g.sheet ? `${fi(g.usedIn)} of cut strips on ${g.net} sheets (${g.offFt.toFixed(0)}' of offcut in ${g.rows} strip lanes per sheet)` : `${fi(g.usedIn)} of cut strips on ${g.net} bars (${((g.net * g.capIn - g.usedIn) / 12).toFixed(1)}' of offcut)`}</text>`;
     else svg += `<text x="${cols[0]}" y="${y + lines.length * 10}" class="tn">${g.usedIn ? `${fi(g.usedIn)} of cut pieces on ${g.net} bars (${(g.net * 96 - g.usedIn / 1 > 0 ? ((g.net * 96 - g.usedIn) / 12).toFixed(1) : 0)}' of usable offcut)` : ''}</text>`;
     y += lines.length * 10 + 14; tPcs += g.pcs; tWt += g.wt; tWt20 += g.wt20;
     if (g.type === 'bars') { tBars += g.net; tBars20 += g.order; } else if (g.type === 'strips') { tStr += g.net; tStr20 += g.order; } else { tBf += g.net; tBf20 += g.order; }
@@ -2856,9 +2860,15 @@ function buildPanel() {
         ${R('stripLean', 'Neighbors lean the same way', 0, 50, 5, 0, v => +v === 0 ? 'Off' : 'Edge bend up to ' + v + '% tighter', 'Louvre strips nest (the high edge of one over the low edge of the next, like slats) only when neighbors lean the same way. Where a strip would lean against its neighbors, it is turned to lean with them, or laid flat, as long as its sideways bend stays within this much of the target. Costs a little edge bend where it is used; saves lifting one strip over another. Needs the overlap setting above.')}
         ${R('stripW', 'Strip width', 1, 4, 0.25, 2, v => (+v).toFixed(2).replace(/\.?0+$/, '') + '"')}
         ${S_('stripT', 'Strip thickness', [['0.063', '0.063" (about 16 ga)'], ['0.08', '0.080"'], ['0.1', '0.100"'], ['0.125', '1/8"'], ['0.1875', '3/16"'], ['0.25', '1/4"'], ['0.118', '3 mm ACM (0.118")'], ['0.157', '4 mm ACM (0.157")']], '0.125')}
-        ${S_('stripMat', 'Strip material', [['bar', 'Aluminum flat bar sticks'], ['sheet', 'Aluminum sheet, cut into strips'], ['acm3', 'ACM, 3 mm (factory finish)'], ['acm4', 'ACM, 4 mm (factory finish)']], 'bar')}
+        ${S_('stripMat', 'Strip material', [['bar', 'Aluminum flat bar sticks'], ['roll', 'Flat bar, rolled on edge to the curve'], ['mixed', 'Mixed: straight bar + arcs cut from 4 × 4 ft sheet'], ['sheet', 'Aluminum sheet, cut into strips'], ['acm3', 'ACM, 3 mm (factory finish)'], ['acm4', 'ACM, 4 mm (factory finish)']], 'bar')}
         <div id="g_stripBar">${S_('stripStock', 'Flat bar stock length', [['12', "12' sticks"], ['20', "20' sticks"]], '12')}</div>
         <div id="g_stripSheet">${S_('stripSheet', 'Sheet size', [['8:48', "4 × 8 ft"], ['10:48', "4 × 10 ft"], ['10:60', "5 × 10 ft"]], '8:48')}</div>
+        <div id="g_roll">${R('rollR', 'Tightest edge radius the roller does', 3, 30, 0.5, 6, v => v + ' ft', 'A 1/8 × 2 ruler rolled on edge to about 5 ft in a homemade roller, with 30 to 35 degrees of tilt coming out of it. Strips are tilted only as needed to stay at or above this radius, and cut short where the bend would still be tighter. Pieces are grouped into roller settings in the strip panel.')}</div>
+        <div id="g_mixed">${R('arcR1', 'Cut arc radius A', 2, 30, 0.5, 6, v => v + ' ft', 'First radius cut from 4 × 4 ft sheet (5052-H32 is easier to form flatwise than 6061-T6). Concentric arcs nest with no waste: cut the second radius from the same family of bands so the offcut of one is the other.')}
+        ${R('arcR2', 'Cut arc radius B', 2, 40, 0.5, 15, v => v + ' ft', 'Second radius. On the Basalt and Ann Arbor presets, 6 and 15 ft worked best of the pairs tried, but a piece must match a radius along its whole length, so expect some pieces (magenta) to miss both; the strip panel counts them. 0 turns this radius off.')}
+        ${R('arcR3', 'Cut arc radius C (optional)', 0, 30, 0.5, 0, v => +v === 0 ? 'Off' : v + ' ft', 'A third radius, for the stretches that sit between A and B. Off keeps it to straight stock plus two radii. The strip panel says how much length misses every radius, so you can see whether a third pays for itself.')}
+        ${R('arcMax', 'Longest arc piece', 2, 4, 0.5, 4, v => v + "'", 'Arc pieces are cut from a 4 × 4 ft sheet, so they cannot be longer than the sheet. Straight pieces follow the stock length and the longest-strip setting.')}
+        ${C_('arcCol', 'Color pieces by type: straight, radius A, radius B, off-radius', true)}</div>
         ${R('stripMinLen', 'Shortest strip', 1.5, 12, 0.5, 5, v => v + "'")}
         ${R('stripMaxLen', 'Longest strip', 4, 8, 0.5, 8, v => v + "'", 'Held under the stock length, with 6" for trim on flat bar. Cut from sheet, a strip can be as long as the sheet.')}
         ${R('stripGap', 'Gap between strip ends', 0, 3, 0.25, 0.5, v => (+v).toFixed(2) + '"')}
@@ -2882,7 +2892,7 @@ function buildPanel() {
         ${C_('stripByData', 'Color each strip by the Color mode', true, 'Each strip takes one color from the Color mode (the main value along the path, elevation, or spectral), read at its middle. Off: all strips use the strip color.')}
         ${R('stripSeed', 'Strip layout (re-roll)', 1, 40, 1, 11, v => v, 'Changes where the strips start and stop.')}
         ${R('stripEdgeTol', 'Edge-bend tolerance', 0.25, 3, 0.25, 1, v => (+v).toFixed(2) + '"', 'Flat bar cannot bend in its own plane. Strips are cut shorter wherever the path curves sideways more than this away from a straight line.')}
-        ${R('stripTwistLim', 'Hand-twist limit', 5, 60, 1, 20, v => v + '°/ft', 'Strips twisting faster than this are marked and need to be pre-rolled. About 20 to 30°/ft is the elastic limit for 2" × 1/8" aluminum.')}
+        ${R('stripTwistLim', 'Hand-twist limit', 5, 60, 1, 35, v => v + '°/ft', 'Strips twisting faster than this are marked and need to be pre-rolled. A 2" × 1/8" ruler twisted 180° over 46" (about 47°/ft) sprang back nearly flat, so 35°/ft keeps a margin.')}
         ${R('stripTone', 'Batch variation', 0, 30, 1, 10, v => v + '%', 'Small lightness changes from strip to strip.')}
         ${C_('stripShowTwist', 'Color strips by twist (green, amber, red)', false)}
         ${C_('stripBuild', 'Buildability check: form white, strips colored by how they can be made', false)}
@@ -2988,7 +2998,7 @@ function updateVisibility() {
   show('g_louvR', num('stripLouvre') > 0);
   show('g_narrowW', num('stripNarrowR') > 0);
   show('g_chord', chk('stripChord'));
-  show('g_seed', $('trussDistribution').value === 'irregular'); show('g_wood', chk('woodOn')); show('g_fill', chk('woodOn')); { const tr = prof === 'truss', fin = $('trussFinish').value; show('g_trussColors', tr); show('g_trussColor', tr && fin === 'paint'); show('g_stripColor', tr && chk('stripOn')); show('g_patchColor', tr && chk('stripOn') && chk('patchOn') && chk('patchShow')); show('g_postColor', chk('postsOn')); show('g_patch', chk('patchOn')); { const mat = $('stripMat').value, acm = mat === 'acm3' || mat === 'acm4'; if (acm) { const tv = mat === 'acm3' ? '0.118' : '0.157'; if ($('stripT').value !== tv) $('stripT').value = tv; } else if ($('stripT').value === '0.118' || $('stripT').value === '0.157') $('stripT').value = '0.063'; $('stripT').disabled = acm; show('g_stripBar', mat === 'bar'); show('g_stripSheet', mat !== 'bar'); } show('g_stepStrips', prof === 'truss' && chk('stripOn')); show('g_flareWhole', prof === 'truss'); show('g_surface', !tr || fin === 'surface'); show('g_colorMode', !tr || fin === 'surface' || chk('stripOn')); } { const ro = $('ribOutside'); if (chk('stripOn')) ro.checked = true; ro.disabled = chk('stripOn'); } show('g_strip', chk('stripOn')); show('c_ribSpacing', !chk('ribAuto')); show('g_ribAuto', chk('ribAuto'));
+  show('g_seed', $('trussDistribution').value === 'irregular'); show('g_wood', chk('woodOn')); show('g_fill', chk('woodOn')); { const tr = prof === 'truss', fin = $('trussFinish').value; show('g_trussColors', tr); show('g_trussColor', tr && fin === 'paint'); show('g_stripColor', tr && chk('stripOn')); show('g_patchColor', tr && chk('stripOn') && chk('patchOn') && chk('patchShow')); show('g_postColor', chk('postsOn')); show('g_patch', chk('patchOn')); { const mat = $('stripMat').value, acm = mat === 'acm3' || mat === 'acm4'; if (acm) { const tv = mat === 'acm3' ? '0.118' : '0.157'; if ($('stripT').value !== tv) $('stripT').value = tv; } else if ($('stripT').value === '0.118' || $('stripT').value === '0.157') $('stripT').value = '0.063'; $('stripT').disabled = acm; show('g_stripBar', mat === 'bar' || mat === 'mixed' || mat === 'roll'); show('g_stripSheet', mat !== 'bar' && mat !== 'mixed' && mat !== 'roll'); show('g_mixed', mat === 'mixed'); show('g_roll', mat === 'roll'); } show('g_stepStrips', prof === 'truss' && chk('stripOn')); show('g_flareWhole', prof === 'truss'); show('g_surface', !tr || fin === 'surface'); show('g_colorMode', !tr || fin === 'surface' || chk('stripOn')); } { const ro = $('ribOutside'); if (chk('stripOn')) ro.checked = true; ro.disabled = chk('stripOn'); } show('g_strip', chk('stripOn')); show('c_ribSpacing', !chk('ribAuto')); show('g_ribAuto', chk('ribAuto'));
   { const lo = chk('lenOn') && $('lenAdapt').value !== 'free'; $('detail').disabled = lo; $('pathLen').disabled = !chk('lenOn'); $('c_detail').style.opacity = lo ? .5 : 1; $('c_pathLen').style.opacity = chk('lenOn') ? 1 : .6; $('lenAdapt').disabled = !chk('lenOn'); }
   show('g_plane', planeOn); show('g_found', chk('foundOn') && !chk('postsOn')); show('g_susp', !planeOn); show('g_posts', chk('postsOn')); show('g_plates', chk('plateOn')); show('c_planeFt', !chk('postsOn'));
   $('exportRibs').disabled = prof !== 'truss'; $('exportStruct').disabled = prof !== 'truss';
@@ -3869,11 +3879,13 @@ function buildPiece(piece, idx, X) {
 // ---------------------------------------------------------------------
 function buildStrips(X) {
   const A = X.A, draft = X.qMul < 1;
-  const O = { w: num('stripW') / 12, th: parseFloat($('stripT').value) / 12, stock: $('stripMat').value === 'bar' ? parseFloat($('stripStock').value) : parseFloat($('stripSheet').value.split(':')[0]), mat: $('stripMat').value, sheetW: $('stripMat').value === 'bar' ? 0 : parseFloat($('stripSheet').value.split(':')[1]),
+  const O = { w: num('stripW') / 12, th: parseFloat($('stripT').value) / 12, stock: ($('stripMat').value === 'bar' || $('stripMat').value === 'mixed' || $('stripMat').value === 'roll') ? parseFloat($('stripStock').value) : parseFloat($('stripSheet').value.split(':')[0]), mat: $('stripMat').value, sheetW: ($('stripMat').value === 'bar' || $('stripMat').value === 'mixed' || $('stripMat').value === 'roll') ? 0 : parseFloat($('stripSheet').value.split(':')[1]),
     minLen: num('stripMinLen'), maxLen: num('stripMaxLen'), butt: num('stripGap') / 12, skip: num('stripSkip') / 100, gaps: num('stripGaps') / 100, tol: num('stripEdgeTol') / 12,
     twLim: num('stripTwistLim') * Math.PI / 180, lap: num('stripLap') / 12, lean: num('stripLean') / 100, louv: num('stripLouvre') * Math.PI / 180, louvR: num('stripLouvreR'), build: chk('stripBuild'), chord: chk('stripChord'), wedge: num('stripWedge') / 12, miterMax: num('stripMiterMax') * Math.PI / 180, bendR: num('stripBendR'), nR: num('stripNarrowR'), wN: num('stripNarrowW') / 12, tone: num('stripTone') / 100, every: Math.max(1, parseInt($('rivetEvery').value)), rivets: chk('stripRivets'), showTw: chk('stripShowTwist'), flat: false,
     patch: chk('patchOn'), patchShow: chk('patchShow'), patchMin: num('patchMin') / 12, byData: chk('stripByData') && $('colorMode').value !== 'solid', cmode: $('colorMode').value };
-  O.maxLen = Math.min(O.maxLen, O.stock - (O.mat === 'bar' ? 0.5 : 0)); O.minLen = Math.min(O.minLen, O.maxLen);
+  O.mixed = O.mat === 'mixed'; if (O.mixed) { O.arcR = [num('arcR1'), num('arcR2'), num('arcR3')].filter(r => r > 0); O.arcMax = num('arcMax'); O.arcCol = chk('arcCol'); O.chord = false; O.mat = 'mixed'; }
+  O.roll = O.mat === 'roll'; if (O.roll) { O.bendR = num('rollR'); O.louvR = O.louv > 0 ? O.bendR : 0; O.chord = false; O.tol = 1e9; }      // rolled on edge: the bar follows the curve, so only the roller's tightest radius limits a piece
+  O.maxLen = Math.min(O.maxLen, O.stock - (O.mat === 'bar' || O.mixed || O.roll ? 0.5 : 0)); O.minLen = Math.min(O.minLen, O.maxLen);
   O.coil = chk('stripCoil'); if (O.coil) { O.maxLen = O.stock - (O.mat === 'bar' ? 0.5 : 0); O.minLen = Math.min(O.minLen, 4); O.tol = 1e9; O.chord = false; }      // a coil is long by nature, and its edge bend is judged by the strain check, not by the straight-chord cutback
   let seed = (parseInt($('stripSeed').value) * 7919 + 13) % 4294967296;
   const rnd = () => { seed = (seed * 1664525 + 1013904223) % 4294967296; return seed / 4294967296; }, rr = (a, b) => a + (b - a) * rnd();
@@ -3903,7 +3915,7 @@ function buildStrips(X) {
     return lift; };
   const JC = [new THREE.Color(0x14b8a6), new THREE.Color(0x8e44ad)];
   const joints = new Map();
-  const SS = { jn: [0, 0, 0], maxMiter: 0, maxTurn: 0, chord2: 0, bl: [0, 0, 0, 0], bc: [0, 0, 0, 0], narrowStill: 0, narrowN: 0, narrowFt: 0, maxEdgeStrain: 0, wFtIn: 0, underTgt: 0, louvN: 0, maxTilt: 0, inUp: 0, inDn: 0, count: 0, lengthened: 0, dropped: 0, totalFt: 0, maxTw: 0, over: 0, minEdgeR: 1e9, forced: 0, rivets: 0, minFlatR: 1e9, maxLift: 0, blocked: 0, patched: 0, patchFt: 0, patchOpen: 0, lanes: A.stripLanes.length, lapFt: 0, lapNat: 0, lapFor: 0, maxLap: 0, maxLapLift: 0, covSum: 0, covN: 0, lapRiv: 0, lapLiftFt: 0, leanFt: 0 };
+  const SS = { jn: [0, 0, 0], maxMiter: 0, maxTurn: 0, chord2: 0, bl: [0, 0, 0, 0], bc: [0, 0, 0, 0], narrowStill: 0, narrowN: 0, narrowFt: 0, maxEdgeStrain: 0, wFtIn: 0, underTgt: 0, louvN: 0, maxTilt: 0, inUp: 0, inDn: 0, count: 0, lengthened: 0, dropped: 0, totalFt: 0, maxTw: 0, over: 0, minEdgeR: 1e9, forced: 0, rivets: 0, minFlatR: 1e9, maxLift: 0, blocked: 0, patched: 0, patchFt: 0, patchOpen: 0, lanes: A.stripLanes.length, lapFt: 0, lapNat: 0, lapFor: 0, maxLap: 0, maxLapLift: 0, covSum: 0, covN: 0, lapRiv: 0, lapLiftFt: 0, leanFt: 0, mix: { sN: 0, sFt: 0, a: {}, off: 0, offFt: 0 }, roll: { n: [0, 0, 0, 0, 0], ft: [0, 0, 0, 0, 0], minR: 1e9 } };
   const groups = [...new Set(A.stripLanes.map(l => l.group))];
   groups.forEach(g => {
     const lanes = A.stripLanes.filter(l => l.group === g), closedG = !!lanes[0].closed, N = lanes[0].cnt * (closedG ? 2 : 1), nF = lanes[0].nF, Lp = lanes[0].L, ribsG = A.ribs.filter(r => r.group === g);
@@ -3927,8 +3939,17 @@ function buildStrips(X) {
         for (let i = 0; i < N; i++) { const a = Math.max(0, i - kk), b = Math.min(N - 1, i + kk), ds = S[b] - S[a]; if (ds < 1e-6) continue; const dT = T[b].clone().sub(T[a]); const ek = dT.dot(AC[i]) / ds, fk = dT.dot(NR[i]) / ds, m = Math.hypot(ek, fk), th = Math.atan2(ek, fk); ekRaw[i] = ek; mgn[i] = m; cs[i] = m * Math.cos(2 * th); sn[i] = m * Math.sin(2 * th); }
         for (let i = 0; i < N; i++) { let c = 0, q = 0, mS = 0, nn = 0; for (let j = Math.max(0, i - 12); j <= Math.min(N - 1, i + 12); j++) { c += cs[j]; q += sn[j]; mS += mgn[j]; nn++; }
           const th = 0.5 * Math.atan2(q, c), mA = mS / nn; let a = th; thI[i] = th; mAI[i] = mA;
-          if (O.louvR > 0) { const kt = 1 / (1.15 * O.louvR); a = mA * Math.abs(Math.sin(th)) <= kt ? 0 : th - Math.sign(th) * Math.asin(Math.min(1, kt / mA)); }      // just enough tilt to bring the edge bend down to the target radius
+          if (O.mixed) a = 0;      // chosen along the whole lane below, so a piece does not flip between targets
+          else if (O.louvR > 0) { const kt = 1 / (1.15 * O.louvR); a = mA * Math.abs(Math.sin(th)) <= kt ? 0 : th - Math.sign(th) * Math.asin(Math.min(1, kt / mA)); }      // just enough tilt to bring the edge bend down to the target radius
           alphaL[i] = Math.sign(a) * Math.min(Math.abs(a), O.louv); }
+        if (O.mixed) {      // each station is served by straight stock or one cut radius (either way round); tilt just enough to bring the edge bend onto it, and keep the choice steady along the lane
+          const kt = 0.5 / O.bendR, tg = [0]; O.arcR.forEach(r => { tg.push(1 / r, -1 / r); }); const nS = tg.length, cost = new Float64Array(N * nS), bp = new Int8Array(N * nS), al = new Float64Array(N * nS), SW = 12;
+          for (let i = 0; i < N; i++) { const m = mAI[i], th = thI[i], k0 = m * Math.sin(th);
+            for (let q = 0; q < nS; q++) { let a2 = 0, c2; if (m > 1e-6) { const kk2 = Math.max(tg[q] - kt, Math.min(tg[q] + kt, k0)); a2 = th - Math.asin(Math.max(-1, Math.min(1, kk2 / m))); a2 = Math.sign(a2) * Math.min(Math.abs(a2), O.louv); }
+              const kr = m * Math.sin(th - a2); c2 = 1000 * Math.max(0, Math.abs(kr - tg[q]) - kt) + 20 * Math.abs(a2); al[i * nS + q] = a2;
+              if (i === 0) { cost[q] = c2; continue; } let b = 1e18, bq = 0; for (let p = 0; p < nS; p++) { const v = cost[(i - 1) * nS + p] + (p === q ? 0 : SW) + 4000 * Math.max(0, Math.abs(al[i * nS + q] - al[(i - 1) * nS + p]) - 0.8 * O.twLim * sp); if (v < b) { b = v; bq = p; } } cost[i * nS + q] = b + c2; bp[i * nS + q] = bq; } }
+          let q = 0, bv = 1e18; for (let p = 0; p < nS; p++) if (cost[(N - 1) * nS + p] < bv) { bv = cost[(N - 1) * nS + p]; q = p; }
+          for (let i = N - 1; i >= 0; i--) { alphaL[i] = al[i * nS + q]; q = bp[i * nS + q]; } }
         if (ov) for (let i = 0; i < N; i++) alphaL[i] = ov[i];
         const ms = 0.8 * O.twLim * sp;                                                             // the tilt may not change faster than the hand-twist limit allows
         for (let i = 1; i < N; i++) alphaL[i] = Math.max(alphaL[i - 1] - ms, Math.min(alphaL[i - 1] + ms, alphaL[i]));
@@ -3939,9 +3960,9 @@ function buildStrips(X) {
       const phi = new Float64Array(N); { const b = NR[0].clone(); let pa = 0;
         for (let i = 1; i < N; i++) { b.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(T[i - 1], T[i])); b.sub(T[i].clone().multiplyScalar(b.dot(T[i]))).normalize();
           let a = Math.atan2(b.clone().cross(NR[i]).dot(T[i]), b.dot(NR[i])); while (a - pa > Math.PI) a -= 2 * Math.PI; while (a - pa < -Math.PI) a += 2 * Math.PI; phi[i] = a; pa = a; } }
-      const kw = 12, kE = new Float32Array(N), kF = new Float32Array(N), tw = new Float32Array(N);
-      for (let i = 0; i < N; i++) { const a = Math.max(0, i - kw), b = Math.min(N - 1, i + kw), ds = S[b] - S[a]; if (ds < 1e-6) continue; const dT = T[b].clone().sub(T[a]); kE[i] = Math.abs(dT.dot(AC[i])) / ds; kF[i] = Math.abs(dT.dot(NR[i])) / ds; tw[i] = Math.abs(phi[b] - phi[a]) / ds; }
-      return { Pm, Rad, actD, S, Lm, sp, T, NR, AC, alphaL, ekRaw, phi, kE, kF, tw, thI, mAI };
+      const kw = 12, kEsg = new Float32Array(N), kE = new Float32Array(N), kF = new Float32Array(N), tw = new Float32Array(N);
+      for (let i = 0; i < N; i++) { const a = Math.max(0, i - kw), b = Math.min(N - 1, i + kw), ds = S[b] - S[a]; if (ds < 1e-6) continue; const dT = T[b].clone().sub(T[a]); kEsg[i] = dT.dot(AC[i]) / ds; kE[i] = Math.abs(kEsg[i]); kF[i] = Math.abs(dT.dot(NR[i])) / ds; tw[i] = Math.abs(phi[b] - phi[a]) / ds; }
+      return { Pm, Rad, actD, S, Lm, sp, T, NR, AC, alphaL, ekRaw, phi, kE, kEsg, kF, tw, thI, mAI };
     };
     let LD = lanes.map(l => prep(l));
     // NEIGHBORS LEAN TOGETHER. Strips nest only if they lean the same way, so where the lean at a station disagrees with the ring's majority, a strip is turned to the majority side
@@ -3993,7 +4014,7 @@ function buildStrips(X) {
         for (let i = 0; i < cntG; i++) { let t = 0; for (let k = i - Wd; k <= i + Wd; k++) t += mx[((k % cntG) + cntG) % cntG]; h[i] = Math.max(h[i], t / (2 * Wd + 1)); } });
     }
     lanes.forEach((ln, wi) => {
-      const { Pm, Rad, actD, S, Lm, sp, T, NR, AC, alphaL, ekRaw, phi, kE, kF, tw } = LD[wi];
+      const { Pm, Rad, actD, S, Lm, sp, T, NR, AC, alphaL, ekRaw, phi, kE, kEsg, kF, tw } = LD[wi];
       const minS = Math.max(4, Math.ceil(1.5 / sp)), mRiv = Math.max(2, Math.ceil((2 / 12) / sp));
       // each ring's mid-width, where this lane passes through it
       const ribP = new Map();
@@ -4020,6 +4041,12 @@ function buildStrips(X) {
       const edgeDemand = (rf) => { const out = new Array(rf.length).fill(0);
         for (let m = 1; m < rf.length - 1; m++) { const a = lerpAt(Pm, rf[m - 1]), b = lerpAt(Pm, rf[m]), c = lerpAt(Pm, rf[m + 1]), d1 = b.clone().sub(a), d2 = c.clone().sub(b), l1 = d1.length(), l2 = d2.length(); if (l1 < 1e-6 || l2 < 1e-6) continue;
           const k = d2.divideScalar(l2).sub(d1.divideScalar(l1)).divideScalar(0.5 * (l1 + l2)); out[m] = Math.abs(k.dot(lerpAt(AC, rf[m]).normalize())); } return out; };
+      const mixClass = (i0, i1) => {       // straight, or one of the cut radii, judged on the signed edge curvature along the piece
+        let mn = 1e9, mx = -1e9, sm = 0, n = 0; for (let i = i0; i <= i1; i++) { const v = kEsg[i]; mn = Math.min(mn, v); mx = Math.max(mx, v); sm += v; n++; }
+        if (!n) return { R: 0, ok: true }; const kt = 1 / O.bendR; if (Math.max(Math.abs(mn), Math.abs(mx)) <= kt) return { R: 0, ok: true };
+        const mean = sm / n; let bR = 0, bd = 1e9; for (const r of O.arcR) { const d = Math.abs(Math.abs(mean) - 1 / r); if (d < bd) { bd = d; bR = r; } }
+        const sg = Math.sign(mean), lo = Math.min(sg * mn, sg * mx), hi = Math.max(sg * mn, sg * mx);
+        return { R: bR, ok: bR > 0 && lo >= 1 / bR - kt && hi <= 1 / bR + kt }; };
       let ra = r0; const plan = [];
       while (ra < rEnd) {
         const fa = ribF[ra];
@@ -4029,10 +4056,12 @@ function buildStrips(X) {
         if (rb < 0) { ra++; continue; }
         const idx0 = (r1, r2) => [Math.ceil(ribF[r1] + half), Math.floor(ribF[r2] - half)];
         let [i0, i1] = idx0(ra, rb), forced = false;
-        while (rb > ra + 1 && dev(i0, i1) > O.tol) { rb--; [i0, i1] = idx0(ra, rb); }       // cut back to an earlier rib where the path bends sideways
+        if (O.roll) { while (rb > ra + 1) { let mk = 0; for (let i = i0; i <= i1; i++) mk = Math.max(mk, kE[i]); if (mk <= 1 / O.bendR) break; rb--; [i0, i1] = idx0(ra, rb); } }
+        else if (O.mixed) { const okf = () => { const c = mixClass(i0, i1); return c.ok && (c.R === 0 || (ribF[rb] - ribF[ra]) * sp - O.butt <= O.arcMax); }; while (rb > ra + 1 && !okf()) { rb--; [i0, i1] = idx0(ra, rb); } }
+        else while (rb > ra + 1 && dev(i0, i1) > O.tol) { rb--; [i0, i1] = idx0(ra, rb); }       // cut back to an earlier rib where the path bends sideways
         if (O.chord) while (rb > ra + 1 && Math.max(...edgeDemand(rivetFs(ra, rb, false, false))) > 1 / O.bendR) { rb--; [i0, i1] = idx0(ra, rb); }       // and where the rivets would force a tighter bend than the bar can take: end the strip, let the joint turn
         const rA = ra; ra = rb;                                                              // the next strip starts on this same rib
-        if (dev(i0, i1) > O.tol) forced = true;
+        if (O.mixed ? !mixClass(i0, i1).ok : dev(i0, i1) > O.tol) forced = true;
         plan.push({ rA, rb, forced, keep: i1 - i0 >= 2 && (ribF[rb] - ribF[rA]) * sp - O.butt >= 0.5 && rnd() >= O.skip });
       }
       const bayFt = (a, b2) => (ribF[b2] - ribF[a]) * sp - O.butt;
@@ -4044,6 +4073,7 @@ function buildStrips(X) {
         if (mode === 2) forced = dev(Math.ceil(ribF[rA] + half), Math.floor(ribF[rb] - half)) > O.tol;
         let twM = 0, kEM = 0, kFM = 0;
         for (let i = i0; i <= i1; i++) { twM = Math.max(twM, tw[i]); kEM = Math.max(kEM, kE[i]); kFM = Math.max(kFM, kF[i]); }
+        const mxc = O.mixed ? mixClass(i0, i1) : null, arcR = mxc ? mxc.R : 0;
         const rfE = rivetFs(rA, rb, prevShares, nextShares), kEs = new Float32Array(N);
         if (O.chord) { const dm = edgeDemand(rfE); kEM = 0; for (let m = 1; m < rfE.length - 1; m++) { kEM = Math.max(kEM, dm[m]); for (let j = Math.max(0, Math.floor(rfE[m - 1])); j <= Math.min(N - 1, Math.ceil(rfE[m + 1])); j++) kEs[j] = Math.max(kEs[j], dm[m]); } }
         const cAdj = (f, fr) => { if (!O.chord) return fr.P; let k = 0; while (k < rfE.length - 2 && f > rfE[k + 1]) k++; const f0 = rfE[k], f1 = rfE[k + 1]; if (f1 - f0 < 1e-6) return fr.P;
@@ -4077,6 +4107,7 @@ function buildStrips(X) {
           if (mode === 1) return true;
           if (mode === 2) { if (O.showTw) twCol(); else { tmpC.copy(O.patchShow ? patchBase : O.byData ? dataCol() : base); tmpC.offsetHSL(0, 0, (prnd() - 0.5) * O.tone); } }
           for (let i = lo; i <= hi; i++) SS.maxLift = Math.max(SS.maxLift, LF[i]);
+          if (mxc && O.arcCol && mode !== 1) tmpC.set(!mxc.ok ? 0xd6336c : arcR === 0 ? 0xb8c0cc : arcR === O.arcR[0] ? 0xe8590c : 0x1c7ed6);
           const LFat = (f0) => { const f = Math.min(N - 1, Math.max(0, f0)), i = Math.min(N - 2, Math.max(0, Math.floor(f))); return LF[i] + (LF[i + 1] - LF[i]) * (f - i); };
           const fl = [fs]; for (let i = Math.ceil(fs); i < fe - 1e-6; i += stride) if (i > fs + 1e-6) fl.push(i); fl.push(fe);
           const ring = fl.map(f => { const fr = frameAt(f), Pc = cAdj(f, fr).addScaledVector(fr.nrm, LFat(f)); return [-1, 1, 1, -1].map((sa, k) => Pc.clone().addScaledVector(fr.acr, sa * wS / 2).addScaledVector(fr.nrm, (k < 2 ? -1 : 1) * O.th / 2)); });
@@ -4102,9 +4133,11 @@ function buildStrips(X) {
         if (O.louv > 0 && O.louvR > 0 && kEM > 1 / O.louvR) SS.underTgt++;
         if (wS < O.w - 1e-6) { SS.narrowN++; SS.narrowFt += sLen; } SS.maxEdgeStrain = Math.max(SS.maxEdgeStrain, (wS / 2) * kEM); SS.wFtIn += sLen * wS; if (O.nR > 0 && (wS / 2) * kEM > (O.w / 2) / O.nR * 1.001) SS.narrowStill++;
         if (rfE.length === 2) SS.chord2++;
+        if (O.roll) { let sm = 0, n = 0; for (let i = i0; i <= i1; i++) { sm += kE[i]; n++; } const R = n ? n / Math.max(1e-9, sm) : 1e9, edges = [O.bendR * 1.0, 8, 12, 20, 28], bi = R >= 28 ? 4 : R >= 20 ? 3 : R >= 12 ? 2 : R >= 8 ? 1 : 0, Q = SS.roll; Q.n[bi]++; Q.ft[bi] += sLen; Q.minR = Math.min(Q.minR, R); }
+        if (mxc) { const M = SS.mix; if (arcR === 0 && mxc.ok) { M.sN++; M.sFt += sLen; } else { const k = arcR || 0; (M.a[k] = M.a[k] || { n: 0, ft: 0 }); M.a[k].n++; M.a[k].ft += sLen; if (!mxc.ok) { M.off++; M.offFt += sLen; } } }
         SS.count++; SS.totalFt += sLen; SS.maxTw = Math.max(SS.maxTw, twM); if (twM > O.twLim) SS.over++; if (forced) SS.forced++; SS.rivets += rf.length;
         if (kEM > 1e-6) SS.minEdgeR = Math.min(SS.minEdgeR, 1 / kEM); if (kFM > 1e-6) SS.minFlatR = Math.min(SS.minFlatR, 1 / kFM);
-        const pcIdx = A.stripPieces.length;
+        const pcIdx = A.stripPieces.length, pcArc = mxc ? arcR : 0, pcOff = mxc ? !mxc.ok : false;
         if (O.chord && (prevShares || nextShares)) {          // where two strips meet on a rib, the path turns: measure the turn sideways, work out the end cuts
           const dS = lerpAt(Pm, rfE[1]).sub(lerpAt(Pm, rfE[0])).normalize(), dE = lerpAt(Pm, rfE[rfE.length - 1]).sub(lerpAt(Pm, rfE[rfE.length - 2])).normalize();
           const rec = (r, side, dir, ci) => { const key = wi + ':' + (closedG ? r % nR : r); let j = joints.get(key); if (!j) joints.set(key, j = { f: ribF[r] }); j[side] = dir; j['p' + side] = pcIdx; j['c' + side] = ci;
@@ -4116,7 +4149,7 @@ function buildStrips(X) {
                 paint(j.ca[1]); paint(j.cb[0]); } } };
           if (nextShares) rec(rb, 'a', dE, [sIdx0, sIdxL]); if (prevShares) rec(rA, 'b', dS, [sIdx0, sIdxL]);
         }
-        A.stripPieces.push({ ci: [sIdx0, sIdxL], w: wS * 12, lenFt: sLen, lane: wi, group: g, twDegFt: twM * 180 / Math.PI, over: twM > O.twLim, forced, patch: mode === 2, secs: ring.map(rg => rg.map(v => [v.x, v.y, v.z])), riv: rf.map(f => { const fr = frameAt(f), q = fr.P.addScaledVector(fr.nrm, LFat(f) + O.th / 2).addScaledVector(fr.acr, pinOff(f)); return { p: [q.x, q.y, q.z], n: [fr.nrm.x, fr.nrm.y, fr.nrm.z] }; }), col: '#' + tmpC.getHexString(), rivets: rf.length, rivetPts: rf.map(f => { const q = frameAt(f).P; return [q.x, q.y, q.z]; }), N });
+        A.stripPieces.push({ arcR: pcArc, arcOff: pcOff, ci: [sIdx0, sIdxL], w: wS * 12, lenFt: sLen, lane: wi, group: g, twDegFt: twM * 180 / Math.PI, over: twM > O.twLim, forced, patch: mode === 2, secs: ring.map(rg => rg.map(v => [v.x, v.y, v.z])), riv: rf.map(f => { const fr = frameAt(f), q = fr.P.addScaledVector(fr.nrm, LFat(f) + O.th / 2).addScaledVector(fr.acr, pinOff(f)); return { p: [q.x, q.y, q.z], n: [fr.nrm.x, fr.nrm.y, fr.nrm.z] }; }), col: '#' + tmpC.getHexString(), rivets: rf.length, rivetPts: rf.map(f => { const q = frameAt(f).P; return [q.x, q.y, q.z]; }), N });
         return true;
       };
       // where a whole strip would run into another part of the truss, it is cut into patches: the longest runs of rib-to-rib spans that clear,
@@ -4141,7 +4174,7 @@ function buildStrips(X) {
   currentMeshGroup.add(new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.42, metalness: 0.12, side: THREE.DoubleSide })));
   if (ridx.length) { const rg = new THREE.BufferGeometry(); rg.setAttribute('position', new THREE.Float32BufferAttribute(rpos, 3)); rg.setIndex(ridx); rg.computeVertexNormals();
     currentMeshGroup.add(new THREE.Mesh(rg, new THREE.MeshStandardMaterial({ color: 0xcfd3d8, roughness: 0.35, metalness: 0.55, side: THREE.DoubleSide }))); }
-  SS.psf = O.mat === 'acm3' ? 0.94 : O.mat === 'acm4' ? 1.14 : (O.th * 12) * 144 * AL_LB_IN3; SS.lbFt = O.w * SS.psf; SS.wLb = SS.wFtIn * SS.psf; SS.opts = { lean: O.lean, lap: O.lap * 12, chord: O.chord, bendR: O.bendR, nR: O.nR, wN: O.wN * 12, louvR: O.louvR, w: O.w * 12, t: O.th * 12, stock: O.stock, mat: O.mat, sheetW: O.sheetW, twLimDeg: O.twLim * 180 / Math.PI, tolIn: O.tol * 12 };
+  SS.psf = O.mat === 'acm3' ? 0.94 : O.mat === 'acm4' ? 1.14 : (O.th * 12) * 144 * AL_LB_IN3; SS.lbFt = O.w * SS.psf; SS.wLb = SS.wFtIn * SS.psf; SS.opts = { lean: O.lean, lap: O.lap * 12, chord: O.chord, bendR: O.bendR, nR: O.nR, wN: O.wN * 12, louvR: O.louvR, w: O.w * 12, t: O.th * 12, stock: O.stock, mat: O.mat, mixed: O.mixed, roll: O.roll, rollR: O.bendR, arcR: O.arcR, sheetW: O.sheetW, twLimDeg: O.twLim * 180 / Math.PI, tolIn: O.tol * 12 };
   SS.coil = A.coil || null; A.stripStats = SS;
 }
 function O_patchOn() { return chk('patchOn'); }
@@ -4285,8 +4318,12 @@ function updateReadouts(c, A) {
       else { const fr = S.minFlatR * 12, eps = fr < 1e5 ? S.opts.t / 2 / fr * 100 : 0;
         si.textContent = `${S.count} strips on ${S.lanes} lanes, ${ftIn(S.totalFt)} of ${S.opts.w}" flat bar${S.narrowN ? ' (' + S.narrowN + ' of them, ' + ftIn(S.narrowFt) + ', cut ' + S.opts.wN + '" wide)' : ''}, about ${Math.round(S.wLb)} lb.\n` +
           `Twist: worst ${(S.maxTw * 180 / Math.PI).toFixed(0)}°/ft. ${S.over} strip${S.over === 1 ? '' : 's'} over the ${S.opts.twLimDeg.toFixed(0)}°/ft limit need pre-rolling.\n` +
-          `Sideways (edge) bend: tightest radius ${S.minEdgeR > 1e8 ? 'none' : ftIn(S.minEdgeR)}; worst edge strain ${(S.maxEdgeStrain * 100).toFixed(2)}% (aluminum yields near 0.3 to 0.4%);${S.opts.nR > 0 ? ' ' + S.narrowStill + ' strip' + (S.narrowStill === 1 ? ' is' : 's are') + ' still past the strain of a full-width strip at ' + S.opts.nR + ' ft, even narrowed;' : ''} ${S.forced} strip${S.forced === 1 ? ' is' : 's are'} still over the ${S.opts.tolIn.toFixed(2)}" tolerance at the shortest length that reaches two ribs.\n` +
+          `Sideways (edge) bend: tightest radius ${S.minEdgeR > 1e8 ? 'none' : ftIn(S.minEdgeR)}; worst edge strain ${(S.maxEdgeStrain * 100).toFixed(2)}% (aluminum yields near 0.3 to 0.4%);${S.opts.nR > 0 ? ' ' + S.narrowStill + ' strip' + (S.narrowStill === 1 ? ' is' : 's are') + ' still past the strain of a full-width strip at ' + S.opts.nR + ' ft, even narrowed;' : ''} ${S.opts.tolIn < 1e6 ? S.forced + ' strip' + (S.forced === 1 ? ' is' : 's are') + ' still over the ' + S.opts.tolIn.toFixed(2) + '" tolerance at the shortest length that reaches two ribs.' : ''}\n` +
           `Buildability (edge limit ${S.opts.bendR} ft on a 2" strip): ${S.bc[0]} strips fine, ${S.bc[2]} marginal, ${S.bc[3]} too tight to bend sideways (${Math.round(100 * S.bl[3] / Math.max(1e-9, S.bl[0] + S.bl[1] + S.bl[2] + S.bl[3]))}% of the length: arc-cut or pre-bend those), ${S.bc[1]} over the twist limit only.\n` +
+          (S.opts.roll ? (() => { const Q = S.roll, nm = ['tighter than 8 ft (roller at its limit)', '8 to 12 ft', '12 to 20 ft', '20 to 28 ft', 'straight, no rolling (over 28 ft)'], tot = Q.n.reduce((a, b) => a + b, 0), rolled = tot - Q.n[4], used = Q.n.filter((n, i) => i < 4 && n > 0).length;
+            return `Rolled on edge: ${rolled} of ${tot} pieces need rolling (${ftIn(Q.ft.slice(0, 4).reduce((a, b) => a + b, 0))}), ${Q.n[4]} stay straight (${ftIn(Q.ft[4])}). Roller settings, by average edge radius: ` + nm.map((t, i) => Q.n[i] ? Q.n[i] + ' at ' + t : '').filter(Boolean).join('; ') + `. Tightest piece averages ${Q.minR > 1e8 ? 'none' : ftIn(Q.minR)}; the roller limit is ${S.opts.rollR} ft. Leave 4 to 6" extra at each end for the flat the roller cannot bend, and cut it off.\n`; })() : '') +
+          (S.opts.mixed ? (() => { const M = S.mix, ks = Object.keys(M.a).map(Number).sort((a, b) => a - b), arcs = ks.filter(k => k > 0), aft = arcs.reduce((t, k) => t + M.a[k].ft, 0), area = arcs.reduce((t, k) => t + M.a[k].ft * (S.opts.w + 0.0625) / 12, 0);
+            return `Mixed: ${M.sN} straight pieces (${ftIn(M.sFt)}) from flat bar; ` + (arcs.length ? arcs.map(k => `${M.a[k].n} arcs at ${k} ft radius (${ftIn(M.a[k].ft)})`).join(', ') + ` cut from 4 × 4 ft sheet: about ${Math.max(1, Math.ceil(area / 14.4))} sheets at 90% nesting (${(100 * aft / Math.max(1e-9, aft + M.sFt)).toFixed(0)}% of the strip length is arc).` : 'no arcs needed.') + (M.off ? ` ${M.off} piece${M.off === 1 ? '' : 's'} (${ftIn(M.offFt)}) match neither straight stock nor a cut radius within the tolerance (magenta): move a radius or raise the tilt cap.` : ' Every piece matches straight stock or a cut radius.') + '\n'; })() : '') +
           (S.opts.chord ? `Joints (strips run straight between rivets; ${S.chord2} of ${S.count} have just two): ${S.jn[0]} fine with square ends and a wedge gap, ${S.jn[1]} need an end cut (up to ${(S.maxMiter * 180 / Math.PI).toFixed(0)}° each), ${S.jn[2]} turn too sharply for a miter, lap those. Sharpest turn ${(S.maxTurn * 180 / Math.PI).toFixed(0)}°.\n` : '') +
           (S.coil ? `Coil: ${S.coil.starts} strip${S.coil.starts === 1 ? '' : 's'} winding side by side, pitch ${S.coil.pMinIn.toFixed(1)}" to ${S.coil.pMaxIn.toFixed(1)}" a turn${S.coil.data ? ', following the data' : ' (no site data loaded: a gentle wave stands in)'}. Strips run up to the full stock length and rivet at every rib they cross.\n` : '') +
           (S.opts.lap > 0 && S.lapFt > 0 ? `Overlap: neighbors overlap along ${S.lapFt.toFixed(0)} ft of seam, up to ${(S.maxLap * 12).toFixed(2)}"; ${S.lapLiftFt > 0 ? 'the top strip is lifted ' + (S.maxLapLift * 12).toFixed(2) + '" at most, over ' + S.lapLiftFt.toFixed(0) + ' ft, to ride over its neighbor' : 'every overlap nests without a lift'}. ${S.opts.lean > 0 ? 'Turned ' + S.leanFt.toFixed(0) + ' ft of strip to lean with its neighbors. ' : ''}${S.lapRiv ? S.lapRiv + ' rivet' + (S.lapRiv === 1 ? '' : 's') + ' have no clear spot; ' : ''}Rivets kept off covered edges.\n` : '') +
