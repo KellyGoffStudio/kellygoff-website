@@ -2584,7 +2584,30 @@ function svgOutline(svg) {
 }
 
 // ---- clean renders: no kink (amber) or clearance warnings on any sheet image ----
+function psClean(fn) {
+  const ids = ['showKinks', 'showClear'].map($).filter(e => e && e.checked);
+  if (ids.length) { ids.forEach(e => { e.checked = false; }); buildScene(true); }
+  try { return fn(); } finally { if (ids.length) { ids.forEach(e => { e.checked = true; }); buildScene(true); } }
+}
 // ---- offscreen rendering ----
+function psRender(opts) {            // {w,h,cam,bg,clipGrade,keepRefs,keepSlab,keepGrid,opaque}
+  const r = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+  r.setPixelRatio(1); r.setSize(opts.w, opts.h, false);
+  r.setClearColor(0xf2f2f3, opts.opaque ? 1 : 0);
+  const yw = currentMeshGroup.position.y;
+  const clipped = [];
+  if (opts.clipGrade) { r.localClippingEnabled = true; const pl = [new THREE.Plane(new THREE.Vector3(0, 1, 0), -yw)];
+    currentMeshGroup.traverse(n => { if (n.material) (Array.isArray(n.material) ? n.material : [n.material]).forEach(m => { clipped.push([m, m.clippingPlanes]); m.clippingPlanes = pl; }); }); }
+  const toHide = [[gridHelper, opts.keepGrid], [slab, opts.keepSlab], [vertRef, false], [extraGroup, false], [refGroup, opts.keepRefs], [marker, false], [footGroup, false]].filter(a => a[0]);
+  const saved = toHide.map(([o]) => o.visible); toHide.forEach(([o, keep]) => { if (!keep) o.visible = false; });
+  const bg = scene.background; scene.background = opts.bg || null;
+  r.render(scene, opts.cam);
+  const url = r.domElement.toDataURL('image/png');
+  clipped.forEach(([m, c]) => { m.clippingPlanes = c; });
+  scene.background = bg; toHide.forEach(([o], i) => { o.visible = saved[i]; });
+  r.dispose(); if (r.forceContextLoss) r.forceContextLoss();
+  return url;
+}
 
 // ---- A-1 ----
 
@@ -2914,6 +2937,8 @@ function buildPanel() {
     <div id="g_colorMode">
     ${S_('colorMode', 'Color mode', [['solid', 'Solid'], ['audio', 'Main value along path'], ['height', 'Elevation'], ['stress', 'Bend radius heatmap'], ['rainbow', 'Spectral spiral']], 'solid')}
     ${S_('colorPalette', 'Color palette', [['spectrum', 'Smooth spectrum'], ['river', 'Six steps: river to ember'], ['vermilion', 'Six steps: vermilion, pale to deep'], ['twohue', 'Six steps: cool to warm']], 'spectrum')}
+    ${R('colorSteps', 'Spectrum steps', 0, 24, 1, 12, v => +v === 0 ? 'Continuous' : v + ' colors', 'Snaps the smooth spectrum to this many colors, so strips share colors instead of every strip being its own. Applies to the view and the STEP file. With steps on, batch variation is ignored so the count stays exact. The six-step palettes already have a fixed count.')}
+    ${R('stepBoost', 'STEP color boost', 0, 60, 5, 20, v => +v === 0 ? 'None' : '+' + v + '% saturation', 'Fusion shades the same color duller than this view does, so the strip colors in the STEP are made this much more saturated. Turn it down if Fusion renders them too hot.')}
     </div>
     <div id="g_surface">
     <input type="color" id="matColor" value="#2d6fb7" aria-label="Surface color">
@@ -2959,6 +2984,8 @@ function buildPanel() {
     <div class="sub">3D models</div>
     <div class="btngrid">
       <div id="g_stepStrips" style="grid-column:1/-1">${C_('stepStrips', 'Include strips and rivets in the STEP', true, 'Adds every strip and patch as its own lofted solid and every rivet as a small dome, in their own groups. Slower and a much bigger file; turn it off for just the pipes, rings, and posts.')}</div>
+      <button class="btn" id="exportPng" title="The current view as a transparent PNG, with no grid, ground, or labels, at the size chosen. Same colors as the screen. For layering onto a photo.">PNG</button>
+      <select id="pngSize" title="Long side in pixels" style="grid-column:auto"><option value="4000">4000 px</option><option value="6000" selected>6000 px</option><option value="8000">8000 px</option></select>
       <button class="btn solid" id="exportStep" title="Hollow pipe solids for Fusion 360 and SolidWorks, inches, Z up. Members that cross are cut so one runs through and the other is notched. Takes a minute or two.">STEP</button>
       <button class="btn solid" id="exportObj" title="Pipe mesh, inches, Y up">OBJ · mesh</button>
       <button class="btn solid" id="exportGlb" title="Pipe mesh, meters, Y up">GLB · 3D</button>
@@ -3463,8 +3490,9 @@ function dataRank(v) {
   const a = rankCache.arr; if (!a.length) return v; let lo = 0, hi = a.length; while (lo < hi) { const m = (lo + hi) >> 1; if (a[m] < v) lo = m + 1; else hi = m; } return lo / a.length;
 }
 function palPick(c, t) { const P = PALETTES[palName()]; c.set(P[Math.max(0, Math.min(P.length - 1, Math.floor(Math.max(0, Math.min(0.9999, t)) * P.length)))]); }
-function paletteDataCol(c, v) { v = Math.max(0, Math.min(1, v)); if (palName() === 'spectrum') c.setHSL(0.62 - 0.62 * v, 0.85, 0.5); else palPick(c, dataRank(v)); }
-function heightCol(c, t) { t = Math.max(0, Math.min(1, t)); if (palName() === 'spectrum') c.setHSL((1 - t) * 0.65, 0.9, 0.5); else palPick(c, t); }
+const specQ = (v) => { const n = parseInt((document.getElementById('colorSteps') || {}).value) || 0; return n > 1 ? (Math.floor(Math.min(0.9999, Math.max(0, v)) * n) + 0.5) / n : v; };
+function paletteDataCol(c, v) { v = Math.max(0, Math.min(1, v)); if (palName() === 'spectrum') v = specQ(v); if (palName() === 'spectrum') c.setHSL(0.62 - 0.62 * v, 0.85, 0.5); else palPick(c, dataRank(v)); }
+function heightCol(c, t) { t = Math.max(0, Math.min(1, t)); if (palName() === 'spectrum') t = specQ(t); if (palName() === 'spectrum') c.setHSL((1 - t) * 0.65, 0.9, 0.5); else palPick(c, t); }
 function applyColor(mesh, geo, bend, flags) {
   if (chk('stripOn') && chk('stripBuild')) { mesh.material = new THREE.MeshStandardMaterial({ color: 0xb9bec4, roughness: 0.8, metalness: 0, wireframe: chk('enableWireframe') }); return; }      // buildability check: the form goes grey
   const stain = flags && flags.stain, own = flags && flags.col, mode = own ? 'solid' : $('colorMode').value, base = new THREE.Color(own ? own : stain ? 0xd2d5d9 : $('matColor').value), rough = own ? flags.rough : stain ? 0.42 : num('matRoughness'), metal = own ? flags.metal : stain ? 0.45 : num('matMetalness'), wire = chk('enableWireframe');
@@ -3883,6 +3911,7 @@ function buildStrips(X) {
     minLen: num('stripMinLen'), maxLen: num('stripMaxLen'), butt: num('stripGap') / 12, skip: num('stripSkip') / 100, gaps: num('stripGaps') / 100, tol: num('stripEdgeTol') / 12,
     twLim: num('stripTwistLim') * Math.PI / 180, lap: num('stripLap') / 12, lean: num('stripLean') / 100, louv: num('stripLouvre') * Math.PI / 180, louvR: num('stripLouvreR'), build: chk('stripBuild'), chord: chk('stripChord'), wedge: num('stripWedge') / 12, miterMax: num('stripMiterMax') * Math.PI / 180, bendR: num('stripBendR'), nR: num('stripNarrowR'), wN: num('stripNarrowW') / 12, tone: num('stripTone') / 100, every: Math.max(1, parseInt($('rivetEvery').value)), rivets: chk('stripRivets'), showTw: chk('stripShowTwist'), flat: false,
     patch: chk('patchOn'), patchShow: chk('patchShow'), patchMin: num('patchMin') / 12, byData: chk('stripByData') && $('colorMode').value !== 'solid', cmode: $('colorMode').value };
+  if (O.byData && (palName() !== 'spectrum' || (parseInt($('colorSteps').value) || 0) > 1)) O.tone = 0;      // steps or a fixed palette: the same colors, not one lightness per strip
   O.mixed = O.mat === 'mixed'; if (O.mixed) { O.arcR = [num('arcR1'), num('arcR2'), num('arcR3')].filter(r => r > 0); O.arcMax = num('arcMax'); O.arcCol = chk('arcCol'); O.chord = false; O.mat = 'mixed'; }
   O.roll = O.mat === 'roll'; if (O.roll) { O.bendR = num('rollR'); O.louvR = O.louv > 0 ? O.bendR : 0; O.chord = false; O.tol = 1e9; }      // rolled on edge: the bar follows the curve, so only the roller's tightest radius limits a piece
   O.maxLen = Math.min(O.maxLen, O.stock - (O.mat === 'bar' || O.mixed || O.roll ? 0.5 : 0)); O.minLen = Math.min(O.minLen, O.maxLen);
@@ -4530,6 +4559,15 @@ async function loadCad() {
   R.setOC(oc); state.cad = { R, builder: makeBuilder(R) }; return state.cad;
 }
 let stepBusy = false;
+async function exportPng() {
+  if (!needForm()) return; const W0 = container.clientWidth, H0 = container.clientHeight, big = parseInt($('pngSize').value) || 6000, k = big / Math.max(W0, H0), w = Math.round(W0 * k), h = Math.round(H0 * k);
+  const cam = camera.clone(); cam.copy(camera); cam.updateMatrixWorld(); if (cam.updateProjectionMatrix) cam.updateProjectionMatrix();
+  setStatus('Rendering ' + w + ' × ' + h + '…'); await new Promise(r => setTimeout(r, 30));
+  try { const url = psClean(() => psRender({ w, h, cam, bg: null, opaque: false, clipGrade: false, keepGrid: false, keepSlab: false, keepRefs: false }));
+    const blob = await (await fetch(url)).blob(); saveBlob(blob, slug() + '_transparent_' + w + 'px.png'); setStatus(`PNG saved: ${w} × ${h}, transparent background, current view.`);
+  } catch (e) { console.error(e); setStatus('PNG export failed: ' + (e.message || e) + ' Try a smaller size.'); }
+}
+let stepLegend = null;
 async function exportStep() {
   if (!needForm() || stepBusy) return;
   const c = state.last, prof = $('profileType').value, A = state.lastA;
@@ -4587,13 +4625,16 @@ async function exportStep() {
     let skinNote = '';
     if (prof === 'truss' && c.st.strip && chk('stepStrips') && A.stripPieces && A.stripPieces.length) {      // the skin: one lofted solid per strip, a small dome per rivet
       const mp = (q) => [q[0] * 12, -q[2] * 12, q[1] * 12], pad = (n) => String(n).padStart(4, '0'), SP = A.stripPieces; let nS = 0, nP = 0, nR = 0, bad = 0;
+      const bst = num('stepBoost') / 100, stepGrouped = palName() !== 'spectrum' || (parseInt($('colorSteps').value) || 0) > 1, tcB = new THREE.Color(), hsl = {};
+      const stepCol = (hx) => { if (!(bst > 0)) return hx; tcB.set(hx); tcB.getHSL(hsl); tcB.setHSL(hsl.h, Math.min(1, hsl.s * (1 + bst)), hsl.l); return '#' + tcB.getHexString(); };
+      stepLegend = new Set(SP.filter(q => q.secs && q.secs.length > 1).map(q => stepCol(q.col).toUpperCase()));
       for (let k = 0; k < SP.length; k++) {
         if (k % 20 === 0) { setStatus(`Building strips and rivets… ${k} of ${SP.length}`); await new Promise(r => setTimeout(r, 0)); }
         const pc = SP[k]; if (!pc.secs || pc.secs.length < 2) continue;
         try {
           const keep = pc.secs.filter((_, i) => i === 0 || i === pc.secs.length - 1 || i % 2 === 0), wires = keep.map(sec => { const P = sec.map(mp); return R.assembleWire([0, 1, 2, 3].map(i => R.makeLine(P[i], P[(i + 1) % 4]))); });
           const zs = pc.secs.flat().map(q => q[1] * 12);
-          parts.push({ shape: R.loft(wires, { ruled: false }), name: (pc.patch ? 'patch_' : 'strip_') + pad(pc.patch ? ++nP : ++nS), color: pc.col, group: 'Strips', zmin: Math.min(...zs) });
+          parts.push({ shape: R.loft(wires, { ruled: false }), name: (pc.patch ? 'patch_' : 'strip_') + pad(pc.patch ? ++nP : ++nS), color: stepCol(pc.col), group: stepGrouped ? 'Strips ' + stepCol(pc.col).toUpperCase() : 'Strips', zmin: Math.min(...zs) });
         } catch (e) { bad++; continue; }
         if (chk('stripRivets')) pc.riv.forEach(rv => { try { const q = mp(rv.p); parts.push({ shape: R.makeCylinder(0.25, 0.09, q, [rv.n[0], -rv.n[2], rv.n[1]]), name: 'rivet_' + pad(++nR), color: '#cfd3d8', group: 'Rivets', zmin: q[2] - 0.3 }); } catch (e) { bad++; } });
       }
@@ -4611,7 +4652,8 @@ async function exportStep() {
     setStatus('Writing the STEP file…'); await new Promise(r => setTimeout(r, 0));
     const blob = R.exportSTEP(parts.map(p => ({ shape: p.shape, name: p.name, color: p.color || '#ffffff', group: p.group })), { unit: 'in', modelUnit: 'in', root: slug() });
     saveBlob(blob, slug() + '_hollow.step');
-    setStatus(`STEP saved: ${parts.length} solids, ${desc}.${skinNote} ${res.crossings} crossing${res.crossings === 1 ? '' : 's'} found, ${res.notched} piece${res.notched === 1 ? '' : 's'} notched.${cutNote} Inches, Z up. ${((performance.now() - t0) / 1000).toFixed(0)} s.${warns.length ? ' ' + warns.join(' ') : ''}${prof === 'corrugated' ? ' Corrugation is modelled as a smooth tube.' : ''}`);
+    const legend = stepLegend && stepLegend.size && stepLegend.size <= 40 ? ` Strip colors (${stepLegend.size}): ${[...stepLegend].sort().join(' ')}.` : '';
+    setStatus(`STEP saved: ${parts.length} solids, ${desc}.${skinNote} ${res.crossings} crossing${res.crossings === 1 ? '' : 's'} found, ${res.notched} piece${res.notched === 1 ? '' : 's'} notched.${cutNote} Inches, Z up. ${((performance.now() - t0) / 1000).toFixed(0)} s.${warns.length ? ' ' + warns.join(' ') : ''}${prof === 'corrugated' ? ' Corrugation is modelled as a smooth tube.' : ''}${legend}`);
   } catch (e) { console.error(e); setStatus('STEP export failed: ' + (e.message || e)); }
   finally { stepBusy = false; btn.disabled = false; }
 }
@@ -4965,7 +5007,7 @@ function wire() {
   });
   ['projName', 'siteName'].forEach(id => $(id).addEventListener('input', () => { }));
 
-  $('exportDxf').addEventListener('click', exportDxf); $('exportContacts').addEventListener('click', exportContacts); $('exportStruct').addEventListener('click', exportStruct); $('exportObj').addEventListener('click', exportObj); $('exportGlb').addEventListener('click', exportGlb); $('exportUsdz').addEventListener('click', exportUsdz); $('exportStep').addEventListener('click', exportStep); $('exportCsv').addEventListener('click', exportCsvPoints);
+  $('exportPng').addEventListener('click', exportPng); $('exportDxf').addEventListener('click', exportDxf); $('exportContacts').addEventListener('click', exportContacts); $('exportStruct').addEventListener('click', exportStruct); $('exportObj').addEventListener('click', exportObj); $('exportGlb').addEventListener('click', exportGlb); $('exportUsdz').addEventListener('click', exportUsdz); $('exportStep').addEventListener('click', exportStep); $('exportCsv').addEventListener('click', exportCsvPoints);
   $('exportTakeoff').addEventListener('click', exportTakeoff); $('exportBend').addEventListener('click', exportBend); $('exportRibs').addEventListener('click', exportRibs);
   $('btnPrint').addEventListener('click', () => window.print());
   $('saveConfigBtn').addEventListener('click', () => {
