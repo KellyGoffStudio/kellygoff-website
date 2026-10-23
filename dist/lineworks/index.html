@@ -2826,7 +2826,8 @@ function buildPanel() {
     ${R('mhX', 'Sculpture across the photo (% from left)', 5, 95, 0.5, 50, v => v + '%', '')}
     <button class="btn wide" id="mhPlace" style="margin-top:6px">Place sculpture in the photo</button>
     <div class="hint" id="mhInfo">Keeps your viewing direction, puts the camera at eye height, level to the horizon, at the distance that makes the posts land where you say. Turn on Scale references to check against a 5\'-10" person. The lens above is the photo's vertical view.</div>
-    ${C_('pngPhoto', 'PNG export matches the full photo frame', true)}
+    ${C_('pngPhoto', 'pngOnPhoto', 'PNG export matches the full photo frame', true)}
+    ${C_('pngOnPhoto', 'PNG export also saves a copy composited on the photo', true)}
     <div class="sub">Clearance</div>
     ${N_('clearance', 'Min overhead clearance (ft, 0 = off)', 0, 0, 40, 0.5)}
     ${C_('showClear', 'Mark clearance conflicts (orange)', true)}`;
@@ -4582,6 +4583,10 @@ async function exportPng() {
       setStatus('Rendering ' + w + ' × ' + h + '… ' + Math.round(100 * Math.min(1, (y * w + (x + tw) * th) / (w * h))) + '%'); await new Promise(r => setTimeout(r, 0));
     }
     const blob = await new Promise(res => out.toBlob(res, 'image/png')); if (!blob) throw new Error('canvas too large for this browser');
+    if (usePhoto && chk('pngOnPhoto')) {   // flattened copy: photo first, sculpture on top
+      const cc = document.createElement('canvas'); cc.width = w; cc.height = h; const cx2 = cc.getContext('2d'); cx2.drawImage(photoTex.image, 0, 0, w, h); cx2.drawImage(out, 0, 0);
+      const b2 = await new Promise(res => cc.toBlob(res, 'image/png')); if (b2) saveBlob(b2, slug() + '_on_photo_' + w + 'px.png');
+    }
     saveBlob(blob, slug() + '_transparent_' + w + 'px.png'); setStatus(`PNG saved: ${w} × ${h}, transparent background, ${usePhoto ? 'full photo frame, so it drops straight onto the photo' : 'current view'}.`);
   } catch (e) { console.error(e); setStatus('PNG export failed: ' + (e.message || e) + ' Try a smaller size.'); }
 }
