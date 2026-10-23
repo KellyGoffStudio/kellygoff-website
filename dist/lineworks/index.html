@@ -2819,6 +2819,14 @@ function buildPanel() {
     <input type="file" id="photoFile" accept="image/*" hidden>
     ${R('photoFov', 'Camera lens (to match the photo)', 20, 75, 1, 40, v => v + '° view', 'Orbit until the sculpture sits right in the photo, then adjust the lens.')}
     ${C_('photoGrid', 'Keep the grid over the photo', false)}
+    <div class="sub">Match the photo's camera</div>
+    ${R('mhCam', 'Camera height above the ground (ft)', 3, 12, 0.5, 5.5, v => v + ' ft', 'Eye height of whoever took the photo: about 5 to 6 ft standing, 4 ft crouched, more from a bridge or truck.')}
+    ${R('mhHor', 'Horizon in the photo (% from top)', 20, 80, 0.5, 53.5, v => v + '%', 'Where distant ground meets the sky, or the eye line on far buildings and cars.')}
+    ${R('mhBase', 'Where the sculpture stands (% from top)', 45, 95, 0.5, 63.5, v => v + '%', 'Where the bottom of its posts sits in the photo. Lower on the photo = closer to the camera = bigger. This sets the scale.')}
+    ${R('mhX', 'Sculpture across the photo (% from left)', 5, 95, 0.5, 50, v => v + '%', '')}
+    <button class="btn wide" id="mhPlace" style="margin-top:6px">Place sculpture in the photo</button>
+    <div class="hint" id="mhInfo">Keeps your viewing direction, puts the camera at eye height, level to the horizon, at the distance that makes the posts land where you say. Turn on Scale references to check against a 5\'-10" person. The lens above is the photo's vertical view.</div>
+    ${C_('pngPhoto', 'PNG export matches the full photo frame', true)}
     <div class="sub">Clearance</div>
     ${N_('clearance', 'Min overhead clearance (ft, 0 = off)', 0, 0, 40, 0.5)}
     ${C_('showClear', 'Mark clearance conflicts (orange)', true)}`;
@@ -4560,8 +4568,9 @@ async function loadCad() {
 }
 let stepBusy = false;
 async function exportPng() {
-  if (!needForm()) return; const W0 = container.clientWidth, H0 = container.clientHeight, big = parseInt($('pngSize').value) || 6000, k = big / Math.max(W0, H0), w = Math.round(W0 * k), h = Math.round(H0 * k);
+  if (!needForm()) return; let W0 = container.clientWidth, H0 = container.clientHeight; const big = parseInt($('pngSize').value) || 6000, usePhoto = !!(photoTex && photoTex.image && chk('pngPhoto') && !camera.isOrthographicCamera); if (usePhoto) { W0 = photoTex.image.width; H0 = photoTex.image.height; } const k = big / Math.max(W0, H0), w = Math.round(W0 * k), h = Math.round(H0 * k);
   const cam = camera.clone(); cam.copy(camera); cam.updateMatrixWorld(); if (cam.updateProjectionMatrix) cam.updateProjectionMatrix();
+  if (usePhoto) { const pv = photoVis(); cam.aspect = pv.ia; cam.fov = 2 * Math.atan(Math.tan(camera.fov * Math.PI / 360) / pv.vy) * 180 / Math.PI; cam.updateProjectionMatrix(); }
   setStatus('Rendering ' + w + ' × ' + h + '…'); await new Promise(r => setTimeout(r, 30));
   try {   // render in tiles (<=2048 px) so no GPU/canvas size limit can clip the frame, then stitch
     const T = 2048, out = document.createElement('canvas'); out.width = w; out.height = h; const octx = out.getContext('2d');
@@ -4573,7 +4582,7 @@ async function exportPng() {
       setStatus('Rendering ' + w + ' × ' + h + '… ' + Math.round(100 * Math.min(1, (y * w + (x + tw) * th) / (w * h))) + '%'); await new Promise(r => setTimeout(r, 0));
     }
     const blob = await new Promise(res => out.toBlob(res, 'image/png')); if (!blob) throw new Error('canvas too large for this browser');
-    saveBlob(blob, slug() + '_transparent_' + w + 'px.png'); setStatus(`PNG saved: ${w} × ${h}, transparent background, current view.`);
+    saveBlob(blob, slug() + '_transparent_' + w + 'px.png'); setStatus(`PNG saved: ${w} × ${h}, transparent background, ${usePhoto ? 'full photo frame, so it drops straight onto the photo' : 'current view'}.`);
   } catch (e) { console.error(e); setStatus('PNG export failed: ' + (e.message || e) + ' Try a smaller size.'); }
 }
 let stepLegend = null;
@@ -5081,7 +5090,7 @@ function animate() {
 // ---------------------------------------------------------------------
 // Presenting: full-screen mode, saved views, turntable, scale figures, site photo
 // ---------------------------------------------------------------------
-const LOCAL_IDS = ['refFigs', 'photoFov', 'photoGrid', 'a2Style', 'textMode'];
+const LOCAL_IDS = ['refFigs', 'photoFov', 'photoGrid', 'mhCam', 'mhHor', 'mhBase', 'mhX', 'pngPhoto', 'a2Style', 'textMode'];
 state.views = []; state.turn = false;
 const refGroup = new THREE.Group(); scene.add(refGroup);
 function buildRefs() {
@@ -5114,6 +5123,32 @@ function applyPhoto() {
   gridHelper.visible = !photoTex || chk('photoGrid');
   if (photoTex && !camera.isOrthographicCamera) { camera.fov = num('photoFov'); camera.updateProjectionMatrix(); }
   fitPhoto();
+}
+function photoVis() {          // fraction of the photo height / width the view shows (cover fit, centred)
+  const ca = container.clientWidth / Math.max(1, container.clientHeight), ia = photoTex.image.width / photoTex.image.height;
+  return ia > ca ? { vy: 1, vx: ca / ia, ia, ca } : { vy: ia / ca, vx: 1, ia, ca };
+}
+function placePhotoCam() {
+  if (!photoTex || !photoTex.image) { setStatus('Load a site photo first (Site photo…).'); return; }
+  if (camera.isOrthographicCamera) { setStatus('Switch to the perspective view to match a photo.'); return; }
+  const bb = new THREE.Box3().setFromObject(currentMeshGroup); if (bb.isEmpty()) return;
+  const cx = (bb.min.x + bb.max.x) / 2, cz = (bb.min.z + bb.max.z) / 2, gy = bb.min.y;
+  const F = num('photoFov') * Math.PI / 180, tf = Math.tan(F / 2), { vy, vx, ca } = photoVis();
+  const toS = (pc, v) => 0.5 + (pc / 100 - 0.5) / v;            // photo fraction -> screen fraction (v = visible share)
+  const sh = toS(num('mhHor'), vy), sb = toS(num('mhBase'), vy), sx = toS(num('mhX'), vx), hc = num('mhCam');
+  const tanD = 2 * tf * (sb - sh);                              // depression angle of the base below the horizon
+  if (tanD <= 0.01) { setStatus('The base has to sit below the horizon line in the photo.'); return; }
+  const D = hc / tanD;
+  let ax = camera.position.x - cx, az = camera.position.z - cz; const al = Math.hypot(ax, az) || 1; ax /= al; az /= al;
+  const pos = new THREE.Vector3(cx + ax * D, gy + hc, cz + az * D);
+  const yaw0 = Math.atan2(ax, az);                    // heading that looks at the sculpture centre (camera looks down -z)
+  const yawOff = Math.atan((sx - 0.5) * 2 * tf * ca);            // turn so the centre lands at sx
+  const pitch = Math.atan((1 - 2 * sh) * tf);                   // level camera horizon at sh => pitch down
+  camera.position.copy(pos); camera.rotation.order = 'YXZ'; camera.rotation.set(-pitch, yaw0 + yawOff, 0); camera.updateMatrixWorld();
+  const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion); controls.target.copy(pos).addScaledVector(fwd, D);
+  controls.update(); camera.fov = num('photoFov'); camera.updateProjectionMatrix();
+  const info = $('mhInfo'); if (info) info.textContent = `Camera ${hc} ft up, ${D.toFixed(0)} ft from the sculpture centre. The form is ${(bb.max.y - gy).toFixed(1)} ft tall and ${(bb.max.x - bb.min.x).toFixed(0)} × ${(bb.max.z - bb.min.z).toFixed(0)} ft in plan.`;
+  setStatus('Sculpture placed in the photo.');
 }
 function fitPhoto() {
   if (!photoTex || !photoTex.image) return;
@@ -5366,6 +5401,7 @@ function wirePresent() {
   $('photoClear').onclick = () => { if (photoTex) { photoTex.dispose(); photoTex = null; } applyPhoto(); };
   $('photoFov').addEventListener('input', () => { $('photoFovVal').textContent = FMT.photoFov($('photoFov').value); if (photoTex) applyPhoto(); else { camera.fov = num('photoFov'); camera.updateProjectionMatrix(); } });
   $('photoGrid').addEventListener('change', applyPhoto);
+  $('mhPlace').onclick = placePhotoCam; ['mhCam', 'mhHor', 'mhBase', 'mhX'].forEach(id => $(id).addEventListener('input', () => { if (photoTex) placePhotoCam(); }));
   window.addEventListener('keydown', (e) => {
     if (isTyping(e) || e.ctrlKey || e.metaKey || e.altKey) return;
     const m = /^Digit([1-9])$/.exec(e.code);
