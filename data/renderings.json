@@ -3,7 +3,7 @@
   "slug": "riffle-mode",
   "title": "Riffle Mode",
   "material": "Aluminum truss skinned with riffle strips",
-  "text": "Rendered models of sculptures made in LineWorks, with the path generated from streamflow data and skinned in layered strips. Shown placed in photographs of roundabouts, then as the model alone. Not built.",
+  "text": "Rendered models of sculptures made in LineWorks, a tool I wrote that generates a path from site data, such as a river's streamflow record, and builds it as an aluminum truss skinned in overlapping strips. The series shows the sculptures placed in photographs of roundabouts, then up close: the strips riveted over the tubular truss, the posts, and the base plates with anchor rods. A proposal sheet shows the truss detail, two elevations, and the plan, with overall dimensions. Not built.",
   "thumb": 1,
   "thumb_zoom": [
    1.9,
