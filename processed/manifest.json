@@ -2714,7 +2714,7 @@
    ]
   },
   {
-   "name": "02",
+   "name": "02-close-view",
    "w": 2576,
    "h": 1750,
    "widths": [
@@ -2725,7 +2725,7 @@
    ]
   },
   {
-   "name": "03",
+   "name": "03-proposal-sheet",
    "w": 2576,
    "h": 1699,
    "widths": [
@@ -2736,7 +2736,7 @@
    ]
   },
   {
-   "name": "04",
+   "name": "04-roundabout-a",
    "w": 2576,
    "h": 1717,
    "widths": [
@@ -2747,7 +2747,7 @@
    ]
   },
   {
-   "name": "05",
+   "name": "05-roundabout-b",
    "w": 2576,
    "h": 1717,
    "widths": [
@@ -2771,7 +2771,7 @@
    ]
   },
   {
-   "name": "02",
+   "name": "02-close-view",
    "w": 2576,
    "h": 1750,
    "widths": [
@@ -2782,7 +2782,7 @@
    ]
   },
   {
-   "name": "03",
+   "name": "03-proposal-sheet",
    "w": 2576,
    "h": 1699,
    "widths": [
@@ -2793,7 +2793,7 @@
    ]
   },
   {
-   "name": "04",
+   "name": "04-roundabout-a",
    "w": 2576,
    "h": 1717,
    "widths": [
@@ -2804,7 +2804,7 @@
    ]
   },
   {
-   "name": "05",
+   "name": "05-roundabout-b",
    "w": 2576,
    "h": 1717,
    "widths": [
