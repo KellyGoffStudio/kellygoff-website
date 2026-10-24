@@ -2826,8 +2826,9 @@ function buildPanel() {
     ${R('mhX', 'Sculpture across the photo (% from left)', 5, 95, 0.5, 50, v => v + '%', '')}
     <button class="btn wide" id="mhPlace" style="margin-top:6px">Place sculpture in the photo</button>
     <div class="hint" id="mhInfo">Keeps your viewing direction, puts the camera at eye height, level to the horizon, at the distance that makes the posts land where you say. Turn on Scale references to check against a 5\'-10" person. The lens above is the photo's vertical view.</div>
-    ${C_('pngPhoto', 'pngOnPhoto', 'PNG export matches the full photo frame', true)}
-    ${C_('pngOnPhoto', 'PNG export also saves a copy composited on the photo', true)}
+    ${C_('pngPhoto', 'pngOnPhoto', 'jpgMode', 'PNG export matches the full photo frame', true)}
+    ${C_('pngOnPhoto', 'Also save a JPG with the sculpture composited on the photo', true)}
+    ${S_('jpgMode', 'JPG size', [['5mb', 'Under 5 MB'], ['full', 'Full size (maximum quality)']], '5mb')}
     <div class="sub">Clearance</div>
     ${N_('clearance', 'Min overhead clearance (ft, 0 = off)', 0, 0, 40, 0.5)}
     ${C_('showClear', 'Mark clearance conflicts (orange)', true)}`;
@@ -4583,11 +4584,23 @@ async function exportPng() {
       setStatus('Rendering ' + w + ' × ' + h + '… ' + Math.round(100 * Math.min(1, (y * w + (x + tw) * th) / (w * h))) + '%'); await new Promise(r => setTimeout(r, 0));
     }
     const blob = await new Promise(res => out.toBlob(res, 'image/png')); if (!blob) throw new Error('canvas too large for this browser');
-    if (usePhoto && chk('pngOnPhoto')) {   // flattened copy: photo first, sculpture on top
-      const cc = document.createElement('canvas'); cc.width = w; cc.height = h; const cx2 = cc.getContext('2d'); cx2.drawImage(photoTex.image, 0, 0, w, h); cx2.drawImage(out, 0, 0);
-      const b2 = await new Promise(res => cc.toBlob(res, 'image/png')); if (b2) saveBlob(b2, slug() + '_on_photo_' + w + 'px.png');
+    let jpgNote = '';
+    if (usePhoto && chk('pngOnPhoto')) {   // flattened JPG: photo first, sculpture on top
+      const cc = document.createElement('canvas'); cc.width = w; cc.height = h; const cx2 = cc.getContext('2d'); cx2.fillStyle = '#fff'; cx2.fillRect(0, 0, w, h); cx2.drawImage(photoTex.image, 0, 0, w, h); cx2.drawImage(out, 0, 0);
+      const jb = (cv, q) => new Promise(res => cv.toBlob(res, 'image/jpeg', q)); let jb2 = null, note = '';
+      if ($('jpgMode').value === 'full') { jb2 = await jb(cc, 1); note = 'full size, maximum quality'; }
+      else { const LIM = 4.9e6; let cv = cc, sc = 1;
+        for (let tries = 0; tries < 8 && !jb2; tries++) {
+          let lo = 0.6, hi = 1, best = null;
+          for (let i = 0; i < 6; i++) { const q = (lo + hi) / 2, t = await jb(cv, q); if (t && t.size <= LIM) { best = t; lo = q; } else hi = q; }
+          if (!best) { const t = await jb(cv, 0.6); if (t && t.size <= LIM) best = t; }
+          if (best) { jb2 = best; break; }
+          sc *= 0.9; cv = document.createElement('canvas'); cv.width = Math.round(w * sc); cv.height = Math.round(h * sc); cv.getContext('2d').drawImage(cc, 0, 0, cv.width, cv.height);
+        }
+        note = jb2 ? `under 5 MB (${(jb2.size / 1e6).toFixed(2)} MB${sc < 1 ? ', reduced to ' + Math.round(w * sc) + ' px wide' : ', full size'})` : ''; }
+      if (jb2) saveBlob(jb2, slug() + '_on_photo_' + w + 'px.jpg'); if (note) jpgNote = ' JPG saved: ' + note + '.';
     }
-    saveBlob(blob, slug() + '_transparent_' + w + 'px.png'); setStatus(`PNG saved: ${w} × ${h}, transparent background, ${usePhoto ? 'full photo frame, so it drops straight onto the photo' : 'current view'}.`);
+    saveBlob(blob, slug() + '_transparent_' + w + 'px.png'); setStatus(`PNG saved: ${w} × ${h}, transparent background, ${usePhoto ? 'full photo frame, so it drops straight onto the photo' : 'current view'}.` + jpgNote);
   } catch (e) { console.error(e); setStatus('PNG export failed: ' + (e.message || e) + ' Try a smaller size.'); }
 }
 let stepLegend = null;
@@ -5265,7 +5278,26 @@ async function clipCodec(w, h, fps, bps) {
   for (const c of list) { try { const o = Object.assign({ codec: c.codec, width: w, height: h, bitrate: bps, framerate: fps, latencyMode: 'quality' }, c.avc ? { avc: c.avc } : {}); const r = await VideoEncoder.isConfigSupported(o); if (r.supported) return Object.assign({}, c, { opts: o }); } catch (e) { } }
   return null;
 }
-async function encodeClip(cc, N, span, base, w, h, fps, ss, label) {
+function titleOverlay(frameW) {      // the on-screen title block, redrawn on a canvas so it can be laid over each video frame
+  const tb = $('titleBlock'); if (!tb || getComputedStyle(tb).display === 'none') return null;
+  const pres = document.body.classList.contains('presenting'), sc = (frameW / Math.max(1, container.clientWidth)) * (pres ? 1.35 : 1);
+  const W = tb.offsetWidth, H = tb.offsetHeight, cv = document.createElement('canvas'); cv.width = Math.ceil(W * sc); cv.height = Math.ceil(H * sc);
+  const g = cv.getContext('2d'), css = getComputedStyle(document.documentElement), col = (n, d) => (css.getPropertyValue(n) || d).trim() || d;
+  g.fillStyle = col('--paper', '#f2f2f3'); g.fillRect(0, 0, cv.width, cv.height);
+  g.strokeStyle = col('--rule', '#b8bcc0'); g.lineWidth = Math.max(1, sc);
+  tb.querySelectorAll('.tb-row').forEach((r, i) => { if (i) { const y = r.offsetTop * sc; g.beginPath(); g.moveTo(0, y); g.lineTo(cv.width, y); g.stroke(); } });
+  tb.querySelectorAll('.tb-cell').forEach(c => { if (c.offsetLeft > 2) { const x = c.offsetLeft * sc, r = c.parentElement; g.beginPath(); g.moveTo(x, r.offsetTop * sc); g.lineTo(x, (r.offsetTop + r.offsetHeight) * sc); g.stroke(); } });
+  tb.querySelectorAll('.tbl, .tbv, input').forEach(el => {
+    const cs = getComputedStyle(el); let t = el.tagName === 'INPUT' ? el.value : el.textContent; if (!t) return; if (cs.textTransform === 'uppercase') t = t.toUpperCase();
+    const x = el.offsetLeft * sc, y = el.offsetTop * sc, w = el.offsetWidth * sc, h = el.offsetHeight * sc;
+    g.save(); g.beginPath(); g.rect(x, y, w, h); g.clip(); g.font = `${cs.fontWeight} ${parseFloat(cs.fontSize) * sc}px ${cs.fontFamily}`; g.fillStyle = cs.color; g.textBaseline = 'middle';
+    if ('letterSpacing' in g) g.letterSpacing = (parseFloat(cs.letterSpacing) || 0) * sc + 'px';
+    g.fillText(t, x, y + h / 2 + sc * 0.5); g.restore();
+  });
+  g.strokeStyle = col('--ink', '#1d1f20'); g.lineWidth = Math.max(1, sc) * 1.2; g.strokeRect(g.lineWidth / 2, g.lineWidth / 2, cv.width - g.lineWidth, cv.height - g.lineWidth);
+  const m = (pres ? 28 : 14) * sc; return { cv, x: Math.round(frameW - cv.width - m), y: null, m };
+}
+async function encodeClip(cc, N, span, base, w, h, fps, ss, label, ov) {
   const cvs = renderer.domElement, samples = []; let cfg = null, err = null;
   const out = document.createElement('canvas'); out.width = w; out.height = h; const ox = out.getContext('2d'); ox.imageSmoothingEnabled = true; ox.imageSmoothingQuality = 'high';
   const enc = new VideoEncoder({ output: (ch, meta) => { const d = new Uint8Array(ch.byteLength); ch.copyTo(d); if (meta && meta.decoderConfig && meta.decoderConfig.description && !cfg) cfg = new Uint8Array(meta.decoderConfig.description); samples.push({ data: d, key: ch.type === 'key' }); }, error: (e) => { err = e; } });
@@ -5274,7 +5306,7 @@ async function encodeClip(cc, N, span, base, w, h, fps, ss, label) {
     for (let i = 0; i < N; i++) {
       if (err) throw err;
       recPose(base, (i / N) * span); renderer.setViewport(0, 0, W, H); renderer.clear(); renderer.render(scene, camera);
-      let src = cvs; if (ss !== 1) { ox.drawImage(cvs, 0, 0, W, H, 0, 0, w, h); src = out; }        // drawn larger, then scaled down: smooth edges, no crawling pixels
+      let src = cvs; if (ss !== 1 || ov) { ox.drawImage(cvs, 0, 0, W, H, 0, 0, w, h); src = out; if (ov) ox.drawImage(ov.cv, ov.x, Math.round(h - ov.cv.height - ov.m)); }        // drawn larger, then scaled down: smooth edges, no crawling pixels
       const fr = new VideoFrame(src, { timestamp: Math.round(i * 1e6 / fps), duration: Math.round(1e6 / fps) });
       enc.encode(fr, { keyFrame: i % fps === 0 }); fr.close();
       const el = (performance.now() - t0) / 1000, eta = i > 2 ? Math.round(el / (i + 1) * (N - i - 1)) : null;
@@ -5318,7 +5350,7 @@ async function recordClip(mode = 'render') {
   const nm = recName(ext).replace('_turntable.', shape === 'window' ? '_turntable.' : `_turntable_${shape}.`);
   if (cc) {
     try {
-      const bytes = await encodeClip(cc, N, span, base, dim.w, dim.h, FPS, ss, quick ? 'Quick' : 'Render'); restore();
+      const ov = titleOverlay(dim.w), bytes = await encodeClip(cc, N, span, base, dim.w, dim.h, FPS, ss, quick ? 'Quick' : 'Render', ov); restore();
       saveBlob(new Blob([bytes], { type: 'video/mp4' }), nm); setStatus(`Saved ${nm} (${Math.round(turnDeg)}° in ${secs} s, ${dim.w} x ${dim.h} at ${FPS} fps, ${(bytes.length / 1048576).toFixed(1)} MB${quick ? ', quick clip' : ', drawn at ' + ss + 'x and scaled down'}).`); return;
     } catch (e) { restore(); setStatus('The video encoder stopped (' + (e && e.message || e) + '). Try the GIF button or another browser.'); return; }
   }
