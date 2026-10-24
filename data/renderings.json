@@ -1,5 +1,17 @@
 [
  {
+  "slug": "riffle-mode",
+  "title": "Riffle Mode",
+  "material": "Aluminum truss skinned with riffle strips",
+  "text": "Rendered models of sculptures made in LineWorks, with the path generated from streamflow data and skinned in layered strips. Shown placed in photographs of roundabouts, then as the model alone. Not built.",
+  "thumb": 1,
+  "thumb_zoom": [
+   1.9,
+   0.515,
+   0.474
+  ]
+ },
+ {
   "slug": "seated-line",
   "title": "Seated Line",
   "text": "Two versions of a rendered model of a sculpture, placed in photographs of existing sites. Not built.",
