@@ -16,9 +16,9 @@ FONT = Path(__file__).resolve().parent / 'fonts' / 'BarlowCondensed-600.ttf'
 
 def overlay(im, text='RENDERING'):
     """Bake a large white label at 30% opacity into the lower-left corner (Barlow Condensed SemiBold).
-    Sized from the image width so it reads the same at every size: text spans ~31% of the width."""
+    Sized from the image width so it reads the same at every size: text spans ~10% of the width."""
     w, h = im.size
-    target = 0.31 * w
+    target = 0.103 * w
     size = 100
     f = ImageFont.truetype(str(FONT), size)
     bb = f.getbbox(text)

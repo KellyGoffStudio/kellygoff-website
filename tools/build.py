@@ -23,7 +23,7 @@ proj = json.loads((ROOT / 'data/projects.json').read_text(encoding='utf8'))
 cv = json.loads((ROOT / 'data/cv.json').read_text(encoding='utf8'))
 fw = json.loads((ROOT / 'data/fieldwork.json').read_text(encoding='utf8'))
 RD = json.loads((ROOT / 'data/renderings.json').read_text(encoding='utf8'))
-for _r in RD: _r.update({'year': '', 'status': 'Rendering, not built', 'uncropped': True, 'img_key': 'rdo-' + _r['slug'], 'back': 'public-work', 'series_label': 'Drawings & Renderings'})
+for _r in RD: _r.update({'year': '', 'status': 'Rendering, design development', 'uncropped': True, 'img_key': 'rdo-' + _r['slug'], 'back': 'public-work', 'series_label': 'Drawings & Renderings'})
 PUB, STU = [p for p in proj['public'] if p.get('web', True)], proj['studio']  # "web": false hides a page on the site only
 manifest = {}
 mp = ROOT / 'processed/manifest.json'
@@ -206,7 +206,7 @@ def public_index():
         tz = r_.get('thumb_zoom'); zs = ''
         if tz: s_, px_, py_ = tz; zs = f' style="transform:translate({-s_*(px_-.5)*100:.2f}%,{-s_*(py_-.5)*100:.2f}%) scale({s_})"'
         rt += (f'<a class="tile" title="{E(r_["title"])}" href="{link(f"public-work/renderings/{r_["slug"]}/")}"><div class="im">{img_tag(im, "(max-width:860px) 100vw, 66vw" if tz else "(max-width:860px) 50vw, 33vw").replace("<img ", "<img" + zs + " ", 1) if tz else img_tag(im, "(max-width:860px) 50vw, 33vw")}</div></a>')
-    if RD: secs += f'<div>{sec("Drawings & Renderings", "03", "Unbuilt")}</div>{secd("renderings")}<div class="grid" id="grid-renderings">{rt}</div>'
+    if RD: secs += f'<div>{sec("Drawings & Renderings", "03", "Design development")}</div>{secd("renderings")}<div class="grid" id="grid-renderings">{rt}</div>'
     body = (f'<div class="wrap page-top"><div class="row-head"><div><h1>Public work</h1></div>'
             f'<a class="btn" href="{asset("files/Kelly-Goff-Public-Art-Project-List.pdf")}">Project list (PDF) ↓</a></div>'
             f'{secs}</div>')
@@ -256,7 +256,7 @@ def project_page(p, folder, label, lst):
             f'<button class="x" type="button">Close</button><button class="pv" type="button" aria-label="Previous image">←</button><button class="nx" type="button" aria-label="Next image">→</button></dialog>')
     ld = {'@context': 'https://schema.org', '@type': 'VisualArtwork', 'name': p['title'], 'creator': {'@type': 'Person', 'name': 'Kelly Goff', 'url': site['baseUrl'] + '/'},
           'dateCreated': p['year'], 'artMedium': p.get('material', ''), 'url': f'{site["baseUrl"]}/{CUR}'}
-    desc = f'{p["title"]}, {p["year"]}. ' + ' '.join(x + '.' for x in [p.get('material', '').rstrip('.'), p.get('site', '').rstrip('.')] if x) if p['year'] else f'{p["title"]}. Rendering, not built. ' + ' '.join(x + '.' for x in [p.get('material', '').rstrip('.'), p.get('site', '').rstrip('.')] if x)
+    desc = f'{p["title"]}, {p["year"]}. ' + ' '.join(x + '.' for x in [p.get('material', '').rstrip('.'), p.get('site', '').rstrip('.')] if x) if p['year'] else f'{p["title"]}. Rendering, design development. ' + ' '.join(x + '.' for x in [p.get('material', '').rstrip('.'), p.get('site', '').rstrip('.')] if x)
     og = ims[0]['src'] if not ims[0]['ph'] else None
     return layout(p['title'], body, desc, active=f'{p.get("back", folder)}/', og=og, ld=ld if p['year'] else None)
 
