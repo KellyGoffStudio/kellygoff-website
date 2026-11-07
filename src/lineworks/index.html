@@ -2247,8 +2247,8 @@ function buildTakeoff() {
     const tube = $('strandStockType').value !== 'sched40';
     A.members.forEach((m, i) => { const s = addStock('strand_' + m.skey, `${m.od}" OD × ${((m.od - m.id) / 2).toFixed(3)}" wall ${tube ? 'tubing' : 'Sched 40 pipe'}`, m.od, m.id, m.w); MM.push({ ptsFt: m.pts, closed: m.closed, group: i, kind: 'metal', stock: s.key }); });
   } else if (prof === 'truss') {
-    const tube = $('trussStockType').value !== 'sched40', sp = tube ? TUBING_0125[$('trussTubingSize').value] : NPS_SCHED_40[$('trussSched40Size').value];
-    const al = $('trussMetal').value === 'alum', s = addStock('truss', `${sp.od}" OD × ${((sp.od - sp.id) / 2).toFixed(3)}" wall ${al ? '6061 aluminum' : 'stainless'} ${tube ? 'tubing' : 'pipe'}`, sp.od, sp.id, sp.w * (al ? AL_FACTOR : 1));
+    const stk = $('trussStockType').value, tube = stk === 'tubing', sp = trussSpec();
+    const al = $('trussMetal').value === 'alum', s = addStock('truss', `${sp.od}" OD × ${((sp.od - sp.id) / 2).toFixed(3)}" wall ${trussMetalWord()} ${stk === 'hss' ? 'A500 round tube' : tube ? 'tubing' : 'pipe'}`, sp.od, sp.id, sp.w * (al ? AL_FACTOR : 1));
     A.members.forEach((m, i) => {
       if (m.mat === 'wood') m.pieces.forEach(pc => { const N = m.pts.length, pts = []; for (let k = pc.a; k <= pc.b; k++) pts.push(m.pts[k % N]); if (pts.length >= 3) MM.push({ ptsFt: pts, closed: false, group: i, kind: 'wood', od: m.od, pre: true }); });
       else MM.push({ ptsFt: m.pts, closed: m.closed, group: i, kind: 'metal', stock: s.key });
@@ -2279,12 +2279,12 @@ function buildTakeoff() {
     order.groups.push({ type: 'bars', item: `${metalName === 'Stainless' ? '' : ''}${s.name}`, pcs: ps.length, net: n, order: n20, unit: "× 10' bars", wt: lb, wt20: lb20, usedIn: used, bars });
   });
   if (prof === 'truss' && A.ribs && A.ribs.length) {
-    const rl = A.ribs.map((r, i) => ({ id: 'R' + (i + 1), lenIn: Math.PI * (r.Ro + r.Ri) * 12 })); const bars = nestBars(rl, TK.flatUsableIn, TK.kerfIn), n = bars.length, n20 = Math.ceil(n * (1 + TK.extra) - 1e-9), wIn = Math.round(A.ribs[0].w * 12 * 100) / 100, wTxt = Math.abs(wIn - 1.25) < 1e-6 ? '1-1/4' : String(wIn), lbFt = 0.25 * wIn * 12 * (st.alum ? AL_LB_IN3 : STEEL_LB_IN3);
-    order.groups.push({ type: 'bars', item: `${st.alum ? '6061 aluminum' : 'Stainless'} flat bar 1/4" × ${wTxt}" — rolled into ${A.ribs.length} rib rings (${(A.ribs[0].odIn).toFixed(1)}" OD)`, pcs: A.ribs.length, net: n, order: n20, unit: "× 10' bars", wt: n * 10 * lbFt, wt20: n20 * 10 * lbFt, usedIn: rl.reduce((a, r) => a + r.lenIn, 0), bars });
+    const rl = A.ribs.map((r, i) => ({ id: 'R' + (i + 1), lenIn: Math.PI * (r.Ro + r.Ri) * 12 })); const bars = nestBars(rl, TK.flatUsableIn, TK.kerfIn), n = bars.length, n20 = Math.ceil(n * (1 + TK.extra) - 1e-9), wIn = Math.round(A.ribs[0].w * 12 * 100) / 100, wTxt = Math.abs(wIn - 1.25) < 1e-6 ? '1-1/4' : String(wIn), lbFt = ribT() * wIn * 12 * (st.alum ? AL_LB_IN3 : STEEL_LB_IN3);
+    order.groups.push({ type: 'bars', item: `${st.alum ? '6061 aluminum' : st.steel ? 'Galvanized steel' : 'Stainless'} flat bar ${ribTTxt()}" × ${wTxt}" — rolled into ${A.ribs.length} rib rings (${(A.ribs[0].odIn).toFixed(1)}" OD)`, pcs: A.ribs.length, net: n, order: n20, unit: "× 10' bars", wt: n * 10 * lbFt, wt20: n20 * 10 * lbFt, usedIn: rl.reduce((a, r) => a + r.lenIn, 0), bars });
   }
   if (prof === 'truss' && A.stripPieces && A.stripPieces.length && A.stripStats) {
     const SS = A.stripStats, o = SS.opts, tt = Math.abs(o.t - 0.125) < 1e-4 ? '1/8' : o.t.toFixed(3),
-      stack = o.t + 0.25, rivSz = stack <= 0.34 ? '-6' : stack <= 0.47 ? '-8' : '-10', rivTxt = `roughly ${SS.rivets} rivets (3/16" large-flange, ${rivSz} grip)`;
+      stack = o.t + ribT(), rivSz = stack <= 0.34 ? '-6' : stack <= 0.47 ? '-8' : '-10', rivTxt = `roughly ${SS.rivets} rivets (3/16" large-flange, ${rivSz} grip)`;
     const widths = [...new Set(A.stripPieces.map(p => Math.round((p.w || o.w) * 1000) / 1000))].sort((x, y) => y - x);
     widths.forEach(wIn => {
       const pcsW = A.stripPieces.map((p, i) => ({ p, i })).filter(r => Math.abs((r.p.w || o.w) - wIn) < 1e-3 && !(o.mat === 'mixed' && r.p.arcR)), items = pcsW.map(r => ({ id: 'S' + (r.i + 1), lenIn: r.p.lenFt * 12 })), wTxt = (+wIn).toFixed(3).replace(/0+$/, '').replace(/\.$/, ''),
@@ -2435,7 +2435,7 @@ function makeTakeoffSVGraw() {
   };
   function stocksName(T, p) { const s = T.stocks[p.stock]; return s ? s.name : ''; }
   let partsSvg = ''; const rows = Math.ceil(metal.length / 3);
-  if (metal.length) { partsSvg += `<text x="${M}" y="${y}" class="sec">PARTS — ${T.prof === 'truss' ? (st.alum ? 'ALUMINUM' : 'STAINLESS') : 'METAL'}, LETTERED</text><line x1="${M + 190}" y1="${y - 3}" x2="${W - M}" y2="${y - 3}" stroke="${RULE}" stroke-width="0.6"/>`; y += 12;
+  if (metal.length) { partsSvg += `<text x="${M}" y="${y}" class="sec">PARTS — ${T.prof === 'truss' ? (st.alum ? 'ALUMINUM' : st.steel ? 'GALVANIZED STEEL' : 'STAINLESS') : 'METAL'}, LETTERED</text><line x1="${M + 190}" y1="${y - 3}" x2="${W - M}" y2="${y - 3}" stroke="${RULE}" stroke-width="0.6"/>`; y += 12;
     metal.forEach((p, i) => { partsSvg += card(p, M + (i % 3) * (cw + 12), y + Math.floor(i / 3) * (ch + 10)); }); y += rows * (ch + 10) + 16; }
   // ---- wood table ------------------------------------------------------
   if (woodP.length) {
@@ -2630,6 +2630,17 @@ const TUBING_0125 = {
   '0.75': { od: 0.750, id: 0.500, w: 0.84 }, '1.0': { od: 1.000, id: 0.750, w: 1.17 }, '1.25': { od: 1.250, id: 1.000, w: 1.50 },
   '1.5': { od: 1.500, id: 1.250, w: 1.84 }, '2.0': { od: 2.000, id: 1.750, w: 2.50 }, '2.5': { od: 2.500, id: 2.250, w: 3.17 }, '3.0': { od: 3.000, id: 2.750, w: 3.84 }
 };
+// ASTM A500 round structural tube (carbon steel, galvanized for outdoor work). Weight is steel lb/ft.
+const HSS_A500 = {
+  '1.900x0.120': { od: 1.900, id: 1.660, w: 2.28, label: '1.900" OD x 0.120" wall' }
+};
+function trussSpec() {      // the member size the truss uses, whichever stock is chosen
+  const stk = $('trussStockType').value;
+  return stk === 'sched40' ? NPS_SCHED_40[$('trussSched40Size').value] : stk === 'hss' ? HSS_A500[$('trussHssSize').value] : TUBING_0125[$('trussTubingSize').value];
+}
+function ribT() { const el = $('ribThick'); return el ? parseFloat(el.value) || 0.25 : 0.25; }      // rib ring flat-bar thickness, inches
+function ribTTxt() { return Math.abs(ribT() - 0.1875) < 1e-4 ? '3/16' : Math.abs(ribT() - 0.25) < 1e-4 ? '1/4' : String(ribT()); }
+function trussMetalWord() { const m = $('trussMetal').value; return m === 'alum' ? '6061 aluminum' : m === 'steel' ? 'galvanized steel' : 'stainless'; }
 
 // Mixed-diameter strands sit on one ring so the bundle's outline is a circle: every strand is flush to the same outer circle, the core is left hollow, and no two pipes overlap.
 function strandSizes() {
@@ -2853,10 +2864,11 @@ function buildPanel() {
     </div>
     <div id="g_truss">
       ${R('trussCount', 'Members', 1, 40, 1, 6, v => v)}
-      ${S_('trussStockType', 'Member stock', [['sched40', 'Sched 40 pipe'], ['tubing', '0.125" wall tubing']], 'sched40')}
+      ${S_('trussStockType', 'Member stock', [['sched40', 'Sched 40 pipe'], ['tubing', '0.125" wall tubing'], ['hss', 'A500 round tube (steel)']], 'sched40')}
       <div id="g_trussS40">${S_('trussSched40Size', 'Pipe size', sizeOpts(NPS_SCHED_40, 'Sched 40').filter(o => +o[0] <= 6), '1.5')}</div>
       <div id="g_trussTub">${S_('trussTubingSize', 'Tubing size', sizeOpts(TUBING_0125, 'tube'), '1.5')}</div>
-      ${S_('trussMetal', 'Truss metal', [['stainless', 'Stainless (weights as steel)'], ['alum', '6061 aluminum']], 'alum')}
+      <div id="g_trussHss">${S_('trussHssSize', 'Tube size', Object.keys(HSS_A500).map(k => [k, HSS_A500[k].label]), '1.900x0.120')}</div>
+      ${S_('trussMetal', 'Truss metal', [['stainless', 'Stainless (weights as steel)'], ['alum', '6061 aluminum'], ['steel', 'Galvanized steel']], 'alum')}
       ${R('trussOD', 'Rib ring outer diameter', 8, 18, 0.5, 12, v => (+v).toFixed(1) + '"')}
       ${S_('trussDistribution', 'Member spacing', [['even', 'Even'], ['irregular', 'Irregular / clustered']], 'even')}
       <div id="g_seed">${R('trussSeed', 'Cluster pattern', 1, 20, 1, 3, v => v)}</div>
@@ -2867,11 +2879,12 @@ function buildPanel() {
         ${R('ribMax', 'Farthest rib spacing', 8, 24, 1, 16, v => v + '"')}
       </div>
       ${C_('ribOutside', 'Ribs on the outside of the tubes', false, 'Off by default: the rings sit inside, and the tubes rest against their outer edge. On: the rings wrap the outside of the tubes. With strips on, every member then stays a tube and the strips lie outside the rings.')}
-      <div class="hint">Solid 1/4" × 1.25" flat-bar rings along the path.</div>
+      ${S_('ribThick', 'Rib thickness', [['0.25', '1/4"'], ['0.1875', '3/16"']], '0.25')}
+      <div class="hint">Solid flat-bar rings along the path, 1.25" wide (set the width under Riffles when strips are on).</div>
       <div class="info" id="ribInfo">—</div>
       <div class="sub">Oak fill</div>
       ${C_('woodOn', 'Add oak members', false, 'Some members become round oak, the same diameter as the tubing. The rest stay tube.')}
-      ${C_('stripOn', 'Riffle mode: skin the truss in overlapping strips', false, 'Riffle mode skins the truss in overlapping strips, called riffles, laid over the outside of the truss and riveted to the rib rings. The members all stay pipe. Turning this on switches the truss to aluminum and puts the rings outside the tubes.')}
+      ${C_('stripOn', 'Riffle mode: skin the truss in overlapping strips', false, 'Riffle mode skins the truss in overlapping strips, called riffles, laid over the outside of the truss and riveted to the rib rings. The members all stay pipe. Turning this on puts the rings outside the tubes, and switches a stainless truss to aluminum (aluminum and galvanized steel stay as they are).')}
       <div id="g_fill">
         ${R('steelShare', 'Tube share of members', 10, 90, 5, 25, pct, 'Spread evenly around the bundle. At least one member stays a tube.')}
       </div>
@@ -3017,7 +3030,7 @@ const ribOutOn = () => !ribIn() && ($('ribOutside').checked || $('stripOn').chec
 function trussAutoFill() {
   if (!chk('woodOn') || state.fillManual) return;
   const stock = $('trussStockType').value, od = num('trussOD'),
-    sp = stock === 'sched40' ? NPS_SCHED_40[$('trussSched40Size').value] : TUBING_0125[$('trussTubingSize').value],
+    sp = trussSpec(),
     rc = od / 2 + sp.od / 2, nmax = Math.floor(Math.PI / Math.asin(Math.min(0.99, (sp.od / 2) / rc))),
     n = Math.max(4, Math.min(40, Math.round(nmax * 0.9)));
   const el = $('trussCount'); el.value = n; const v = $('trussCountVal'); if (v) v.textContent = n;
@@ -3030,7 +3043,7 @@ function updateVisibility() {
   show('g_mobius', prof === 'square' && !planeOn);
   { const inForm = prof === 'strand' || prof === 'truss', box = $('flareBox'), slot = $(inForm ? 'flareSlotForm' : 'flareSlotStock'); if (box && slot && box.parentNode !== slot) slot.appendChild(box); $('flareSub').style.display = inForm ? '' : 'none'; }   // flare sits under Stock for a single pipe, under Form for bundles and trusses
   show('g_strandS40', $('strandStockType').value === 'sched40'); show('g_strandTub', $('strandStockType').value === 'tubing');
-  show('g_trussS40', $('trussStockType').value === 'sched40'); show('g_trussTub', $('trussStockType').value === 'tubing');
+  show('g_trussS40', $('trussStockType').value === 'sched40'); show('g_trussTub', $('trussStockType').value === 'tubing'); show('g_trussHss', $('trussStockType').value === 'hss');
   show('g_drift', num('stripInfill') > 50);
   show('g_louvR', num('stripLouvre') > 0);
   show('g_narrowW', num('stripNarrowR') > 0);
@@ -3069,11 +3082,11 @@ function getStock() {
   } else {
     const stock = $('trussStockType').value, n = parseInt($('trussCount').value), od = num('trussOD');
     const strip = chk('stripOn'), wood = chk('woodOn'), ns = wood ? Math.max(1, Math.min(n - 1, Math.round(n * num('steelShare') / 100))) : n;
-    const sp = stock === 'sched40' ? NPS_SCHED_40[$('trussSched40Size').value] : TUBING_0125[$('trussTubingSize').value];
-    const alum = $('trussMetal').value === 'alum', mw = alum ? 'ALUMINUM' : 'STAINLESS', fw = strip ? 'STRIP LANES' : 'OAK', allTubes = strip;   // strips sit outside the rings: every member stays a pipe
-    Object.assign(st, { outerExtentIn: od / 2 + sp.od + (strip ? 0.25 + parseFloat($('stripT').value) : ribOutOn() ? 0.25 : 0), minInsideIn: sp.id * bf, weightLbFt: sp.w * (allTubes ? n : ns) * (alum ? AL_FACTOR : 1), weightNote: stock === 'sched40' ? 'pipe' : 'steel',
+    const sp = trussSpec();
+    const alum = $('trussMetal').value === 'alum', steel = $('trussMetal').value === 'steel', mw = alum ? 'ALUMINUM' : steel ? 'STEEL' : 'STAINLESS', fw = strip ? 'STRIP LANES' : 'OAK', allTubes = strip;   // strips sit outside the rings: every member stays a pipe
+    Object.assign(st, { outerExtentIn: od / 2 + sp.od + (strip ? ribT() + parseFloat($('stripT').value) : ribOutOn() ? ribT() : 0), minInsideIn: sp.id * bf, weightLbFt: sp.w * (allTubes ? n : ns) * (alum ? AL_FACTOR : 1), weightNote: stock === 'sched40' ? 'pipe' : 'steel',
       label: allTubes ? `${n} ${mw} PIPES + FLAT-BAR STRIP SKIN × ${sp.od}" · ${od}" RIBS` : wood ? `${ns} ${mw} + ${n - ns} ${fw} × ${sp.od}" · ${od}" RIBS` : `${n} × ${sp.od}" ${alum ? 'ALUMINUM ' : ''}MEMBERS · ${od}" RIBS`, memOD: sp.od, memID: sp.id, memCount: n, steelCount: ns, woodCount: wood ? n - ns : 0, memLbFt: sp.w, ringOD: od,
-      strip, alum, metalWord: mw, fillWord: fw, allTubes });
+      strip, alum, steel, metalWord: mw, fillWord: fw, allTubes });
     { const seed = parseInt($('trussSeed').value), irr = $('trussDistribution').value === 'irregular', rc = od / 2 + sp.od / 2;
       const angs = Array.from({ length: n }, (_, m) => (((m / n) * TAU + (irr ? Math.sin(m * 2.3 + seed) * Math.min(0.45, 0.22 * TAU / n) : 0)) % TAU + TAU) % TAU).sort((a, b) => a - b);
       let gap = n >= 2 ? 0 : TAU; for (let i = 0; i < n && n >= 2; i++) gap = Math.max(gap, (i + 1 < n ? angs[i + 1] : angs[0] + TAU) - angs[i]);
@@ -3667,7 +3680,7 @@ function buildPiece(piece, idx, X) {
       const mkLane = (th0, act, lift = 0, shF = null, phF = null) => {      // shF: optional sideways drift in feet at every station (infill)
         const th = th0 + manual, P = [], Rad = [], Cc = [], RoA = [], outside = ribOutOn() || ribIn(), onPipes = ribIn(), clr = stripP.th / 2;
         for (let i = 0; i < cnt; i++) {
-          const R = onPipes ? Rb * df(i) + st.memOD / 12 + clr + lift : outside ? Rb * dfm[i] + st.memOD / 12 + 0.25 / 12 + clr + lift : Rb * df(i) + mR, thi = (shF ? th + shF[i] / R : th) + (phF ? phF[i] : 0);
+          const R = onPipes ? Rb * df(i) + st.memOD / 12 + clr + lift : outside ? Rb * dfm[i] + st.memOD / 12 + ribT() / 12 + clr + lift : Rb * df(i) + mR, thi = (shF ? th + shF[i] / R : th) + (phF ? phF[i] : 0);
           const tan = curve.getTangentAt(Math.min(1, i / nF)).normalize(), r0 = frames.normals[i].clone().multiplyScalar(Math.cos(thi)).addScaledVector(frames.binormals[i], Math.sin(thi));
           r0.addScaledVector(tan, -r0.dot(tan)); if (r0.length() < 1e-6) r0.copy(frames.normals[i]); r0.normalize();
           P.push(spaced[i].clone().addScaledVector(r0, R)); Rad.push(r0); Cc.push(spaced[i]); RoA.push(R + stripP.th / 2);
@@ -3715,7 +3728,7 @@ function buildPiece(piece, idx, X) {
         // strip lanes do not belong to members: rows of strips are spread around the circumference by the coverage setting, and
         // where the bundle flares and gets wider, extra rows start between the existing ones so the coverage holds
         const coilOn = chk('stripCoil'), lapF = num('stripLap') / 12, cov = Math.min(num('stripCover') / 100, stripP.w / Math.max(0.05 * stripP.w, stripP.w - lapF)), pitchF = Math.min(1, 1 / Math.max(1, cov)), nreq = [];
-        for (let i = 0; i < cnt; i++) nreq.push(cov * TAU * (Rb * df(i) + st.memOD / 12 + 0.25 / 12 + stripP.th / 2) / stripP.w);
+        for (let i = 0; i < cnt; i++) nreq.push(cov * TAU * (Rb * df(i) + st.memOD / 12 + ribT() / 12 + stripP.th / 2) / stripP.w);
         const N0 = Math.max(2, Math.round(Math.min(...nreq))), lvl = nreq.map(v => Math.max(0, Math.floor(Math.log2(Math.max(1, v) / N0) + 1e-6))), maxL = Math.max(...lvl);
         const Emax = Math.max(1, Math.round(5 / (length / Math.max(1, nF))));
         const erode = (a, e) => { if (!e) return a; const pre = [0]; for (let i = 0; i < cnt; i++) pre.push(pre[i] + a[i]); const o = new Uint8Array(cnt);
@@ -3744,7 +3757,7 @@ function buildPiece(piece, idx, X) {
           X.A.coil = { starts: Smax, pMinIn: pMn * 12, pMaxIn: pMx * 12, data: haveD };
         }
         if (fine) {      // rows are added one at a time wherever the flare leaves room for another strip, flush beside its neighbors and never overlapping them
-          const N0f = Math.max(2, Math.floor(Math.min(...nreq) + 1e-6)), rStrip = (i) => Rb * df(i) + st.memOD / 12 + 0.25 / 12 + stripP.th / 2;
+          const N0f = Math.max(2, Math.floor(Math.min(...nreq) + 1e-6)), rStrip = (i) => Rb * df(i) + st.memOD / 12 + ribT() / 12 + stripP.th / 2;
           const sub = Math.max(1, Math.floor(cnt / 100)), idxs = []; for (let i = 0; i < cnt; i += sub) idxs.push(i);
           const wAs = idxs.map(i => stripP.w * 1.01 * pitchF / rStrip(i)), occ = idxs.map(() => []);                 // the angle a strip covers at each sampled station, and which angles are taken
           const aDist = (a, b) => { const d = Math.abs(a - b) % TAU; return d > Math.PI ? TAU - d : d; }, free = (a, k) => { const o = occ[k]; for (let q = 0; q < o.length; q++) if (aDist(a, o[q]) < wAs[k]) return false; return true; };
@@ -3777,7 +3790,7 @@ function buildPiece(piece, idx, X) {
         if (infillV > 0 && !coilOn) {
           const dmax = num('stripDrift') / 12, sub2 = Math.max(1, Math.floor(cnt / 100)), idxs2 = []; for (let i = 0; i < cnt; i += sub2) idxs2.push(i);
           const nS = idxs2.length, ds = length / Math.max(1, nF), ftPer2 = ds * sub2;
-          const rS = idxs2.map(i => Rb * df(i) + st.memOD / 12 + 0.25 / 12 + stripP.th / 2), wA = rS.map(r => stripP.w * 1.01 / r);
+          const rS = idxs2.map(i => Rb * df(i) + st.memOD / 12 + ribT() / 12 + stripP.th / 2), wA = rS.map(r => stripP.w * 1.01 / r);
           const bayFt = (chk('ribAuto') ? num('ribMax') : parseFloat($('ribSpacing').value)) / 12;
           const eStn = Math.ceil(((num('ribWidth') / 2 + 1) / 12) / ds) + 1, minRun = Math.max(3, Math.ceil(1.5 * bayFt / ftPer2)), Wn = Math.max(2, Math.ceil(0.3 / ftPer2));
           const nrm = (a) => { a %= TAU; return a < 0 ? a + TAU : a; }, wk = (k) => closed ? ((k % nS) + nS) % nS : Math.max(0, Math.min(nS - 1, k));
@@ -3866,7 +3879,7 @@ function buildPiece(piece, idx, X) {
       }
       X.A.woodW = (X.A.woodW || 0) + woodVolIn3 * 0.0272; X.A.woodPieces = (X.A.woodPieces || []).concat(woodPieces);
       // flat-bar rib rings every 12"
-      const nRibs = Math.max(2, Math.floor(length / (num('ribSpacing') / 12))), tRib = 0.25 / 12, wRib = (st.strip ? num('ribWidth') : 1.25) / 12, ribOut = ribOutOn(), ribAuto = chk('ribAuto');
+      const nRibs = Math.max(2, Math.floor(length / (num('ribSpacing') / 12))), tRib = ribT() / 12, wRib = (st.strip ? num('ribWidth') : 1.25) / 12, ribOut = ribOutOn(), ribAuto = chk('ribAuto');
       X.ribOutside = ribOut;
       const ribMat = chk('stripOn') && chk('stripBuild') ? new THREE.MeshStandardMaterial({ color: 0xb9bec4, roughness: 0.8, metalness: 0 }) : paint ? new THREE.MeshStandardMaterial({ color: paintHex, roughness: 0.42, metalness: 0.1 }) : $('trussFinish').value === 'metal' ? stainlessMat() : new THREE.MeshStandardMaterial({ color: $('matColor').value, roughness: num('matRoughness'), metalness: num('matMetalness') }), last = closed ? nRibs - 1 : nRibs;      // same finish as the pipes in all three cases
       // rib stations as fractions of the path: even, or placed by the form (closest in the flares, farthest where it is skinny and straight)
@@ -4373,7 +4386,7 @@ function updateReadouts(c, A) {
   const fmtW = (w) => Math.round(w).toLocaleString() + ' lb', b = A.baseW * sc, ex = A.extraW * sc;
   const wm = $('tbWeightMode').value;
   if (st.profile === 'truss' && (st.alum || st.strip)) {
-    const parts = [`${st.alum ? 'ALUM' : 'STAINLESS'} ${st.alum ? '~' : ''}${fmtW(b + ex)}`];
+    const parts = [`${st.alum ? 'ALUM' : st.steel ? 'STEEL' : 'STAINLESS'} ${st.alum ? '~' : ''}${fmtW(b + ex)}`];
     if (st.strip && A.stripStats) parts.push(`STRIPS ~${fmtW(A.stripStats.wLb * sc)}`);
     if (st.woodCount > 0 && !st.strip) parts.push(`OAK ~${fmtW((A.woodW || 0) * sc)}`);
     $('tbWeight').textContent = parts.join(' · ');
@@ -4898,8 +4911,8 @@ function exportRibs() {
   if (state.last.st.profile !== 'truss') { setStatus('The rib list is for Hollow Ribbed Truss mode.'); return; }
   const rows = ['piece,rib,station_ft,ring_od_in,ring_id_in,bar_in,flat_bar_length_in'];
   let total = 0;
-  state.lastA.ribs.forEach((r, i) => { const mean = (r.odIn + r.idIn) / 2, len = Math.PI * mean; total += len; rows.push(`${r.piece + 1},${i + 1},${(r.station).toFixed(2)},${r.odIn.toFixed(2)},${r.idIn.toFixed(2)},0.25 x ${+(r.w * 12).toFixed(2)},${len.toFixed(1)}`); });
-  rows.push(`# ${state.lastA.ribs.length} rings, ${(total / 12).toFixed(1)} ft of 1/4" x ${+(state.lastA.ribs[0].w * 12).toFixed(2)}" flat bar before waste`);
+  state.lastA.ribs.forEach((r, i) => { const mean = (r.odIn + r.idIn) / 2, len = Math.PI * mean; total += len; rows.push(`${r.piece + 1},${i + 1},${(r.station).toFixed(2)},${r.odIn.toFixed(2)},${r.idIn.toFixed(2)},${ribT()} x ${+(r.w * 12).toFixed(2)},${len.toFixed(1)}`); });
+  rows.push(`# ${state.lastA.ribs.length} rings, ${(total / 12).toFixed(1)} ft of ${ribTTxt()}" x ${+(state.lastA.ribs[0].w * 12).toFixed(2)}" flat bar before waste`);
   saveBlob(new Blob([rows.join('\n')], { type: 'text/csv' }), slug() + '_rib_cut_list.csv'); setStatus('Rib list saved.');
 }
 
@@ -4945,7 +4958,7 @@ function exportStruct() {
   const out = {
     about: 'LineWorks structural model. Feet, inches and pounds; y is up. Pipes are centerlines; each rib is a flat ring that ties the pipes together at the listed nodes. No loads are applied, and nothing here has been checked for strength, stability or vibration.',
     project: $('projName').value || 'lineworks', generated: new Date().toISOString().slice(0, 10), units: { length: 'ft unless a name ends in _in', area: 'sf or in2', weight: 'lb', axes: 'x, z horizontal; y up; grade at y = 0 when posts are on' },
-    material: alum ? { pipes_and_ribs: 'aluminum, typically 6061-T6; confirm with the supplier', E_psi: 10.0e6, G_psi: 3.8e6, density_lb_in3: AL_LB_IN3, thermal_per_F: 13.1e-6, yield_psi_typical_min: 35000, yield_psi_welded_zone: 15000, note: 'published minimums, to be confirmed by the engineer' } : { pipes_and_ribs: 'steel', E_psi: 29.0e6, G_psi: 11.2e6, density_lb_in3: STEEL_LB_IN3, thermal_per_F: 6.5e-6 },
+    material: alum ? { pipes_and_ribs: 'aluminum, typically 6061-T6; confirm with the supplier', E_psi: 10.0e6, G_psi: 3.8e6, density_lb_in3: AL_LB_IN3, thermal_per_F: 13.1e-6, yield_psi_typical_min: 35000, yield_psi_welded_zone: 15000, note: 'published minimums, to be confirmed by the engineer' } : { pipes_and_ribs: st.steel ? ($('trussStockType').value === 'hss' ? 'galvanized carbon steel; members ASTM A500 Grade C round tube' : 'galvanized carbon steel; members ASTM A53 Grade B pipe') : 'steel', E_psi: 29.0e6, G_psi: 11.2e6, density_lb_in3: STEEL_LB_IN3, thermal_per_F: 6.5e-6, ...(st.steel ? { yield_psi_typical_min: $('trussStockType').value === 'hss' ? 46000 : 35000, note: 'published minimums, to be confirmed by the engineer' } : {}) },
     pipe_section: pipeSec, pipe_count: members.length, path_length_ft: r3(A.length || 0), bounding_box_ft: { min: mn.map(r3), max: mx.map(r3) },
     totals: { pipes_lb: r3(pipeLb), ribs_lb: r3(ribLb), skin_lb: r3(skinLb), total_lb: r3(pipeLb + ribLb + skinLb), skin_surface_area_sf: r3(areaTot), skin_projected_area_sf: { normal_to_x: r3(aX), normal_to_y: r3(aY), normal_to_z: r3(aZ) }, note: 'skin areas are one face of every strip with no shielding between strips or openings; wind exposure, shape factors and the weight of rivets and fasteners are for the engineer' },
     skin: SS ? { strip_width_in: SS.opts.w, thickness_in: SS.opts.t, material: SS.opts.mat, count: strips.length, weight_psf: r4(SS.psf) } : null,
@@ -5035,9 +5048,9 @@ function wire() {
         if (el.checked) {
           const other = $(el.id === 'woodOn' ? 'stripOn' : 'woodOn'), wasFill = other.checked; other.checked = false;
           if (el.id === 'woodOn') { if (!wasFill) state.prevTrussCount = $('trussCount').value; state.fillManual = false; state.fillShareReset = true; trussAutoFill(); }
-          if (el.id === 'stripOn') { $('trussMetal').value = 'alum'; $('trussStockType').value = 'sched40'; $('trussSched40Size').value = '1.5'; updateVisibility(); }
+          if (el.id === 'stripOn' && $('trussMetal').value === 'stainless') { $('trussMetal').value = 'alum'; $('trussStockType').value = 'sched40'; $('trussSched40Size').value = '1.5'; updateVisibility(); }
         } else if (el.id === 'woodOn' && !chk('stripOn') && state.prevTrussCount) { $('trussCount').value = state.prevTrussCount; const v = $('trussCountVal'); if (v) v.textContent = state.prevTrussCount; }
-      } else if (['trussStockType', 'trussSched40Size', 'trussTubingSize'].includes(el.id)) trussAutoFill();
+      } else if (['trussStockType', 'trussSched40Size', 'trussTubingSize', 'trussHssSize'].includes(el.id)) { if (el.id === 'trussStockType' && el.value === 'hss') $('trussMetal').value = 'steel'; trussAutoFill(); }
       updateVisibility(); rebuild();
     });
   });
