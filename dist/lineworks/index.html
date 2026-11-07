@@ -2882,6 +2882,17 @@ function buildPanel() {
       ${S_('ribThick', 'Rib thickness', [['0.25', '1/4"'], ['0.1875', '3/16"']], '0.25')}
       <div class="hint">Solid flat-bar rings along the path, 1.25" wide (set the width under Riffles when strips are on).</div>
       <div class="info" id="ribInfo">—</div>
+      <div class="sub">Galvanizing sections</div>
+      ${C_('galvOn', 'Split into galvanizing sections', false, 'Finds where the truss has to come apart to fit the galvanizer\'s kettle and puts a pair of bolted match plates at each cut. Uses the fewest sections that fit, and keeps cuts clear of posts and touch points. Sized on the bare truss, since strips go on after galvanizing.')}
+      <div id="g_galv">
+        ${R('galvL', 'Kettle length', 10, 60, 0.5, 29, v => (+v).toFixed(1).replace(/\.0$/, '') + "'")}
+        ${R('galvW', 'Kettle width', 2, 10, 0.25, 6, v => (+v).toFixed(2).replace(/\.?0+$/, '') + "'")}
+        ${R('galvD', 'Kettle depth', 2, 14, 0.25, 10, v => (+v).toFixed(2).replace(/\.?0+$/, '') + "'")}
+        ${R('galvMargin', 'Clearance each side', 0, 24, 1, 6, v => v + '"', 'Room left between the piece and the kettle walls on every side.')}
+        ${R('galvKeep', 'Keep cuts away from posts and touch points', 0, 6, 0.5, 2.5, v => (+v).toFixed(1).replace(/\.0$/, '') + "'")}
+        ${S_('galvPlateT', 'Match plate thickness', [['0.375', '3/8"'], ['0.5', '1/2"'], ['0.625', '5/8"']], '0.375')}
+        <div class="info" id="galvInfo">—</div>
+      </div>
       <div class="sub">Oak fill</div>
       ${C_('woodOn', 'Add oak members', false, 'Some members become round oak, the same diameter as the tubing. The rest stay tube.')}
       ${C_('stripOn', 'Riffle mode: skin the truss in overlapping strips', false, 'Riffle mode skins the truss in overlapping strips, called riffles, laid over the outside of the truss and riveted to the rib rings. The members all stay pipe. Turning this on puts the rings outside the tubes, and switches a stainless truss to aluminum (aluminum and galvanized steel stay as they are).')}
@@ -2991,6 +3002,7 @@ function buildPanel() {
       <button class="btn" id="exportContacts" title="Every place two strands meet, with overlap">CSV · touch points</button>
       <button class="btn" id="exportBend" title="Arc segmentation of the centerline">CSV · bend schedule</button>
       <button class="btn" id="exportRibs" title="Truss mode only">CSV · rib cut list</button>
+      <button class="btn" id="exportGalv" title="Truss mode with galvanizing sections on">CSV · galvanizing sections</button>
       <button class="btn" id="exportStruct" title="Truss mode only. Pipes, ribs, posts and skin with section properties, weights and areas, for an engineer's own analysis software. No loads are applied.">JSON · structural model</button>
       <button class="btn" id="exportCsv" title="Centerline points, feet">CSV · points</button>
       <button class="btn" id="btnPrint" title="Print the view">Print</button>
@@ -3043,7 +3055,7 @@ function updateVisibility() {
   show('g_mobius', prof === 'square' && !planeOn);
   { const inForm = prof === 'strand' || prof === 'truss', box = $('flareBox'), slot = $(inForm ? 'flareSlotForm' : 'flareSlotStock'); if (box && slot && box.parentNode !== slot) slot.appendChild(box); $('flareSub').style.display = inForm ? '' : 'none'; }   // flare sits under Stock for a single pipe, under Form for bundles and trusses
   show('g_strandS40', $('strandStockType').value === 'sched40'); show('g_strandTub', $('strandStockType').value === 'tubing');
-  show('g_trussS40', $('trussStockType').value === 'sched40'); show('g_trussTub', $('trussStockType').value === 'tubing'); show('g_trussHss', $('trussStockType').value === 'hss');
+  show('g_trussS40', $('trussStockType').value === 'sched40'); show('g_trussTub', $('trussStockType').value === 'tubing'); show('g_trussHss', $('trussStockType').value === 'hss'); show('g_galv', chk('galvOn'));
   show('g_drift', num('stripInfill') > 50);
   show('g_louvR', num('stripLouvre') > 0);
   show('g_narrowW', num('stripNarrowR') > 0);
@@ -3051,7 +3063,7 @@ function updateVisibility() {
   show('g_seed', $('trussDistribution').value === 'irregular'); show('g_wood', chk('woodOn')); show('g_fill', chk('woodOn')); { const tr = prof === 'truss', fin = $('trussFinish').value; show('g_trussColors', tr); show('g_trussColor', tr && fin === 'paint'); show('g_stripColor', tr && chk('stripOn')); show('g_patchColor', tr && chk('stripOn') && chk('patchOn') && chk('patchShow')); show('g_postColor', chk('postsOn')); show('g_patch', chk('patchOn')); { const mat = $('stripMat').value, acm = mat === 'acm3' || mat === 'acm4'; if (acm) { const tv = mat === 'acm3' ? '0.118' : '0.157'; if ($('stripT').value !== tv) $('stripT').value = tv; } else if ($('stripT').value === '0.118' || $('stripT').value === '0.157') $('stripT').value = '0.063'; $('stripT').disabled = acm; show('g_stripBar', mat === 'bar' || mat === 'mixed' || mat === 'roll'); show('g_stripSheet', mat !== 'bar' && mat !== 'mixed' && mat !== 'roll'); show('g_mixed', mat === 'mixed'); show('g_roll', mat === 'roll'); } show('g_stepStrips', prof === 'truss' && chk('stripOn')); show('g_flareWhole', prof === 'truss'); show('g_surface', !tr || fin === 'surface'); show('g_colorMode', !tr || fin === 'surface' || chk('stripOn')); } { const ro = $('ribOutside'); if (chk('stripOn')) ro.checked = true; ro.disabled = chk('stripOn'); } show('g_strip', chk('stripOn')); show('c_ribSpacing', !chk('ribAuto')); show('g_ribAuto', chk('ribAuto'));
   { const lo = chk('lenOn') && $('lenAdapt').value !== 'free'; $('detail').disabled = lo; $('pathLen').disabled = !chk('lenOn'); $('c_detail').style.opacity = lo ? .5 : 1; $('c_pathLen').style.opacity = chk('lenOn') ? 1 : .6; $('lenAdapt').disabled = !chk('lenOn'); }
   show('g_plane', planeOn); show('g_found', chk('foundOn') && !chk('postsOn')); show('g_susp', !planeOn); show('g_posts', chk('postsOn')); show('g_plates', chk('plateOn')); show('c_planeFt', !chk('postsOn'));
-  $('exportRibs').disabled = prof !== 'truss'; $('exportStruct').disabled = prof !== 'truss';
+  $('exportRibs').disabled = prof !== 'truss'; $('exportGalv').disabled = prof !== 'truss' || !chk('galvOn'); $('exportStruct').disabled = prof !== 'truss';
   { const hl = $('strandSizes').value.trim() !== ''; $('strandCount').disabled = hl; $('c_strandCount').style.opacity = hl ? .5 : 1; }
   { const vt = $('viewTitle'); if (/^(Perspective|Orthographic) View$/.test(vt.textContent) || !vt.textContent) vt.textContent = (typeof isOrtho !== 'undefined' && isOrtho) ? 'Orthographic View' : 'Perspective View'; }
 }
@@ -4298,6 +4310,7 @@ function buildScene(draft) {
     }); }
   scene.add(currentMeshGroup); scene.add(extraGroup);
   state.lastA = X.A;
+  try { drawGalv(c, X.A, draft); } catch (e) { console.error(e); }
 
   { const yw = c.plane.on ? c.plane.yc : 0;                 // the form stays rooted at its lowest point; the plane is what moves
     currentMeshGroup.position.y = yw; extraGroup.position.y = yw; slab.position.y = yw - 0.03; gridHelper.position.y = yw;
@@ -4906,6 +4919,135 @@ function exportBend() {
   out.push(`# Segments below the radius limit: ${totalTight}`);
   saveBlob(new Blob([out.join('\n')], { type: 'text/csv' }), slug() + '_bend_schedule.csv'); setStatus('Bend schedule saved.');
 }
+// ---------------------------------------------------------------------
+// Galvanizing sections: fewest cuts so every section fits the kettle, with a pair of bolted match plates at each cut
+// ---------------------------------------------------------------------
+const GALV_FRAMES = (() => {      // box orientations to try: axes spread over the sphere, each turned through a quarter turn
+  const out = [], nD = 110, nA = 9;
+  for (let i = 0; i < nD; i++) {
+    const y = 1 - (i + 0.5) / nD, r = Math.sqrt(1 - y * y), th = i * Math.PI * (3 - Math.sqrt(5));
+    const a = [Math.cos(th) * r, y, Math.sin(th) * r], ref = Math.abs(a[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0];
+    let b = [a[1] * ref[2] - a[2] * ref[1], a[2] * ref[0] - a[0] * ref[2], a[0] * ref[1] - a[1] * ref[0]]; const bl = Math.hypot(...b); b = b.map(v => v / bl);
+    const cc = [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+    for (let k = 0; k < nA; k++) { const t = k / nA * Math.PI / 2, ct = Math.cos(t), sn = Math.sin(t); out.push([a, b.map((v, j) => v * ct + cc[j] * sn), cc.map((v, j) => v * ct - b[j] * sn)]); }
+  }
+  return out;
+})();
+function galvFit(P, r, K, frames) {      // smallest box over the orientations: returns how far over the kettle it is (1 = just fits) and the box size
+  let best = null;
+  for (const F of frames) {
+    const lo = [1e9, 1e9, 1e9], hi = [-1e9, -1e9, -1e9];
+    for (const p of P) for (let j = 0; j < 3; j++) { const v = p[0] * F[j][0] + p[1] * F[j][1] + p[2] * F[j][2]; if (v < lo[j]) lo[j] = v; if (v > hi[j]) hi[j] = v; }
+    const d = [0, 1, 2].map(j => hi[j] - lo[j] + 2 * r).sort((x, y) => x - y), sc = Math.max(d[0] / K[0], d[1] / K[1], d[2] / K[2]);
+    if (!best || sc < best.sc) best = { sc, dims: d };
+  }
+  return best;
+}
+function galvPlan(c, A) {
+  const st = c.st; if (st.profile !== 'truss' || !chk('galvOn') || !A.dense.length || !A.ribs.length) return null;
+  const marg = num('galvMargin') / 12, K = [num('galvW'), num('galvD'), num('galvL')].map(v => v - 2 * marg).sort((x, y) => x - y), keep = num('galvKeep');
+  const extra = ribOutOn() ? 0 : st.memOD / 12;
+  const key = JSON.stringify([K, keep, extra, A.ribs.length, A.ribs[0].Ro, A.dense.map(d => [d.pts.length, d.closed, d.pts[0], d.pts[d.pts.length >> 1]])]);
+  if (state.galvCache && state.galvCache.key === key) return state.galvCache.plan;
+  if (K[0] <= 0) return { fail: 'The clearance is larger than the kettle.' };
+  const plan = { K, keep, pieces: [], fail: null };
+  A.dense.forEach((d, idx) => {
+    const pts = d.pts, n = pts.length, closed = d.closed, sArr = new Float64Array(n);
+    for (let i = 1; i < n; i++) sArr[i] = sArr[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1], pts[i][2] - pts[i - 1][2]);
+    const L = sArr[n - 1] + (closed ? Math.hypot(pts[0][0] - pts[n - 1][0], pts[0][1] - pts[n - 1][1], pts[0][2] - pts[n - 1][2]) : 0);
+    const rr = A.ribs.filter(r => r.piece === idx).sort((a, b) => a.station - b.station);
+    const radAt = (sv) => { if (!rr.length) return st.outerExtentIn / 12; let best = rr[0], bd = 1e9; for (const r of rr) { const dd = Math.abs(r.station - sv); if (dd < bd) { bd = dd; best = r; } } return best.Ro + extra; };
+    const nearest = (q) => { let bi = 0, bd = 1e9; for (let i = 0; i < n; i += 2) { const dd = Math.hypot(pts[i][0] - q[0], pts[i][1] - q[1], pts[i][2] - q[2]); if (dd < bd) { bd = dd; bi = i; } } return { i: bi, d: bd }; };
+    const hot = [];
+    (c.contacts || []).filter(k => k.overlap >= 0.25 / 12).forEach(k => ['pa', 'pb'].forEach(key2 => { const h = nearest(k[key2]); if (h.d < 1.5 * (k.od || 1)) hot.push(sArr[h.i]); }));
+    if (c.postsOn) (c.posts || []).forEach(p => { const h = nearest([p.x, p.yTop, p.z]); if (h.d < 3) hot.push(sArr[h.i]); });
+    const wrap = (x) => closed ? ((x % L) + L) % L : x, sep = (a, b) => { const dd = Math.abs(a - b); return closed ? Math.min(dd, L - dd) : dd; };
+    const okCut = (x) => hot.every(h => sep(x, h) >= keep) && (closed || (x > 0.5 && x < L - 0.5));
+    const idxAt = (x) => { let lo = 0, hi = n - 1; while (lo < hi) { const m = (lo + hi) >> 1; if (sArr[m] < x) lo = m + 1; else hi = m; } return lo; };
+    const sectionPts = (a, b) => {      // stations a to b (b may wrap past the end on a closed loop)
+      const out = []; let rMax = 0; const len = closed ? ((b - a) % L + L) % L || L : b - a, step = Math.max(len / 140, 0.05);
+      for (let x = 0; x <= len + 1e-9; x += step) { const sv = wrap(a + x), i = Math.min(n - 1, idxAt(sv)); out.push(pts[i]); rMax = Math.max(rMax, radAt(sv)); }
+      const ctr = [0, 1, 2].map(j => out.reduce((m, p) => m + p[j], 0) / out.length);
+      return { P: out.map(p => [p[0] - ctr[0], p[1] - ctr[1], p[2] - ctr[2]]), r: rMax, len };
+    };
+    const coarse = GALV_FRAMES.filter((_, i) => i % 3 === 0);
+    const score = (cuts, frames) => {
+      const bounds = closed ? cuts.map((cu, i) => [cu, cuts[(i + 1) % cuts.length]]) : [0, ...cuts, L].slice(0, -1).map((a, i) => [a, [...cuts, L][i]]);
+      if (closed && cuts.length === 0) bounds.push([0, L]);
+      let worst = 0; const secs = [];
+      for (const [a, b] of bounds) { const sp = sectionPts(a, b), f = galvFit(sp.P, sp.r, K, frames); worst = Math.max(worst, f.sc); secs.push({ a, b, len: sp.len, dims: f.dims, sc: f.sc }); }
+      return { worst, secs };
+    };
+    let found = null;
+    for (let N = 1; N <= 30 && !found; N++) {
+      let best = null; const nc = closed ? (N === 1 ? 0 : N) : N - 1, span = L / N, tries = nc === 0 ? 1 : Math.max(8, Math.min(40, Math.round(span / 0.5)));
+      for (let t = 0; t < tries; t++) {
+        const off = nc === 0 ? 0 : (closed ? t / tries * span : (t / tries - 0.5) * span * 0.6);
+        const cuts = Array.from({ length: nc }, (_, k) => wrap(closed ? off + k * span : (k + 1) * span + off)).sort((x, y) => x - y);
+        if (!cuts.every(okCut)) continue;
+        const r = score(cuts, coarse); if (!best || r.worst < best.worst) best = Object.assign(r, { cuts });
+      }
+      if (best && best.worst <= 1.15 && nc > 0) {      // nudge each cut on its own to shave the worst section
+        for (const fr of [0.2, 0.1, 0.05]) for (let k = 0; k < best.cuts.length; k++) for (const sg of [-1, 1]) {
+          const cuts = best.cuts.slice(); cuts[k] = wrap(cuts[k] + sg * fr * span); cuts.sort((x, y) => x - y);
+          if (!cuts.every(okCut) || (!closed && cuts.some((x, i) => i && x - cuts[i - 1] < 1))) continue;
+          const r = score(cuts, coarse); if (r.worst < best.worst) best = Object.assign(r, { cuts });
+        }
+      }
+      if (best && best.worst <= 1) { const fine = score(best.cuts, GALV_FRAMES); found = fine.worst <= 1 ? Object.assign(fine, { cuts: best.cuts, N }) : null; }
+    }
+    if (!found) { plan.fail = 'No layout fits this kettle with cuts clear of the posts and touch points. Try a bigger kettle, less clearance, or a smaller keep-away.'; return; }
+    const at = (sv) => { const i = Math.min(n - 1, idxAt(sv)), j = Math.min(n - 1, i + 1), i0 = Math.max(0, i - 1); const t = [pts[j][0] - pts[i0][0], pts[j][1] - pts[i0][1], pts[j][2] - pts[i0][2]], tl = Math.hypot(...t) || 1; return { p: pts[i], t: t.map(v => v / tl) }; };
+    plan.pieces.push({ piece: idx, L, closed, N: found.N, secs: found.secs, cuts: found.cuts.map(sv => Object.assign({ s: sv, R: radAt(sv) }, at(sv))) });
+  });
+  state.galvCache = { key, plan };
+  return plan;
+}
+function drawGalv(c, A, draft) {
+  const info = $('galvInfo'); state.lastGalv = null;
+  if (c.st.profile !== 'truss' || !chk('galvOn')) { if (info) info.textContent = '—'; return; }
+  let plan = null;
+  if (draft) { plan = state.galvCache ? state.galvCache.plan : null; if (!plan) { if (info) info.textContent = 'Finding sections…'; return; } }
+  else plan = galvPlan(c, A);
+  if (!plan) { if (info) info.textContent = '—'; return; }
+  state.lastGalv = plan;
+  if (plan.fail) { if (info) info.textContent = plan.fail; return; }
+  const tP = num('galvPlateT') / 12, memR = c.st.memOD / 12, dens = c.st.alum ? AL_LB_IN3 : STEEL_LB_IN3;
+  const pm = new THREE.MeshStandardMaterial({ color: 0x9aa1a8, roughness: 0.45, metalness: 0.6 }), cutM = new THREE.MeshBasicMaterial({ color: 0xe8590c, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false });
+  let plates = 0, plateLb = 0;
+  plan.pieces.forEach(pc => pc.cuts.forEach(cu => {
+    const Ro = cu.R, Ri = Math.max(Ro * 0.35, Ro - memR - 2.5 / 12), t = new THREE.Vector3(...cu.t).normalize(), q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), t);
+    [-1, 1].forEach(sg => {      // two plates face to face, one on each section
+      const sh = new THREE.Shape(); sh.absarc(0, 0, Ro, 0, TAU, false); const h = new THREE.Path(); h.absarc(0, 0, Ri, 0, TAU, true); sh.holes.push(h);
+      const g = new THREE.ExtrudeGeometry(sh, { depth: tP, bevelEnabled: false, curveSegments: 40 }); g.translate(0, 0, sg < 0 ? -tP : 0);
+      const m = new THREE.Mesh(g, pm); m.position.set(...cu.p); m.quaternion.copy(q); currentMeshGroup.add(m);
+      plates++; plateLb += Math.PI * (Math.pow(Ro * 12, 2) - Math.pow(Ri * 12, 2)) * tP * 12 * dens;
+    });
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(Ro * 1.6, 48), cutM); disc.position.set(...cu.p); disc.quaternion.copy(q); disc.renderOrder = 5; extraGroup.add(disc);
+  }));
+  A.extraW += plateLb; plan.plates = plates; plan.plateLb = plateLb;
+  if (info) {
+    const K = plan.K, L = [];
+    plan.pieces.forEach(pc => {
+      const big = pc.secs.reduce((m, s) => (s.dims[2] * s.dims[1] > m.dims[2] * m.dims[1] ? s : m), pc.secs[0]);
+      L.push(`${pc.secs.length} section${pc.secs.length === 1 ? '' : 's'} fit a ${ftIn(num('galvL'))} × ${ftIn(num('galvW'))} × ${ftIn(num('galvD'))} kettle with ${num('galvMargin')}" clearance.`);
+      L.push(`Largest: ${big.dims.map(ftIn).join(' × ')} (fits ${K.map(ftIn).join(' × ')}).`);
+      if (pc.cuts.length) L.push(`Cuts at ${pc.cuts.map(cu => ftIn(cu.s)).join(', ')} along the line, at least ${ftIn(plan.keep)} from posts and touch points.`);
+    });
+    if (plates) L.push(`${plates} match plates (${plates / 2} pairs), ${num('galvPlateT') === 0.375 ? '3/8' : num('galvPlateT') === 0.5 ? '1/2' : '5/8'}" thick, about ${Math.round(plateLb)} lb. Strips that cross a cut are riveted on after assembly.`);
+    info.textContent = L.join('\n');
+  }
+}
+function exportGalv() {
+  if (!needForm()) return;
+  const g = state.lastGalv; if (!g || g.fail || !g.pieces) { setStatus(g && g.fail ? g.fail : 'Turn on galvanizing sections in Hollow Ribbed Truss mode first.'); return; }
+  const rows = ['piece,section,start_ft,end_ft,length_ft,box_small_ft,box_mid_ft,box_long_ft'];
+  g.pieces.forEach(pc => pc.secs.forEach((s, i) => rows.push([pc.piece + 1, i + 1, s.a.toFixed(2), s.b.toFixed(2), s.len.toFixed(2), ...s.dims.map(v => v.toFixed(2))].join(','))));
+  rows.push('', 'piece,cut,station_ft,x_ft,y_ft,z_ft,tan_x,tan_y,tan_z,plate_od_in');
+  g.pieces.forEach(pc => pc.cuts.forEach((cu, i) => rows.push([pc.piece + 1, i + 1, cu.s.toFixed(2), ...cu.p.map(v => v.toFixed(3)), ...cu.t.map(v => v.toFixed(4)), (cu.R * 24).toFixed(2)].join(','))));
+  rows.push(`# usable kettle ${g.K.map(v => v.toFixed(2)).join(' x ')} ft after clearance; bare truss, strips not included`);
+  saveBlob(new Blob([rows.join('\n')], { type: 'text/csv' }), slug() + '_galvanizing_sections.csv'); setStatus('Galvanizing sections saved.');
+}
 function exportRibs() {
   if (!needForm()) return;
   if (state.last.st.profile !== 'truss') { setStatus('The rib list is for Hollow Ribbed Truss mode.'); return; }
@@ -5057,7 +5199,7 @@ function wire() {
   ['projName', 'siteName'].forEach(id => $(id).addEventListener('input', () => { }));
 
   $('exportPng').addEventListener('click', exportPng); $('exportDxf').addEventListener('click', exportDxf); $('exportContacts').addEventListener('click', exportContacts); $('exportStruct').addEventListener('click', exportStruct); $('exportObj').addEventListener('click', exportObj); $('exportGlb').addEventListener('click', exportGlb); $('exportUsdz').addEventListener('click', exportUsdz); $('exportStep').addEventListener('click', exportStep); $('exportCsv').addEventListener('click', exportCsvPoints);
-  $('exportTakeoff').addEventListener('click', exportTakeoff); $('exportBend').addEventListener('click', exportBend); $('exportRibs').addEventListener('click', exportRibs);
+  $('exportTakeoff').addEventListener('click', exportTakeoff); $('exportBend').addEventListener('click', exportBend); $('exportRibs').addEventListener('click', exportRibs); $('exportGalv').addEventListener('click', exportGalv);
   $('btnPrint').addEventListener('click', () => window.print());
   $('saveConfigBtn').addEventListener('click', () => {
     const cfg = collectConfig(), f = state.feat;
