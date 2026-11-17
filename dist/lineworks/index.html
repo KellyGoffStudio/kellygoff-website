@@ -2322,6 +2322,12 @@ function buildTakeoff() {
     const desc = wood[0].w ? `Rectangular ${wood[0].w}" × ${wood[0].h}" wood` : `${tone}, ${wood[0].od}" round, cut from ${Math.ceil((wood[0].od + 0.25) / 0.25) * 0.25}" square blanks`;
     order.groups.push({ type: 'wood', item: desc, pcs: wood.length, net: bf, order: bf * (1 + TK.extra), unit: 'bd ft', wt, wt20: wt * (1 + TK.extra), byLen });
   }
+  if (prof === 'truss' && A.hoseFt > 0) {      // hose fill: ordered by the foot, with backer rod to match and a coupling at each 50 ft joint
+    const hm = A.members.filter(m => m.mat === 'hose'), ft = A.hoseFt, secs = A.hoseSecs || 0, cpl = A.hoseCpl || 0, hod = st.fillOD, up = (v) => Math.ceil(v * (1 + TK.extra) - 1e-9), hwt = ft * 0.6 * hod / 2.5;
+    order.groups.push({ type: 'hose', item: `Fire hose, filled to ${hod}" OD — ${hm.length} hose members`, note: `About ${secs} sections of 50 ft. Weight is an estimate for hose and backer rod together.`, pcs: hm.length, net: ft, order: up(ft), unit: 'ft', wt: hwt, wt20: hwt * (1 + TK.extra) });
+    order.groups.push({ type: 'hose', sub: true, item: 'Closed-cell polyethylene backer rod, sized to fill the hose round', note: 'Same length as the hose. Weight is counted with the hose above.', pcs: hm.length, net: ft, order: up(ft), unit: 'ft', wt: 0, wt20: 0 });
+    if (cpl) order.groups.push({ type: 'hose', sub: true, item: 'Brass couplings, one at each 50 ft hose joint', note: 'Threaded pair joins two sections. Count is joints only, not free ends.', pcs: cpl, net: cpl, order: up(cpl), unit: 'ea', wt: 0, wt20: 0 });
+  }
   return { pieces, order, stocks, ground, prof };
 }
 
@@ -2381,24 +2387,24 @@ function makeTakeoffSVGraw() {
   const cols = [tx, tx + 330, tx + 392, tx + 500, tx + 608, tx + 692]; const heads = ['ITEM', 'PIECES', 'NET QUANTITY', 'ORDER (+20%)', 'WEIGHT NET', 'WEIGHT +20%'];
   heads.forEach((h, i) => svg += `<text x="${cols[i]}" y="${y}" class="th">${h}</text>`); y += 5; svg += `<line x1="${tx}" y1="${y}" x2="${tx + tw}" y2="${y}" stroke="${INK}" stroke-width="0.7"/>`; y += 12;
   const lb = (v) => Math.round(v).toLocaleString() + ' lb', nf = (v) => v.toFixed(1);
-  const strSheet = T.order.groups.some(g => g.type === 'strips' && g.sheet); let tBars = 0, tBars20 = 0, tBf = 0, tBf20 = 0, tWt = 0, tWt20 = 0, tPcs = 0, tStr = 0, tStr20 = 0;
+  const strSheet = T.order.groups.some(g => g.type === 'strips' && g.sheet); let tBars = 0, tBars20 = 0, tBf = 0, tBf20 = 0, tWt = 0, tWt20 = 0, tPcs = 0, tStr = 0, tStr20 = 0, tHose = 0, tHose20 = 0;
   const wrap = (t, n) => { const w = t.split(' '), lines = []; let cur = ''; w.forEach(x => { if ((cur + ' ' + x).trim().length > n) { lines.push(cur.trim()); cur = x; } else cur += ' ' + x; }); lines.push(cur.trim()); return lines; };
   T.order.groups.forEach(g => {
     const lines = wrap(g.item, 62); lines.forEach((l, i) => svg += `<text x="${cols[0]}" y="${y + i * 10}" class="row">${esc(l)}</text>`);
-    const isBar = g.type === 'bars' || g.type === 'strips', net = isBar ? `${g.net} ${g.unit}` : `${nf(g.net)} ${g.unit}`, ord = isBar ? `${g.order} ${g.unit}` : `${nf(g.order)} ${g.unit}`;
+    const isBar = g.type === 'bars' || g.type === 'strips', fq = g.type === 'hose' ? (v) => Math.round(v).toLocaleString() : nf, net = isBar ? `${g.net} ${g.unit}` : `${fq(g.net)} ${g.unit}`, ord = isBar ? `${g.order} ${g.unit}` : `${fq(g.order)} ${g.unit}`;
     svg += `<text x="${cols[1]}" y="${y}" class="row">${g.pcs}</text><text x="${cols[2]}" y="${y}" class="row">${net}</text><text x="${cols[3]}" y="${y}" class="rowb">${ord}</text><text x="${cols[4]}" y="${y}" class="row">${lb(g.wt)}</text><text x="${cols[5]}" y="${y}" class="row">${lb(g.wt20)}</text>`;
     if (g.type === 'wood' && g.byLen) svg += `<text x="${cols[0]}" y="${y + lines.length * 10}" class="tn">${Object.keys(g.byLen).sort((a, b) => a - b).map(kk => `${g.byLen[kk]} × ${kk}'`).join('   ')}  ·  gross board feet incl. 3" trim per piece</text>`;
     else if (g.type === 'strips') svg += `<text x="${cols[0]}" y="${y + lines.length * 10}" class="tn">${g.arcs ? `${fi(g.usedIn)} of arc pieces on ${g.net} sheets` : g.sheet ? `${fi(g.usedIn)} of cut strips on ${g.net} sheets (${g.offFt.toFixed(0)}' of offcut in ${g.rows} strip lanes per sheet)` : `${fi(g.usedIn)} of cut strips on ${g.net} bars (${((g.net * g.capIn - g.usedIn) / 12).toFixed(1)}' of offcut)`}</text>`;
-    else svg += `<text x="${cols[0]}" y="${y + lines.length * 10}" class="tn">${g.usedIn ? `${fi(g.usedIn)} of cut pieces on ${g.net} bars (${(g.net * 96 - g.usedIn / 1 > 0 ? ((g.net * 96 - g.usedIn) / 12).toFixed(1) : 0)}' of usable offcut)` : ''}</text>`;
-    y += lines.length * 10 + 14; tPcs += g.pcs; tWt += g.wt; tWt20 += g.wt20;
-    if (g.type === 'bars') { tBars += g.net; tBars20 += g.order; } else if (g.type === 'strips') { tStr += g.net; tStr20 += g.order; } else { tBf += g.net; tBf20 += g.order; }
+    else svg += `<text x="${cols[0]}" y="${y + lines.length * 10}" class="tn">${g.usedIn ? `${fi(g.usedIn)} of cut pieces on ${g.net} bars (${(g.net * 96 - g.usedIn / 1 > 0 ? ((g.net * 96 - g.usedIn) / 12).toFixed(1) : 0)}' of usable offcut)` : (g.note ? esc(g.note) : '')}</text>`;
+    y += lines.length * 10 + 14; tPcs += g.sub ? 0 : g.pcs; tWt += g.wt; tWt20 += g.wt20;
+    if (g.type === 'bars') { tBars += g.net; tBars20 += g.order; } else if (g.type === 'strips') { tStr += g.net; tStr20 += g.order; } else if (g.type === 'hose') { if (!g.sub) { tHose += g.net; tHose20 += g.order; } } else { tBf += g.net; tBf20 += g.order; }
     svg += `<line x1="${tx}" y1="${y - 5}" x2="${tx + tw}" y2="${y - 5}" stroke="${RULE}" stroke-width="0.5"/>`; y += 6;
   });
   const metalSub = T.order.groups.filter(g => g.type === 'bars'), woodSub = T.order.groups.filter(g => g.type === 'wood');
   if (metalSub.length) { const w1 = metalSub.reduce((a, g) => a + g.wt, 0), w2 = metalSub.reduce((a, g) => a + g.wt20, 0); svg += `<text x="${cols[0]}" y="${y}" class="rowb">SUBTOTAL — METAL STOCK</text><text x="${cols[1]}" y="${y}" class="rowb">${metalSub.reduce((a, g) => a + g.pcs, 0)}</text><text x="${cols[2]}" y="${y}" class="rowb">${tBars} × 10' bars</text><text x="${cols[3]}" y="${y}" class="rowb">${tBars20} × 10' bars</text><text x="${cols[4]}" y="${y}" class="rowb">${lb(w1)}</text><text x="${cols[5]}" y="${y}" class="rowb">${lb(w2)}</text>`; y += 13; }
   if (woodSub.length) { const g = woodSub[0]; svg += `<text x="${cols[0]}" y="${y}" class="rowb">SUBTOTAL — WOOD</text><text x="${cols[1]}" y="${y}" class="rowb">${g.pcs}</text><text x="${cols[2]}" y="${y}" class="rowb">${nf(g.net)} bd ft</text><text x="${cols[3]}" y="${y}" class="rowb">${nf(g.order)} bd ft</text><text x="${cols[4]}" y="${y}" class="rowb">${lb(g.wt)}</text><text x="${cols[5]}" y="${y}" class="rowb">${lb(g.wt20)}</text>`; y += 13; }
   svg += `<line x1="${tx}" y1="${y - 4}" x2="${tx + tw}" y2="${y - 4}" stroke="${INK}" stroke-width="0.9"/>`; y += 8;
-  svg += `<text x="${cols[0]}" y="${y}" class="rowb">TOTAL ORDER</text><text x="${cols[1]}" y="${y}" class="rowb">${tPcs}</text><text x="${cols[2]}" y="${y}" class="rowb">${[tBars ? tBars + " bars" : '', tStr ? tStr + (strSheet ? ' sheets' : ' flat bar') : '', tBf ? nf(tBf) + ' bd ft' : ''].filter(Boolean).join(' + ')}</text><text x="${cols[3]}" y="${y}" class="rowb">${[tBars20 ? tBars20 + " bars" : '', tStr20 ? tStr20 + (strSheet ? ' sheets' : ' flat bar') : '', tBf20 ? nf(tBf20) + ' bd ft' : ''].filter(Boolean).join(' + ')}</text><text x="${cols[4]}" y="${y}" class="rowb">${lb(tWt)}</text><text x="${cols[5]}" y="${y}" class="rowb">${lb(tWt20)}</text>`;
+  svg += `<text x="${cols[0]}" y="${y}" class="rowb">TOTAL ORDER</text><text x="${cols[1]}" y="${y}" class="rowb">${tPcs}</text><text x="${cols[2]}" y="${y}" class="rowb">${[tBars ? tBars + " bars" : '', tStr ? tStr + (strSheet ? ' sheets' : ' flat bar') : '', tBf ? nf(tBf) + ' bd ft' : '', tHose ? Math.round(tHose).toLocaleString() + ' ft hose' : ''].filter(Boolean).join(' + ')}</text><text x="${cols[3]}" y="${y}" class="rowb">${[tBars20 ? tBars20 + " bars" : '', tStr20 ? tStr20 + (strSheet ? ' sheets' : ' flat bar') : '', tBf20 ? nf(tBf20) + ' bd ft' : '', tHose20 ? Math.round(tHose20).toLocaleString() + ' ft hose' : ''].filter(Boolean).join(' + ')}</text><text x="${cols[4]}" y="${y}" class="rowb">${lb(tWt)}</text><text x="${cols[5]}" y="${y}" class="rowb">${lb(tWt20)}</text>`;
   const orderBottom = y + 8;
   // ---- notes ---------------------------------------------------------
   const nx = M + tw + 30, nw = W - M - nx; let ny = by + bh + 34;
@@ -2409,6 +2415,7 @@ function makeTakeoffSVGraw() {
     "Order columns add 20% for waste and mistakes. Bars round up to whole bars.",
     T.order.groups.some(g => g.type === 'wood') ? "Oak is rounded from square blanks: diameter + 1/4\", rounded up to 1/4\". Board feet include 3\" of trim per piece. White oak weighs about 47 lb per cubic foot." : "",
     T.order.groups.some(g => /rib rings/.test(g.item)) ? "Rib rings are rolled from flat bar. Each bar loses 12\" for tool ends." : "",
+    T.order.groups.some(g => g.type === 'hose') ? "Hose is decommissioned fire hose slid over backer rod so it holds a round section. It rests on the rib rings like the pipes and is not drawn in the plan or elevations. Hose and backer rod are ordered by the foot, with 20% extra." : "",
     T.order.groups.some(g => g.type === 'strips') ? (T.order.groups.some(g => g.type === 'strips' && g.sheet) ? (T.order.groups.some(g => g.mat && g.mat !== 'sheet') ? "Strips are cut lengthwise from ACM sheet with a carbide blade, 1/8\" kerf. Seal cut edges against water; ask for spare strips from the same production lot. " : "Strips are cut lengthwise from sheet, 1/8\" kerf. ") : "Strips are cut from flat bar sticks with 1\" trim per stick and 1/8\" kerf. ") + "Each strip crosses at least two rib rings and is riveted only at the ribs, never to the tubes. Pre-roll any strip marked for twist or tight flatwise bends before painting. Strips are not in the STEP file." : ""].filter(Boolean);
   notes.forEach(n => wrap(n, 62).forEach(l => { svg += `<text x="${nx}" y="${ny}" class="tn">${esc(l)}</text>`; ny += 9.5; }) || (ny += 3));
   // member colour legend
@@ -3727,7 +3734,7 @@ function buildPiece(piece, idx, X) {
         }
         return { closed, group: idx, L: length, P, Rad, nF, cnt, act, th, th0, C: Cc, Ro: RoA };
       };
-      let woodVolIn3 = 0, woodPieces = [], hoseFt = 0, hoseSecs = 0;
+      let woodVolIn3 = 0, woodPieces = [], hoseFt = 0, hoseSecs = 0, hoseCpl = 0;
       const fR = (st.fillOD || st.memOD) / 24, tw0 = (st.twist || 0) * TAU / 10 * length, twT = closed ? Math.round(tw0 / TAU) * TAU : tw0, twA = (i) => twT * i / Math.max(1, cnt - 1);
       for (let m = 0; m < n; m++) {
         const pts = [], hoseM = st.fillHose && !isSteel[m];
@@ -3752,14 +3759,16 @@ function buildPiece(piece, idx, X) {
           const hm = hoseMat(hHex); currentMeshGroup.add(new THREE.Mesh(geo, hm));
           if (!closed) [[0, sub.getTangentAt(0).negate()], [1, sub.getTangentAt(1)]].forEach(([u, d]) => { const cg = new THREE.CircleGeometry(fR, radH); addVC(cg, hHex); const cm = new THREE.Mesh(cg, hm); cm.position.copy(sub.getPointAt(u)); cm.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), d.normalize()); currentMeshGroup.add(cm); });
           const off = (m * 17.5) % 50, nSec = Math.max(1, Math.ceil((Lm - off) / 50 - 1e-9) + (off > 0.5 ? 1 : 0));
+          let cplN = 0;
           if (chk('hoseCouplings')) {
             const cMat = new THREE.MeshStandardMaterial({ color: 0xb08d4f, roughness: 0.5, metalness: 0.75 }), cl = 3.5 / 12;
             for (let s0 = off > 0.5 ? off : 50; s0 < Lm - 0.5; s0 += 50) {
+              cplN++;
               const u = s0 / Lm, cg = new THREE.CylinderGeometry(fR * 1.13, fR * 1.13, cl, radH, 1, false); addVC(cg, 0xb08d4f);
               const cm = new THREE.Mesh(cg, cMat); cm.position.copy(sub.getPointAt(u)); cm.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), sub.getTangentAt(u).normalize()); currentMeshGroup.add(cm);
             }
           }
-          hoseFt += Lm; hoseSecs += nSec;
+          hoseFt += Lm; hoseSecs += nSec; hoseCpl += cplN;
           X.A.members.push({ pts: samp, closed, od: st.fillOD, id: 0, group: idx, L: length, kind: 'truss', mat: 'hose' });
         } else {
           const N = samp.length; let Lm = 0; for (let i = 1; i < N; i++) Lm += Math.hypot(samp[i][0] - samp[i - 1][0], samp[i][1] - samp[i - 1][1], samp[i][2] - samp[i - 1][2]); if (closed) Lm += Math.hypot(samp[0][0] - samp[N - 1][0], samp[0][1] - samp[N - 1][1], samp[0][2] - samp[N - 1][2]);
@@ -3935,7 +3944,7 @@ function buildPiece(piece, idx, X) {
           X.A.infill = { rows1, rows2, moved, covBefore: covOf(base), covAfter: covOf(fin.S), stage1Total: A1.n };
         }
       }
-      X.A.woodW = (X.A.woodW || 0) + woodVolIn3 * 0.0272 + hoseFt * 0.6 * (st.fillOD || 2.5) / 2.5; X.A.hoseFt = (X.A.hoseFt || 0) + hoseFt; X.A.hoseSecs = (X.A.hoseSecs || 0) + hoseSecs; X.A.woodPieces = (X.A.woodPieces || []).concat(woodPieces);
+      X.A.woodW = (X.A.woodW || 0) + woodVolIn3 * 0.0272 + hoseFt * 0.6 * (st.fillOD || 2.5) / 2.5; X.A.hoseFt = (X.A.hoseFt || 0) + hoseFt; X.A.hoseSecs = (X.A.hoseSecs || 0) + hoseSecs; X.A.hoseCpl = (X.A.hoseCpl || 0) + hoseCpl; X.A.woodPieces = (X.A.woodPieces || []).concat(woodPieces);
       // flat-bar rib rings every 12"
       const nRibs = Math.max(2, Math.floor(length / (num('ribSpacing') / 12))), tRib = ribT() / 12, wRib = (st.strip ? num('ribWidth') : 1.25) / 12, ribOut = ribOutOn(), ribAuto = chk('ribAuto');
       X.ribOutside = ribOut;
@@ -5253,11 +5262,15 @@ function exportStruct() {
   const sec = (od, id) => { const a = Math.PI / 4 * (od * od - id * id), I = Math.PI / 64 * (Math.pow(od, 4) - Math.pow(id, 4)); return { od_in: r3(od), id_in: r3(id), wall_in: r3((od - id) / 2), area_in2: r3(a), I_in4: r4(I), S_in3: r4(I / (od / 2)), J_in4: r4(2 * I), weight_lb_per_ft: r3(a * 12 * dens) }; };
   const pipeSec = sec(st.memOD, st.memID);
   // pipes: centerlines every 6 in along their length
-  const members = A.members.filter(m => m.kind === 'truss').map((m, k) => { const pts = [m.pts[0]]; let acc = 0;
+  const isFill = (m) => m.mat === 'hose' || m.mat === 'wood';      // oak and hose fill rest on the rings but are not pipes: no steel or aluminum section, weight, or stiffness
+  const members = A.members.filter(m => m.kind === 'truss' && !isFill(m)).map((m, k) => { const pts = [m.pts[0]]; let acc = 0;
     for (let i = 1; i < m.pts.length; i++) { acc += Math.hypot(m.pts[i][0] - m.pts[i - 1][0], m.pts[i][1] - m.pts[i - 1][1], m.pts[i][2] - m.pts[i - 1][2]); if (acc >= 0.5) { pts.push(m.pts[i]); acc = 0; } }
     if (pts[pts.length - 1] !== m.pts[m.pts.length - 1]) pts.push(m.pts[m.pts.length - 1]);
     let len = 0; for (let i = 1; i < pts.length; i++) len += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1], pts[i][2] - pts[i - 1][2]);
     return { id: 'P' + (k + 1), closed: !!m.closed, length_ft: r3(len), weight_lb: r3(len * pipeSec.weight_lb_per_ft), points_ft: pts.map(pt) }; });
+  const fillMembers = A.members.filter(m => m.kind === 'truss' && isFill(m)).map((m, k) => { let len = 0; for (let i = 1; i < m.pts.length; i++) len += Math.hypot(m.pts[i][0] - m.pts[i - 1][0], m.pts[i][1] - m.pts[i - 1][1], m.pts[i][2] - m.pts[i - 1][2]);
+    if (m.closed && m.pts.length > 2) len += Math.hypot(m.pts[0][0] - m.pts[m.pts.length - 1][0], m.pts[0][1] - m.pts[m.pts.length - 1][1], m.pts[0][2] - m.pts[m.pts.length - 1][2]);
+    return { id: 'F' + (k + 1), material: m.mat === 'hose' ? 'fire hose over backer rod' : 'white oak', od_in: r3(m.od), closed: !!m.closed, length_ft: r3(len), structural: false }; });
   // ribs: ring dimensions, weight, and the node on each pipe where the ring ties to it
   const up = new THREE.Vector3(0, 1, 0);
   const ribs = A.ribs.map((r, i) => { const ctr = new THREE.Vector3(...r.ctr), tan = new THREE.Vector3(...r.tan).normalize();
@@ -5289,11 +5302,11 @@ function exportStruct() {
     pipe_section: pipeSec, pipe_count: members.length, path_length_ft: r3(A.length || 0), bounding_box_ft: { min: mn.map(r3), max: mx.map(r3) },
     totals: { pipes_lb: r3(pipeLb), ribs_lb: r3(ribLb), skin_lb: r3(skinLb), total_lb: r3(pipeLb + ribLb + skinLb), skin_surface_area_sf: r3(areaTot), skin_projected_area_sf: { normal_to_x: r3(aX), normal_to_y: r3(aY), normal_to_z: r3(aZ) }, note: 'skin areas are one face of every strip with no shielding between strips or openings; wind exposure, shape factors and the weight of rivets and fasteners are for the engineer' },
     skin: SS ? { strip_width_in: SS.opts.w, thickness_in: SS.opts.t, material: SS.opts.mat, count: strips.length, weight_psf: r4(SS.psf) } : null,
-    posts, ribs, pipes: members, strips,
+    posts, ribs, pipes: members, fill_members: fillMembers, fill_members_note: fillMembers.length ? 'Oak or hose fill. Not pipes: left out of pipes, pipe_count, the rib nodes, and every weight and stiffness total here. Treat as dead load or a non-structural fill, and weigh it yourself.' : '', strips,
     braces: (A.braces || []).map((b, i) => ({ id: 'B' + (i + 1), a: pt(b.a), b: pt(b.b), dia_in: b.dia, note: 'round bar, tension only when slender' }))
   };
   saveBlob(new Blob([JSON.stringify(out)], { type: 'application/json' }), slug() + '_structural_model.json');
-  setStatus(`Structural model saved: ${members.length} pipes, ${ribs.length} ribs, ${posts.length} posts, ${strips.length} strips; about ${Math.round(pipeLb + ribLb + skinLb)} lb. No loads applied.`);
+  setStatus(`Structural model saved: ${members.length} pipes${fillMembers.length ? ` (${fillMembers.length} oak or hose fill members listed apart, not structural)` : ''}, ${ribs.length} ribs, ${posts.length} posts, ${strips.length} strips; about ${Math.round(pipeLb + ribLb + skinLb)} lb. No loads applied.`);
 }
 
 
