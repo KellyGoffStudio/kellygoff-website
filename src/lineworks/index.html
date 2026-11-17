@@ -2886,7 +2886,7 @@ function buildPanel() {
       ${S_('trussMetal', 'Truss metal', [['stainless', 'Stainless (weights as steel)'], ['alum', '6061 aluminum'], ['steel', 'Galvanized steel']], 'alum')}
       ${R('trussOD', 'Rib ring outer diameter', 8, 18, 0.5, 12, v => (+v).toFixed(1) + '"')}
       ${S_('trussDistribution', 'Member spacing', [['even', 'Even'], ['irregular', 'Irregular / clustered']], 'even')}
-      ${R('trussTwist', 'Helical twist', 0, 3, 0.05, 0, v => +v === 0 ? 'Straight' : (+v).toFixed(2).replace(/0+$/, '').replace(/\.$/, '') + ' turns per 10 ft', 'Members wind around the line like a rope while the rib rings stay square to the path. On a closed loop the twist is rounded to whole turns so the members meet themselves. Bracing and riffle strips assume straight members: leave them off with a twist.')}
+      ${R('trussTwist', 'Helical twist', 0, 3, 0.05, 0, v => +v === 0 ? 'Straight' : (+v).toFixed(2).replace(/0+$/, '').replace(/\.$/, '') + (+v === 1 ? ' turn per 10 ft' : ' turns per 10 ft'), 'Members wind around the line like a rope while the rib rings stay square to the path. On a closed loop the twist is rounded to whole turns so the members meet themselves. Bracing and riffle strips assume straight members: leave them off with a twist.')}
       <div id="g_seed">${R('trussSeed', 'Cluster pattern', 1, 20, 1, 3, v => v)}</div>
       ${S_('ribSpacing', 'Rib spacing', [['10', '10"'], ['12', '12"'], ['14', '14"'], ['16', '16"']], '12')}
       ${C_('ribAuto', 'Auto place ribs', false, 'Spacing follows the form: closest where the bundle flares, farthest where it is skinnier and straighter. Tight bends pull it halfway to the closest spacing.')}
