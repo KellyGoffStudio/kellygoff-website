@@ -2250,6 +2250,7 @@ function buildTakeoff() {
     const stk = $('trussStockType').value, tube = stk === 'tubing', sp = trussSpec();
     const al = $('trussMetal').value === 'alum', s = addStock('truss', `${sp.od}" OD × ${((sp.od - sp.id) / 2).toFixed(3)}" wall ${trussMetalWord()} ${stk === 'hss' ? 'A500 round tube' : tube ? 'tubing' : 'pipe'}`, sp.od, sp.id, sp.w * (al ? AL_FACTOR : 1));
     A.members.forEach((m, i) => {
+      if (m.mat === 'hose') return;
       if (m.mat === 'wood') m.pieces.forEach(pc => { const N = m.pts.length, pts = []; for (let k = pc.a; k <= pc.b; k++) pts.push(m.pts[k % N]); if (pts.length >= 3) MM.push({ ptsFt: pts, closed: false, group: i, kind: 'wood', od: m.od, pre: true }); });
       else MM.push({ ptsFt: m.pts, closed: m.closed, group: i, kind: 'metal', stock: s.key });
     });
@@ -2281,6 +2282,11 @@ function buildTakeoff() {
   if (prof === 'truss' && A.ribs && A.ribs.length) {
     const rl = A.ribs.map((r, i) => ({ id: 'R' + (i + 1), lenIn: Math.PI * (r.Ro + r.Ri) * 12 })); const bars = nestBars(rl, TK.flatUsableIn, TK.kerfIn), n = bars.length, n20 = Math.ceil(n * (1 + TK.extra) - 1e-9), wIn = Math.round(A.ribs[0].w * 12 * 100) / 100, wTxt = Math.abs(wIn - 1.25) < 1e-6 ? '1-1/4' : String(wIn), lbFt = ribT() * wIn * 12 * (st.alum ? AL_LB_IN3 : STEEL_LB_IN3);
     order.groups.push({ type: 'bars', item: `${st.alum ? '6061 aluminum' : st.steel ? 'Galvanized steel' : 'Stainless'} flat bar ${ribTTxt()}" × ${wTxt}" — rolled into ${A.ribs.length} rib rings (${(A.ribs[0].odIn).toFixed(1)}" OD)`, pcs: A.ribs.length, net: n, order: n20, unit: "× 10' bars", wt: n * 10 * lbFt, wt20: n20 * 10 * lbFt, usedIn: rl.reduce((a, r) => a + r.lenIn, 0), bars });
+  }
+  if (prof === 'truss' && A.braces && A.braces.length) {
+    const dIn = A.braces[0].dia, rl = A.braces.map((b, i) => ({ id: 'B' + (i + 1), lenIn: Math.hypot(b.b[0] - b.a[0], b.b[1] - b.a[1], b.b[2] - b.a[2]) * 12 + 0.5 })), bars = nestBars(rl, TK.usableIn + 24, TK.kerfIn), n = bars.length, n20 = Math.ceil(n * (1 + TK.extra) - 1e-9),
+      lbFt = Math.PI * dIn * dIn / 4 * 12 * (st.alum ? AL_LB_IN3 : STEEL_LB_IN3), dTxt = { 0.25: '1/4', 0.3125: '5/16', 0.375: '3/8', 0.5: '1/2' }[dIn] || String(dIn);
+    order.groups.push({ type: 'bars', item: `${st.alum ? '6061 aluminum' : st.steel ? 'Steel' : 'Stainless'} round bar ${dTxt}" — ${A.braces.length} diagonal braces`, pcs: A.braces.length, net: n, order: n20, unit: "× 10' bars", wt: n * 10 * lbFt, wt20: n20 * 10 * lbFt, usedIn: rl.reduce((a, r) => a + r.lenIn, 0), bars });
   }
   if (prof === 'truss' && A.stripPieces && A.stripPieces.length && A.stripStats) {
     const SS = A.stripStats, o = SS.opts, tt = Math.abs(o.t - 0.125) < 1e-4 ? '1/8' : o.t.toFixed(3),
@@ -2812,6 +2818,8 @@ function buildPanel() {
     <div id="g_posts">
       <div class="row2">${N_('postN', 'Posts', 4, 1, 12, 1)}${N_('postClear', 'Clear height under pipe (ft)', 2, 0, 20, 0.25)}</div>
       <div class="row2">${N_('postOd', 'Post dia (in, 0 = pipe OD)', 0, 0, 24, 0.125)}<div></div></div>
+      ${S_('postTop', 'Post top (truss mode)', [['saddle', 'Saddle under the truss'], ['center', 'Into the centerline (concept)']], 'saddle')}
+      <div class="hint">Saddle: the post stops under the truss with a cap plate and two fin plates, which bolt to a curved saddle plate welded to two heavier post rings. The saddle goes to the galvanizer with its section; the post bolts on at install.</div>
       ${C_('plateOn', 'Base plates and bolts', true, 'A round plate and anchor bolts at the foot of each post, sitting on grade. No piers. Concept geometry; the engineer of record sizes the real thing.')}
       <div id="g_plates">
         <div class="row2">${N_('plateDia', 'Plate dia (in, 0 = auto)', 0, 0, 60, 0.5)}${N_('plateT', 'Plate thickness (in)', 1, 0.25, 4, 0.125)}</div>
@@ -2871,6 +2879,7 @@ function buildPanel() {
       ${S_('trussMetal', 'Truss metal', [['stainless', 'Stainless (weights as steel)'], ['alum', '6061 aluminum'], ['steel', 'Galvanized steel']], 'alum')}
       ${R('trussOD', 'Rib ring outer diameter', 8, 18, 0.5, 12, v => (+v).toFixed(1) + '"')}
       ${S_('trussDistribution', 'Member spacing', [['even', 'Even'], ['irregular', 'Irregular / clustered']], 'even')}
+      ${R('trussTwist', 'Helical twist', 0, 3, 0.05, 0, v => +v === 0 ? 'Straight' : (+v).toFixed(2).replace(/0+$/, '').replace(/\.$/, '') + ' turns per 10 ft', 'Members wind around the line like a rope while the rib rings stay square to the path. On a closed loop the twist is rounded to whole turns so the members meet themselves. Bracing and riffle strips assume straight members: leave them off with a twist.')}
       <div id="g_seed">${R('trussSeed', 'Cluster pattern', 1, 20, 1, 3, v => v)}</div>
       ${S_('ribSpacing', 'Rib spacing', [['10', '10"'], ['12', '12"'], ['14', '14"'], ['16', '16"']], '12')}
       ${C_('ribAuto', 'Auto place ribs', false, 'Spacing follows the form: closest where the bundle flares, farthest where it is skinnier and straighter. Tight bends pull it halfway to the closest spacing.')}
@@ -2882,6 +2891,15 @@ function buildPanel() {
       ${S_('ribThick', 'Rib thickness', [['0.25', '1/4"'], ['0.1875', '3/16"']], '0.25')}
       <div class="hint">Solid flat-bar rings along the path, 1.25" wide (set the width under Riffles when strips are on).</div>
       <div class="info" id="ribInfo">—</div>
+      <div class="sub">Diagonal bracing</div>
+      ${S_('braceMode', 'Diagonal bracing', [['off', 'Off'], ['supports', 'Near posts and touch points'], ['all', 'Full length']], 'off')}
+      <div id="g_brace">
+        ${R('braceZone', 'Braced length each side of a support', 1, 10, 0.5, 3, v => (+v).toFixed(1).replace(/\.0$/, '') + "'", 'Rods go in every bay between rings within this distance of a post or touch point, where the line carries the most shear and twist.')}
+        ${S_('braceDia', 'Rod diameter', [['0.25', '1/4"'], ['0.3125', '5/16"'], ['0.375', '3/8"'], ['0.5', '1/2"']], '0.375')}
+        ${S_('bracePattern', 'Pattern', [['x', 'X in every bay'], ['zig', 'Single diagonal, alternating']], 'x')}
+        <div class="hint">Round bar across each bay, on every face of the truss, under the strips. Each rod end sits in the corner where a ring meets a tube, so it welds to both. In an X the two rods touch at the middle; tack them there. Thin rod only works in tension, so the X covers load from both directions.</div>
+        <div class="info" id="braceInfo">—</div>
+      </div>
       <div class="sub">Galvanizing sections</div>
       ${C_('galvOn', 'Split into galvanizing sections', false, 'Finds where the truss has to come apart to fit the galvanizer\'s kettle and puts a pair of bolted match plates at each cut. Uses the fewest sections that fit, and keeps cuts clear of posts and touch points. Sized on the bare truss, since strips go on after galvanizing.')}
       <div id="g_galv">
@@ -2893,16 +2911,26 @@ function buildPanel() {
         ${S_('galvPlateT', 'Match plate thickness', [['0.375', '3/8"'], ['0.5', '1/2"'], ['0.625', '5/8"']], '0.375')}
         <div class="info" id="galvInfo">—</div>
       </div>
-      <div class="sub">Oak fill</div>
-      ${C_('woodOn', 'Add oak members', false, 'Some members become round oak, the same diameter as the tubing. The rest stay tube.')}
+      <div class="sub">Fill members</div>
+      ${C_('woodOn', 'Add fill members (oak or hose)', false, 'Some members become fill: round oak the same diameter as the tubing, or fire hose stuffed with backer rod. The rest stay tube.')}
       ${C_('stripOn', 'Riffle mode: skin the truss in overlapping strips', false, 'Riffle mode skins the truss in overlapping strips, called riffles, laid over the outside of the truss and riveted to the rib rings. The members all stay pipe. Turning this on puts the rings outside the tubes, and switches a stainless truss to aluminum (aluminum and galvanized steel stay as they are).')}
       <div id="g_fill">
         ${R('steelShare', 'Tube share of members', 10, 90, 5, 25, pct, 'Spread evenly around the bundle. At least one member stays a tube.')}
       </div>
       <div id="g_wood">
+        ${S_('fillMat', 'Fill material', [['oak', 'Oak rounds'], ['hose', 'Fire hose, filled with backer rod']], 'oak')}
+        <div id="g_hose">
+          ${S_('hoseOD', 'Filled hose diameter', [['1.75', '1 3/4"'], ['2', '2"'], ['2.5', '2 1/2"'], ['2.75', '2 3/4"'], ['3', '3"'], ['5', '5" (supply hose)']], '2.75')}
+          <label class="lbl" for="hoseColor"><span>Hose color</span></label>
+          <input type="color" id="hoseColor" value="#bfa983" aria-label="Hose color">
+          ${C_('hoseCouplings', 'Couplings every 50 ft', true, 'Fire hose comes in 50 ft sections joined by threaded couplings. Shows a short brass coupling at each joint, staggered member to member.')}
+          <div class="hint">Decommissioned hose slid over closed-cell polyethylene backer rod so it holds a round section. It rests on the rib rings like the tubes and is lashed or clamped to them; it carries no load.</div>
+        </div>
+        <div id="g_oakOpts">
         ${S_('woodTone', 'Oak finish', [['white', 'White oak, clear'], ['charred', 'Charred, dark charcoal']], 'white')}
         ${S_('oakLen', 'Oak piece length', [['mix', 'Mix of 4\', 6\' and 8\''], ['4', '4\' pieces'], ['6', '6\' pieces'], ['8', '8\' pieces']], 'mix')}
         ${R('oakSeed', 'Oak layout (re-roll)', 1, 40, 1, 1, v => v, 'Changes where the oak pieces start and stop. Pieces are staggered so joints do not line up. 1/2" gap between butt ends.')}
+        </div>
         <div class="info" id="woodInfo">—</div>
       </div>
       <div id="g_strip">
@@ -3042,8 +3070,8 @@ const ribOutOn = () => !ribIn() && ($('ribOutside').checked || $('stripOn').chec
 function trussAutoFill() {
   if (!chk('woodOn') || state.fillManual) return;
   const stock = $('trussStockType').value, od = num('trussOD'),
-    sp = trussSpec(),
-    rc = od / 2 + sp.od / 2, nmax = Math.floor(Math.PI / Math.asin(Math.min(0.99, (sp.od / 2) / rc))),
+    sp = trussSpec(), dd = $('fillMat').value === 'hose' ? Math.max(sp.od, parseFloat($('hoseOD').value)) : sp.od,
+    rc = od / 2 + dd / 2, nmax = Math.floor(Math.PI / Math.asin(Math.min(0.99, (dd / 2) / rc))),
     n = Math.max(4, Math.min(40, Math.round(nmax * 0.9)));
   const el = $('trussCount'); el.value = n; const v = $('trussCountVal'); if (v) v.textContent = n;
   const ss = $('steelShare'); if (ss && state.fillShareReset) { ss.value = 25; const sv = $('steelShareVal'); if (sv && FMT.steelShare) sv.textContent = FMT.steelShare(25); state.fillShareReset = false; }
@@ -3055,12 +3083,12 @@ function updateVisibility() {
   show('g_mobius', prof === 'square' && !planeOn);
   { const inForm = prof === 'strand' || prof === 'truss', box = $('flareBox'), slot = $(inForm ? 'flareSlotForm' : 'flareSlotStock'); if (box && slot && box.parentNode !== slot) slot.appendChild(box); $('flareSub').style.display = inForm ? '' : 'none'; }   // flare sits under Stock for a single pipe, under Form for bundles and trusses
   show('g_strandS40', $('strandStockType').value === 'sched40'); show('g_strandTub', $('strandStockType').value === 'tubing');
-  show('g_trussS40', $('trussStockType').value === 'sched40'); show('g_trussTub', $('trussStockType').value === 'tubing'); show('g_trussHss', $('trussStockType').value === 'hss'); show('g_galv', chk('galvOn'));
+  show('g_trussS40', $('trussStockType').value === 'sched40'); show('g_trussTub', $('trussStockType').value === 'tubing'); show('g_trussHss', $('trussStockType').value === 'hss'); show('g_galv', chk('galvOn')); show('g_brace', $('braceMode').value !== 'off');
   show('g_drift', num('stripInfill') > 50);
   show('g_louvR', num('stripLouvre') > 0);
   show('g_narrowW', num('stripNarrowR') > 0);
   show('g_chord', chk('stripChord'));
-  show('g_seed', $('trussDistribution').value === 'irregular'); show('g_wood', chk('woodOn')); show('g_fill', chk('woodOn')); { const tr = prof === 'truss', fin = $('trussFinish').value; show('g_trussColors', tr); show('g_trussColor', tr && fin === 'paint'); show('g_stripColor', tr && chk('stripOn')); show('g_patchColor', tr && chk('stripOn') && chk('patchOn') && chk('patchShow')); show('g_postColor', chk('postsOn')); show('g_patch', chk('patchOn')); { const mat = $('stripMat').value, acm = mat === 'acm3' || mat === 'acm4'; if (acm) { const tv = mat === 'acm3' ? '0.118' : '0.157'; if ($('stripT').value !== tv) $('stripT').value = tv; } else if ($('stripT').value === '0.118' || $('stripT').value === '0.157') $('stripT').value = '0.063'; $('stripT').disabled = acm; show('g_stripBar', mat === 'bar' || mat === 'mixed' || mat === 'roll'); show('g_stripSheet', mat !== 'bar' && mat !== 'mixed' && mat !== 'roll'); show('g_mixed', mat === 'mixed'); show('g_roll', mat === 'roll'); } show('g_stepStrips', prof === 'truss' && chk('stripOn')); show('g_flareWhole', prof === 'truss'); show('g_surface', !tr || fin === 'surface'); show('g_colorMode', !tr || fin === 'surface' || chk('stripOn')); } { const ro = $('ribOutside'); if (chk('stripOn')) ro.checked = true; ro.disabled = chk('stripOn'); } show('g_strip', chk('stripOn')); show('c_ribSpacing', !chk('ribAuto')); show('g_ribAuto', chk('ribAuto'));
+  show('g_seed', $('trussDistribution').value === 'irregular'); show('g_wood', chk('woodOn')); show('g_hose', chk('woodOn') && $('fillMat').value === 'hose'); show('g_oakOpts', chk('woodOn') && $('fillMat').value !== 'hose'); show('g_fill', chk('woodOn')); { const tr = prof === 'truss', fin = $('trussFinish').value; show('g_trussColors', tr); show('g_trussColor', tr && fin === 'paint'); show('g_stripColor', tr && chk('stripOn')); show('g_patchColor', tr && chk('stripOn') && chk('patchOn') && chk('patchShow')); show('g_postColor', chk('postsOn')); show('g_patch', chk('patchOn')); { const mat = $('stripMat').value, acm = mat === 'acm3' || mat === 'acm4'; if (acm) { const tv = mat === 'acm3' ? '0.118' : '0.157'; if ($('stripT').value !== tv) $('stripT').value = tv; } else if ($('stripT').value === '0.118' || $('stripT').value === '0.157') $('stripT').value = '0.063'; $('stripT').disabled = acm; show('g_stripBar', mat === 'bar' || mat === 'mixed' || mat === 'roll'); show('g_stripSheet', mat !== 'bar' && mat !== 'mixed' && mat !== 'roll'); show('g_mixed', mat === 'mixed'); show('g_roll', mat === 'roll'); } show('g_stepStrips', prof === 'truss' && chk('stripOn')); show('g_flareWhole', prof === 'truss'); show('g_surface', !tr || fin === 'surface'); show('g_colorMode', !tr || fin === 'surface' || chk('stripOn')); } { const ro = $('ribOutside'); if (chk('stripOn')) ro.checked = true; ro.disabled = chk('stripOn'); } show('g_strip', chk('stripOn')); show('c_ribSpacing', !chk('ribAuto')); show('g_ribAuto', chk('ribAuto'));
   { const lo = chk('lenOn') && $('lenAdapt').value !== 'free'; $('detail').disabled = lo; $('pathLen').disabled = !chk('lenOn'); $('c_detail').style.opacity = lo ? .5 : 1; $('c_pathLen').style.opacity = chk('lenOn') ? 1 : .6; $('lenAdapt').disabled = !chk('lenOn'); }
   show('g_plane', planeOn); show('g_found', chk('foundOn') && !chk('postsOn')); show('g_susp', !planeOn); show('g_posts', chk('postsOn')); show('g_plates', chk('plateOn')); show('c_planeFt', !chk('postsOn'));
   $('exportRibs').disabled = prof !== 'truss'; $('exportGalv').disabled = prof !== 'truss' || !chk('galvOn'); $('exportStruct').disabled = prof !== 'truss';
@@ -3094,11 +3122,11 @@ function getStock() {
   } else {
     const stock = $('trussStockType').value, n = parseInt($('trussCount').value), od = num('trussOD');
     const strip = chk('stripOn'), wood = chk('woodOn'), ns = wood ? Math.max(1, Math.min(n - 1, Math.round(n * num('steelShare') / 100))) : n;
-    const sp = trussSpec();
-    const alum = $('trussMetal').value === 'alum', steel = $('trussMetal').value === 'steel', mw = alum ? 'ALUMINUM' : steel ? 'STEEL' : 'STAINLESS', fw = strip ? 'STRIP LANES' : 'OAK', allTubes = strip;   // strips sit outside the rings: every member stays a pipe
-    Object.assign(st, { outerExtentIn: od / 2 + sp.od + (strip ? ribT() + parseFloat($('stripT').value) : ribOutOn() ? ribT() : 0), minInsideIn: sp.id * bf, weightLbFt: sp.w * (allTubes ? n : ns) * (alum ? AL_FACTOR : 1), weightNote: stock === 'sched40' ? 'pipe' : 'steel',
-      label: allTubes ? `${n} ${mw} PIPES + FLAT-BAR STRIP SKIN × ${sp.od}" · ${od}" RIBS` : wood ? `${ns} ${mw} + ${n - ns} ${fw} × ${sp.od}" · ${od}" RIBS` : `${n} × ${sp.od}" ${alum ? 'ALUMINUM ' : ''}MEMBERS · ${od}" RIBS`, memOD: sp.od, memID: sp.id, memCount: n, steelCount: ns, woodCount: wood ? n - ns : 0, memLbFt: sp.w, ringOD: od,
-      strip, alum, steel, metalWord: mw, fillWord: fw, allTubes });
+    const sp = trussSpec(), hose = wood && !strip && $('fillMat').value === 'hose', fillOD = hose ? parseFloat($('hoseOD').value) : sp.od;
+    const alum = $('trussMetal').value === 'alum', steel = $('trussMetal').value === 'steel', mw = alum ? 'ALUMINUM' : steel ? 'STEEL' : 'STAINLESS', fw = strip ? 'STRIP LANES' : hose ? 'HOSE' : 'OAK', allTubes = strip;   // strips sit outside the rings: every member stays a pipe
+    Object.assign(st, { outerExtentIn: od / 2 + Math.max(sp.od, wood ? fillOD : 0) + (strip ? ribT() + parseFloat($('stripT').value) : ribOutOn() ? ribT() : 0), minInsideIn: sp.id * bf, weightLbFt: sp.w * (allTubes ? n : ns) * (alum ? AL_FACTOR : 1), weightNote: stock === 'sched40' ? 'pipe' : 'steel',
+      label: allTubes ? `${n} ${mw} PIPES + FLAT-BAR STRIP SKIN × ${sp.od}" · ${od}" RIBS` : wood ? (hose ? `${ns} ${mw} × ${sp.od}" + ${n - ns} HOSE × ${fillOD}" · ${od}" RIBS` : `${ns} ${mw} + ${n - ns} ${fw} × ${sp.od}" · ${od}" RIBS`) : `${n} × ${sp.od}" ${alum ? 'ALUMINUM ' : ''}MEMBERS · ${od}" RIBS`, memOD: sp.od, memID: sp.id, memCount: n, steelCount: ns, woodCount: wood ? n - ns : 0, memLbFt: sp.w, ringOD: od,
+      strip, alum, steel, metalWord: mw, fillWord: fw, allTubes, fillHose: hose, fillOD, twist: num('trussTwist') });
     { const seed = parseInt($('trussSeed').value), irr = $('trussDistribution').value === 'irregular', rc = od / 2 + sp.od / 2;
       const angs = Array.from({ length: n }, (_, m) => (((m / n) * TAU + (irr ? Math.sin(m * 2.3 + seed) * Math.min(0.45, 0.22 * TAU / n) : 0)) % TAU + TAU) % TAU).sort((a, b) => a - b);
       let gap = n >= 2 ? 0 : TAU; for (let i = 0; i < n && n >= 2; i++) gap = Math.max(gap, (i + 1 < n ? angs[i + 1] : angs[0] + TAU) - angs[i]);
@@ -3699,11 +3727,12 @@ function buildPiece(piece, idx, X) {
         }
         return { closed, group: idx, L: length, P, Rad, nF, cnt, act, th, th0, C: Cc, Ro: RoA };
       };
-      let woodVolIn3 = 0, woodPieces = [];
+      let woodVolIn3 = 0, woodPieces = [], hoseFt = 0, hoseSecs = 0;
+      const fR = (st.fillOD || st.memOD) / 24, tw0 = (st.twist || 0) * TAU / 10 * length, twT = closed ? Math.round(tw0 / TAU) * TAU : tw0, twA = (i) => twT * i / Math.max(1, cnt - 1);
       for (let m = 0; m < n; m++) {
-        const pts = [];
+        const pts = [], hoseM = st.fillHose && !isSteel[m];
         for (let i = 0; i < cnt; i++) {
-          const rc = Rb * df(i) + mR, th = angs[m] + manual;
+          const rc = Rb * df(i) + (hoseM ? fR : mR), th = angs[m] + manual + twA(i);
           pts.push(spaced[i].clone().addScaledVector(frames.normals[i], Math.cos(th) * rc).addScaledVector(frames.binormals[i], Math.sin(th) * rc));
         }
         const sub = new THREE.CatmullRomCurve3(pts, closed, 'centripetal', 0.25), samp = sampleMember(sub, length, closed);
@@ -3715,6 +3744,23 @@ function buildPiece(piece, idx, X) {
           if (stainless && !geo.attributes.color) addVC(geo, 0xd2d5d9);
           currentMeshGroup.add(mm);
           X.A.members.push({ pts: samp, closed, od: st.memOD, id: st.memID, group: idx, L: length, kind: 'truss', mat: 'steel' });
+        } else if (hoseM) {
+          const N = samp.length; let Lm = 0; for (let i = 1; i < N; i++) Lm += Math.hypot(samp[i][0] - samp[i - 1][0], samp[i][1] - samp[i - 1][1], samp[i][2] - samp[i - 1][2]); if (closed) Lm += Math.hypot(samp[0][0] - samp[N - 1][0], samp[0][1] - samp[N - 1][1], samp[0][2] - samp[N - 1][2]);
+          const radH = q < 1 ? 12 : 22, segs = Math.max(120, Math.ceil(cnt * (q < 1 ? 0.6 : 1.2))), hHex = $('hoseColor').value;
+          const geo = new THREE.TubeGeometry(sub, segs, fR, radH, closed); geo.userData = { kind: 'tube', vps: radH + 1 };
+          hoseUV(geo, Lm * 12, st.fillOD, (m * 7.3) % 3); addVC(geo, hHex);
+          const hm = hoseMat(hHex); currentMeshGroup.add(new THREE.Mesh(geo, hm));
+          if (!closed) [[0, sub.getTangentAt(0).negate()], [1, sub.getTangentAt(1)]].forEach(([u, d]) => { const cg = new THREE.CircleGeometry(fR, radH); addVC(cg, hHex); const cm = new THREE.Mesh(cg, hm); cm.position.copy(sub.getPointAt(u)); cm.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), d.normalize()); currentMeshGroup.add(cm); });
+          const off = (m * 17.5) % 50, nSec = Math.max(1, Math.ceil((Lm - off) / 50 - 1e-9) + (off > 0.5 ? 1 : 0));
+          if (chk('hoseCouplings')) {
+            const cMat = new THREE.MeshStandardMaterial({ color: 0xb08d4f, roughness: 0.5, metalness: 0.75 }), cl = 3.5 / 12;
+            for (let s0 = off > 0.5 ? off : 50; s0 < Lm - 0.5; s0 += 50) {
+              const u = s0 / Lm, cg = new THREE.CylinderGeometry(fR * 1.13, fR * 1.13, cl, radH, 1, false); addVC(cg, 0xb08d4f);
+              const cm = new THREE.Mesh(cg, cMat); cm.position.copy(sub.getPointAt(u)); cm.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), sub.getTangentAt(u).normalize()); currentMeshGroup.add(cm);
+            }
+          }
+          hoseFt += Lm; hoseSecs += nSec;
+          X.A.members.push({ pts: samp, closed, od: st.fillOD, id: 0, group: idx, L: length, kind: 'truss', mat: 'hose' });
         } else {
           const N = samp.length; let Lm = 0; for (let i = 1; i < N; i++) Lm += Math.hypot(samp[i][0] - samp[i - 1][0], samp[i][1] - samp[i - 1][1], samp[i][2] - samp[i - 1][2]); if (closed) Lm += Math.hypot(samp[0][0] - samp[N - 1][0], samp[0][1] - samp[N - 1][1], samp[0][2] - samp[N - 1][2]);
           const lay = oakLayout(Lm, closed, oakMode, oakSeed, m, 0.5), mem = { pts: samp, closed, od: st.memOD, id: 0, group: idx, L: length, kind: 'truss', mat: 'wood', pieces: [] };
@@ -3889,7 +3935,7 @@ function buildPiece(piece, idx, X) {
           X.A.infill = { rows1, rows2, moved, covBefore: covOf(base), covAfter: covOf(fin.S), stage1Total: A1.n };
         }
       }
-      X.A.woodW = (X.A.woodW || 0) + woodVolIn3 * 0.0272; X.A.woodPieces = (X.A.woodPieces || []).concat(woodPieces);
+      X.A.woodW = (X.A.woodW || 0) + woodVolIn3 * 0.0272 + hoseFt * 0.6 * (st.fillOD || 2.5) / 2.5; X.A.hoseFt = (X.A.hoseFt || 0) + hoseFt; X.A.hoseSecs = (X.A.hoseSecs || 0) + hoseSecs; X.A.woodPieces = (X.A.woodPieces || []).concat(woodPieces);
       // flat-bar rib rings every 12"
       const nRibs = Math.max(2, Math.floor(length / (num('ribSpacing') / 12))), tRib = ribT() / 12, wRib = (st.strip ? num('ribWidth') : 1.25) / 12, ribOut = ribOutOn(), ribAuto = chk('ribAuto');
       X.ribOutside = ribOut;
@@ -4256,6 +4302,30 @@ function oakUV(geo, lenIn, odIn, off) {      // grain runs along the member; ima
   for (let i = 0; i < uv.count; i++) { const u = uv.getX(i), v = uv.getY(i); uv.setXY(i, v * circ / 6, (u * lenIn + off) / 12); }
   uv.needsUpdate = true;
 }
+let hoseTex = null;
+function getHoseTex() {      // woven polyester jacket: fine twill, fuzz, uneven fade (grayscale, tinted by the hose color)
+  if (hoseTex) return hoseTex;
+  const S = 256, cv = document.createElement('canvas'); cv.width = cv.height = S; const g = cv.getContext('2d'), im = g.createImageData(S, S);
+  let sd = 7; const rnd = () => (sd = (sd * 16807) % 2147483647) / 2147483647;
+  const blot = []; for (let k = 0; k < 18; k++) blot.push([rnd() * S, rnd() * S, 10 + rnd() * 40, (rnd() - 0.5) * 0.16]);
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const cell = 8, cx = x % cell, cy = y % cell, warp = ((Math.floor(x / cell) + Math.floor(y / cell)) & 1) === 0;
+    const across = warp ? cx / cell : cy / cell, thread = 0.86 + 0.14 * Math.sin(Math.PI * across), tw = ((x + y) % 4 < 2) ? 0.03 : -0.015;
+    let v = thread + tw + (rnd() - 0.5) * 0.12;
+    blot.forEach(([bx, by, br, bd]) => { const dx = Math.min(Math.abs(x - bx), S - Math.abs(x - bx)), dy = Math.min(Math.abs(y - by), S - Math.abs(y - by)), d = Math.hypot(dx, dy); if (d < br) v += bd * (1 - d / br); });
+    const c = Math.max(0, Math.min(255, Math.round(v * 232))), o = (y * S + x) * 4; im.data[o] = im.data[o + 1] = im.data[o + 2] = c; im.data[o + 3] = 255;
+  }
+  g.putImageData(im, 0, 0);
+  hoseTex = new THREE.CanvasTexture(cv); hoseTex.wrapS = hoseTex.wrapT = THREE.RepeatWrapping; hoseTex.anisotropy = 4;
+  return hoseTex;
+}
+const hoseMats = {};
+function hoseMat(hex) { return hoseMats[hex] || (hoseMats[hex] = new THREE.MeshStandardMaterial({ color: hex, map: getHoseTex(), bumpMap: getHoseTex(), bumpScale: 0.35, roughness: 0.98, metalness: 0 })); }
+function hoseUV(geo, lenIn, odIn, off) {      // one texture tile = 2" of jacket each way
+  const uv = geo.attributes.uv, circ = Math.PI * odIn;
+  for (let i = 0; i < uv.count; i++) { const u = uv.getX(i), v = uv.getY(i); uv.setXY(i, v * circ / 1.25, (u * lenIn + off) / 1.25); }
+  uv.needsUpdate = true;
+}
 function addVC(geo, hex) { const c = new THREE.Color(hex), n = geo.attributes.position.count, a = new Float32Array(n * 3); for (let i = 0; i < n; i++) { a[i * 3] = c.r; a[i * 3 + 1] = c.g; a[i * 3 + 2] = c.b; } geo.setAttribute('color', new THREE.BufferAttribute(a, 3)); }
 
 // ---------------------------------------------------------------------
@@ -4282,11 +4352,14 @@ function buildScene(draft) {
   const X = { c, qMul: draft ? 0.35 : 1, flare: flareMult(c.st.odIn), centroid, maxDist, limit: c.pipeLimitFt, A: { length: 0, lenAbove: 0, minR: 99999, tightFt: 0, lowFt: 0, dense: [], members: [], ribs: [], baseW: 0, extraW: 0, stripLanes: [], stripPieces: [], stripStats: null } };
   form.pieces.forEach((pc, i) => buildPiece(pc, i, X));
   if (c.st.profile === 'truss' && c.st.strip) { try { buildStrips(X); } catch (e) { console.error(e); } }
+  if (c.st.profile === 'truss') { try { buildBraces(X, draft); } catch (e) { console.error(e); } }
   if (c.postsOn && c.posts.length) {
     const ps = postSpec(c), pm = new THREE.MeshStandardMaterial({ color: $('postColor').value, roughness: 0.55, metalness: 0.2 });
     const pl = chk('plateOn') ? plateSpec(ps.od) : null, tF = pl ? pl.t / 12 : 0, bm = new THREE.MeshStandardMaterial({ color: 0x8e9398, roughness: 0.4, metalness: 0.6 });
-    c.posts.forEach(p => {
-      const h = p.yTop - tF, m = new THREE.Mesh(new THREE.CylinderGeometry(ps.od / 24, ps.od / 24, h, 32), pm); m.position.set(p.x, tF + h / 2, p.z); currentMeshGroup.add(m);
+    const tops = postTops(c, X.A);
+    c.posts.forEach((p, pk) => {
+      const tp = tops ? tops[pk] : null, h = (tp ? tp.yBody : p.yTop) - tF, m = new THREE.Mesh(new THREE.CylinderGeometry(ps.od / 24, ps.od / 24, h, 32), pm); m.position.set(p.x, tF + h / 2, p.z); currentMeshGroup.add(m);
+      if (tp) drawSaddle(c, X.A, p, tp, ps, pm);
       if (!pl) return;
       const pt = new THREE.Mesh(new THREE.CylinderGeometry(pl.D / 24, pl.D / 24, tF, 48), pm); pt.position.set(p.x, tF / 2, p.z); currentMeshGroup.add(pt);
       for (let g = 0; g < pl.ng; g++) {                         // gussets sit between the bolts and are welded to the plate and the post
@@ -4300,7 +4373,7 @@ function buildScene(draft) {
         const nut = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.8, r * 1.8, pl.bd * 0.9 / 12, 6), bm); nut.position.set(bx, tF + pl.bd * 0.45 / 12, bz); currentMeshGroup.add(nut);
       }
     });
-    const pi = $('postInfo'); if (pi) pi.textContent = `${c.posts.length} post${c.posts.length === 1 ? '' : 's'}, ${ps.od.toFixed(3)}" OD, ${c.posts.map(p => ftIn(p.yTop)).join(' / ')} to the centerline.` + (pl ? ` Plates ${pl.D}" dia × ${pl.t}", ${pl.n} × ${pl.bd}" bolts and ${pl.ng} gusset${pl.ng === 1 ? "" : "s"} each.` : '');
+    const pi = $('postInfo'); if (pi) pi.textContent = `${c.posts.length} post${c.posts.length === 1 ? '' : 's'}, ${ps.od.toFixed(3)}" OD, ` + (tops ? `${c.posts.map((p, k) => ftIn(tops[k] ? tops[k].yBody : p.yTop)).join(' / ')} to the cap plates (saddles under the truss).` + (tops.some(t => !t) ? ` Post ${tops.map((t, k) => t ? null : k + 1).filter(Boolean).join(', ')} sits too close to the truss underside for a saddle, so it runs to the centerline; raise the clear height under the pipe to fix that.` : '') : `${c.posts.map(p => ftIn(p.yTop)).join(' / ')} to the centerline.`) + (pl ? ` Plates ${pl.D}" dia × ${pl.t}", ${pl.n} × ${pl.bd}" bolts and ${pl.ng} gusset${pl.ng === 1 ? "" : "s"} each.` : '');
   } else { const pi = $('postInfo'); if (pi) pi.textContent = '—'; }
   if (chk('showContacts') && c.contacts) { const mp = num('maxOverlapPct') / 100;
     c.contacts.filter(k => k.gap <= 0.5 * k.od).forEach(k => {
@@ -4369,7 +4442,7 @@ function updateReadouts(c, A) {
       if (st.profile !== 'truss' || !st.woodCount) wi.textContent = '—';
       else { const by = {}; wp.forEach(p => { const k = Math.round(p.lenFt); by[k] = (by[k] || 0) + 1; });
         const tot = wp.reduce((a, p) => a + p.lenFt, 0);
-        wi.textContent = `${st.steelCount} stainless + ${st.woodCount} oak members (${st.memOD}" round).\n${wp.length} oak pieces, ${ftIn(tot)} in all. Gaps of 1/2" at every butt joint.`; } } }
+        wi.textContent = st.fillHose ? `${st.steelCount} ${st.metalWord.toLowerCase()} tubes (${st.memOD}") + ${st.woodCount} hose members filled to ${st.fillOD}".\n${ftIn(A.hoseFt || 0)} of hose in all, about ${A.hoseSecs || 0} sections of 50 ft (plus spares). Backer rod: the same length, sized to fill the hose round.` : `${st.steelCount} stainless + ${st.woodCount} oak members (${st.memOD}" round).\n${wp.length} oak pieces, ${ftIn(tot)} in all. Gaps of 1/2" at every butt joint.`; } } }
   { const ri = $('ribInfo'); if (ri) { if (st.profile !== 'truss' || !A.ribs.length) ri.textContent = '—'; else {
       const g = {}; A.ribs.forEach(r => (g[r.group] = g[r.group] || []).push(r.station)); let mn = 1e9, mx = 0;
       Object.values(g).forEach(a => { a.sort((x, y) => x - y); for (let i = 1; i < a.length; i++) { const d = (a[i] - a[i - 1]) * 12; mn = Math.min(mn, d); mx = Math.max(mx, d); } });
@@ -4398,10 +4471,10 @@ function updateReadouts(c, A) {
           `Flatwise: tightest radius ${fr < 1e5 ? inch(fr) : 'none'} (${eps.toFixed(2)}% strain at the surface).\nRivets: ${S.rivets}, only at rib rings, at least 2 per strip. ${S.lengthened} strip${S.lengthened === 1 ? ' was' : 's were'} lengthened to reach a second rib${S.dropped ? '; ' + S.dropped + ' left out at lane ends' : ''}.${S.blocked ? (O_patchOn() ? ' ' + S.blocked + ' ran into another part of the truss; ' + S.patched + ' patch' + (S.patched === 1 ? '' : 'es') + ' (' + ftIn(S.patchFt) + ') fill in up to the contact' + (S.patchOpen ? ', and ' + S.patchOpen + ' rib-to-rib span' + (S.patchOpen === 1 ? ' stays' : 's stay') + ' open where the other part passes through.' : '.') : ' ' + S.blocked + ' left out where they would cut into a tube or into another part of the truss.') : ''}${S.maxLift > 0.01 ? ' Strips are raised up to ' + inch(S.maxLift) + ' off the rings to clear the tubes.' : ''}`; } } }
   const fmtW = (w) => Math.round(w).toLocaleString() + ' lb', b = A.baseW * sc, ex = A.extraW * sc;
   const wm = $('tbWeightMode').value;
-  if (st.profile === 'truss' && (st.alum || st.strip)) {
+  if (st.profile === 'truss' && (st.alum || st.strip || st.steel)) {
     const parts = [`${st.alum ? 'ALUM' : st.steel ? 'STEEL' : 'STAINLESS'} ${st.alum ? '~' : ''}${fmtW(b + ex)}`];
     if (st.strip && A.stripStats) parts.push(`STRIPS ~${fmtW(A.stripStats.wLb * sc)}`);
-    if (st.woodCount > 0 && !st.strip) parts.push(`OAK ~${fmtW((A.woodW || 0) * sc)}`);
+    if (st.woodCount > 0 && !st.strip) parts.push(`${st.fillHose ? 'HOSE' : 'OAK'} ~${fmtW((A.woodW || 0) * sc)}`);
     $('tbWeight').textContent = parts.join(' · ');
   } else
   $('tbWeight').textContent = ((st.weightNote === 'pipe' || st.weightNote === 'steel') && !(st.woodCount > 0) && wm !== 'both') ? (wm === 'steel' ? `STEEL ${fmtW(b + ex)}` : wm === 'alum' ? `ALUM ~${fmtW((b + ex) * 0.344)}` : '—') : (st.woodCount > 0) ? `STAINLESS ${fmtW(b + ex)} · OAK ~${fmtW((A.woodW || 0) * sc)}` : (st.weightNote === 'pipe' || st.weightNote === 'steel') ? `STEEL ${fmtW(b + ex)} · ALUM ~${fmtW((b + ex) * 0.344)}` : st.weightNote === 'wood' ? `WOOD ~${fmtW(b)}` : `HDPE ~${fmtW(b)} (rough)`;
@@ -4658,9 +4731,10 @@ async function exportStep() {
     let parts = res.parts, cutNote = '';
     if (c.postsOn && c.posts.length) {
       const ps = postSpec(c);
-      const pl = chk('plateOn') ? plateSpec(ps.od) : null, tI = pl ? pl.t : 0;
+      const pl = chk('plateOn') ? plateSpec(ps.od) : null, tI = pl ? pl.t : 0, tops = postTops(c, state.lastA);
+      if (tops) warns.push('Posts stop at their cap plates under the truss; the saddles, fins and post rings are not in the STEP file yet.');
       c.posts.forEach((p, k) => {
-        const X0 = p.x * 12, Y0 = -p.z * 12, h = p.yTop * 12 - tI, nm = String(k + 1).padStart(2, '0');
+        const X0 = p.x * 12, Y0 = -p.z * 12, h = (tops && tops[k] ? tops[k].yBody : p.yTop) * 12 - tI, nm = String(k + 1).padStart(2, '0');
         let sh = R.makeCylinder(ps.od / 2, h, [X0, Y0, tI], [0, 0, 1]);
         if (ps.id > 0) sh = sh.cut(R.makeCylinder(ps.id / 2, h + 2, [X0, Y0, tI - 1], [0, 0, 1]));
         parts.push({ shape: sh, name: 'post_' + nm, color: '#b0b4b8' });
@@ -4920,6 +4994,116 @@ function exportBend() {
   saveBlob(new Blob([out.join('\n')], { type: 'text/csv' }), slug() + '_bend_schedule.csv'); setStatus('Bend schedule saved.');
 }
 // ---------------------------------------------------------------------
+// Post tops: in truss mode the post stops under the truss on a saddle instead of running into the middle of it
+// ---------------------------------------------------------------------
+function postTops(c, A) {
+  if (!c || !A || c.st.profile !== 'truss' || !$('postTop') || $('postTop').value !== 'saddle' || !A.ribs || !A.ribs.length || !c.postsOn) return null;
+  const extra = ribOutOn() ? 0 : c.st.memOD / 12, ts = 0.375 / 12, finMin = 3 / 12, tc = 0.75 / 12, Ls = 16 / 12;
+  return c.posts.map(p => {
+    let r = null, bd = 1e9; A.ribs.forEach(q => { const dd = Math.hypot(q.ctr[0] - p.x, q.ctr[1] - p.yTop, q.ctr[2] - p.z); if (dd < bd) { bd = dd; r = q; } });
+    if (!r || bd > 3) return null;
+    const t = r.tan, ty = t[1], cosv = Math.sqrt(Math.max(0.25, 1 - ty * ty)), Rout = (ribOutOn() ? Math.max(r.Ro, r.Ri + 0.375 / 12) : r.Ro + extra);
+    const yUnder = r.ctr[1] - Rout / cosv, yCapTop = yUnder - ts / cosv - finMin, yBody = yCapTop - tc;
+    if (yBody < 0.5) return null;
+    return { rib: r, ctr: r.ctr, t, cosv, Rout, ts, tc, Ls, yUnder, yCapTop, yBody };
+  });
+}
+function drawSaddle(c, A, p, tp, ps, pm) {
+  const dens = c.st.alum ? AL_LB_IN3 : STEEL_LB_IN3, paint = $('trussFinish').value === 'paint';
+  const tm = new THREE.MeshStandardMaterial({ color: paint ? $('trussColor').value : 0xc9cdd2, roughness: 0.45, metalness: 0.5 });
+  const T = new THREE.Vector3(...tp.t).normalize(), down = new THREE.Vector3(0, -1, 0).addScaledVector(T, T.y).normalize(), Y = new THREE.Vector3().crossVectors(T, down);
+  const ctr = new THREE.Vector3(...tp.ctr), q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(down, Y, T));
+  // cap plate on the post
+  const capR = ps.od / 24 + 1 / 12, cap = new THREE.Mesh(new THREE.CylinderGeometry(capR, capR, tp.tc, 40), pm); cap.position.set(p.x, tp.yBody + tp.tc / 2, p.z); currentMeshGroup.add(cap);
+  // two fin plates rising from the cap to the saddle, running with the line
+  let hx = T.x, hz = T.z; const hl = Math.hypot(hx, hz); if (hl < 0.2) { hx = 1; hz = 0; } else { hx /= hl; hz /= hl; }
+  const lx = -hz, lz = hx, finL = Math.min(tp.Ls * 0.8, ps.od / 12 + 4 / 12), finT = 0.375 / 12;
+  [-1, 1].forEach(sg => {
+    const e = sg * ps.od / 24 * 0.55, R2 = tp.Rout + tp.ts, yTopFin = tp.ctr[1] - Math.sqrt(Math.max(0, R2 * R2 - e * e)) / tp.cosv, hgt = Math.max(0.05, yTopFin - tp.yCapTop + 0.25 / 12);
+    const fin = new THREE.Mesh(new THREE.BoxGeometry(finL, hgt, finT), pm); fin.position.set(p.x + lx * e, tp.yCapTop + hgt / 2, p.z + lz * e); fin.rotation.y = -Math.atan2(hz, hx); currentMeshGroup.add(fin);
+  });
+  // curved saddle plate wrapping the underside, welded to two heavier post rings
+  const a = 55 * D2R, R1 = tp.Rout, R2 = tp.Rout + tp.ts, sh = new THREE.Shape(); sh.absarc(0, 0, R2, -a, a, false); sh.absarc(0, 0, R1, a, -a, true); sh.closePath();
+  const sg = new THREE.ExtrudeGeometry(sh, { depth: tp.Ls, bevelEnabled: false, curveSegments: 24 }); sg.translate(0, 0, -tp.Ls / 2);
+  const sm = new THREE.Mesh(sg, tm); sm.position.copy(ctr); sm.quaternion.copy(q); currentMeshGroup.add(sm);
+  const r = tp.rib, ringRi = ribOutOn() ? r.Ri : Math.max(0.01, r.Ro - 0.375 / 12), ringRo = ribOutOn() ? Math.max(r.Ro, r.Ri + 0.375 / 12) : r.Ro, ringW = 2 / 12;
+  let lb = (2 * a) * (R2 * R2 - R1 * R1) / 2 * tp.Ls * 1728 * dens;
+  [-1, 1].forEach(sg2 => {
+    const rs = new THREE.Shape(); rs.absarc(0, 0, ringRo, 0, TAU, false); const hh = new THREE.Path(); hh.absarc(0, 0, ringRi, 0, TAU, true); rs.holes.push(hh);
+    const rg = new THREE.ExtrudeGeometry(rs, { depth: ringW, bevelEnabled: false, curveSegments: 40 }); rg.translate(0, 0, -ringW / 2);
+    const rm = new THREE.Mesh(rg, tm); rm.position.copy(ctr).addScaledVector(T, sg2 * (tp.Ls / 2 - 1 / 12)); rm.quaternion.copy(q); currentMeshGroup.add(rm);
+    lb += Math.PI * (ringRo * ringRo - ringRi * ringRi) * ringW * 1728 * dens;
+  });
+  A.extraW += lb;
+}
+// ---------------------------------------------------------------------
+// Diagonal bracing: round bar chord to chord across each bay near the supports (or the full length)
+// ---------------------------------------------------------------------
+function buildBraces(X, draft) {
+  const c = X.c, A = X.A, st = c.st, info = $('braceInfo'); A.braces = [];
+  const mode = $('braceMode') ? $('braceMode').value : 'off';
+  if (mode === 'off' || !A.ribs.length) { if (info) info.textContent = '—'; return; }
+  const dia = num('braceDia'), zone = num('braceZone'), pat = $('bracePattern').value, dens = st.alum ? AL_LB_IN3 : STEEL_LB_IN3, rr = dia / 24;
+  const mat = new THREE.MeshStandardMaterial({ color: $('trussFinish').value === 'paint' ? $('trussColor').value : 0xc9cdd2, roughness: 0.45, metalness: 0.5 });
+  const up = new THREE.Vector3(0, 1, 0);
+  let bays = 0, lenFt = 0;
+  const rod = (a, b) => {
+    const va = new THREE.Vector3(...a), vb = new THREE.Vector3(...b), d = new THREE.Vector3().subVectors(vb, va), L = d.length(); if (L < 1e-3) return;
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(rr, rr, L, draft ? 6 : 10, 1), mat); m.position.copy(va).addScaledVector(d, 0.5); m.quaternion.setFromUnitVectors(up, d.normalize()); currentMeshGroup.add(m);
+    A.braces.push({ a, b, dia }); lenFt += L;
+  };
+  A.dense.forEach((dd, idx) => {
+    const ribs = A.ribs.filter(r => r.piece === idx).sort((x, y) => x.station - y.station); if (ribs.length < 2) return;
+    const mems = A.members.filter(m => m.group === idx && m.kind === 'truss'); if (mems.length < 3) return;
+    const pts = dd.pts; let L = 0; for (let i = 1; i < pts.length; i++) L += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1], pts[i][2] - pts[i - 1][2]);
+    if (dd.closed) L += Math.hypot(pts[0][0] - pts[pts.length - 1][0], pts[0][1] - pts[pts.length - 1][1], pts[0][2] - pts[pts.length - 1][2]);
+    const sep = (a, b) => { const d = Math.abs(a - b); return dd.closed ? Math.min(d, L - d) : d; };
+    const nearRib = (q) => { let br = null, bd = 1e9; ribs.forEach(r => { const d = Math.hypot(r.ctr[0] - q[0], r.ctr[1] - q[1], r.ctr[2] - q[2]); if (d < bd) { bd = d; br = r; } }); return { r: br, d: bd }; };
+    const hot = [];
+    (c.contacts || []).filter(k => k.overlap >= 0.25 / 12).forEach(k => ['pa', 'pb'].forEach(key => { const h = nearRib(k[key]); if (h.d < 1.5 * (k.od || 1)) hot.push(h.r.station); }));
+    if (c.postsOn) (c.posts || []).forEach(p => { const h = nearRib([p.x, p.yTop, p.z]); if (h.d < 3) hot.push(h.r.station); });
+    const inZone = (sv) => mode === 'all' || hot.some(h => sep(sv, h) <= zone + 1e-6);
+    const cache = new Map(), chordPts = (k) => {
+      if (cache.has(k)) return cache.get(k);
+      const r = ribs[k], out = mems.map(m => { let bi = 0, bd = 1e18; const P = m.pts; for (let i = 0; i < P.length; i++) { const d2 = (P[i][0] - r.ctr[0]) ** 2 + (P[i][1] - r.ctr[1]) ** 2 + (P[i][2] - r.ctr[2]) ** 2; if (d2 < bd) { bd = d2; bi = i; } } return P[bi]; });
+      cache.set(k, out); return out;
+    };
+    // a rod end sits in the corner where the ring meets the tube, on the side facing the neighboring tube, so it welds to both
+    const Rt = st.memOD / 24, out = ribOutOn();
+    const nook = (r, Pm, Pn) => {
+      const t = r.tan, sub = (p) => { const v = [p[0] - r.ctr[0], p[1] - r.ctr[1], p[2] - r.ctr[2]], d = v[0] * t[0] + v[1] * t[1] + v[2] * t[2]; return [v[0] - d * t[0], v[1] - d * t[1], v[2] - d * t[2]]; };
+      const vm = sub(Pm), Rc = Math.hypot(...vm); if (Rc < 1e-6) return Pm;
+      const e = vm.map(v => v / Rc), vn = sub(Pn), de = vn[0] * e[0] + vn[1] * e[1] + vn[2] * e[2];
+      let g = [vn[0] - de * e[0], vn[1] - de * e[1], vn[2] - de * e[2]]; const gl = Math.hypot(...g); if (gl < 1e-6) return Pm; g = g.map(v => v / gl);
+      const rho = out ? r.Ri - rr : r.Ro + rr, cphi = (rho * rho + Rc * Rc - (Rt + rr) * (Rt + rr)) / (2 * rho * Rc);
+      if (!(cphi > -1 && cphi < 1)) return Pm;
+      const ph = Math.acos(cphi), cp = Math.cos(ph), sp = Math.sin(ph);
+      return [0, 1, 2].map(j => r.ctr[j] + rho * (cp * e[j] + sp * g[j]));
+    };
+    const nb = dd.closed ? ribs.length : ribs.length - 1;
+    for (let k = 0; k < nb; k++) {
+      const k1 = (k + 1) % ribs.length, r0 = ribs[k], r1 = ribs[k1];
+      if (!inZone(r0.station) && !inZone(r1.station)) continue;
+      if (Math.hypot(r1.ctr[0] - r0.ctr[0], r1.ctr[1] - r0.ctr[1], r1.ctr[2] - r0.ctr[2]) > 3) continue;     // a wrap gap or a break, not a bay
+      const P0 = chordPts(k), P1 = chordPts(k1), t = r0.tan, ref = Math.abs(t[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0], dt = ref[0] * t[0] + ref[1] * t[1] + ref[2] * t[2];
+      let u = [ref[0] - dt * t[0], ref[1] - dt * t[1], ref[2] - dt * t[2]]; const ul = Math.hypot(...u); u = u.map(v => v / ul);
+      const w = [t[1] * u[2] - t[2] * u[1], t[2] * u[0] - t[0] * u[2], t[0] * u[1] - t[1] * u[0]];
+      const ang = P0.map(p => { const v = [p[0] - r0.ctr[0], p[1] - r0.ctr[1], p[2] - r0.ctr[2]]; return Math.atan2(v[0] * w[0] + v[1] * w[1] + v[2] * w[2], v[0] * u[0] + v[1] * u[1] + v[2] * u[2]); });
+      const ord = mems.map((_, i) => i).sort((x, y) => ang[x] - ang[y]);
+      ord.forEach((a, j) => {
+        const b = ord[(j + 1) % ord.length];
+        const A0 = nook(r0, P0[a], P0[b]), B1 = nook(r1, P1[b], P1[a]), B0 = nook(r0, P0[b], P0[a]), A1 = nook(r1, P1[a], P1[b]);
+        if (pat === 'x') { rod(A0, B1); rod(B0, A1); }
+        else if ((k + j) % 2 === 0) rod(A0, B1); else rod(B0, A1);
+      });
+      bays++;
+    }
+  });
+  const lb = lenFt * 12 * Math.PI * dia * dia / 4 * dens; A.extraW += lb;
+  const dTxt = { 0.25: '1/4', 0.3125: '5/16', 0.375: '3/8', 0.5: '1/2' }[dia] || String(dia);
+  if (info) info.textContent = A.braces.length ? `${A.braces.length} rods in ${bays} bays, ${ftIn(lenFt)} of ${dTxt}" round bar, about ${Math.round(lb)} lb.` + (mode === 'supports' ? ` Bays within ${ftIn(zone)} of each post and touch point.` : '') : 'No bays to brace: needs at least 3 members and rings on both sides of a bay.';
+}
+// ---------------------------------------------------------------------
 // Galvanizing sections: fewest cuts so every section fits the kettle, with a pair of bolted match plates at each cut
 // ---------------------------------------------------------------------
 const GALV_FRAMES = (() => {      // box orientations to try: axes spread over the sphere, each turned through a quarter turn
@@ -5086,7 +5270,8 @@ function exportStruct() {
       pipe_nodes: nodes, pipes_acting_as_one: { about_horizontal_axis_I_in4: r3(Ih), about_vertical_axis_I_in4: r3(Iv), horizontal_axis: pt([h.x, h.y, h.z]), vertical_axis: pt([v.x, v.y, v.z]), note: 'upper bound: full composite action through the ribs' } }; });
   // posts
   const ps = c.postsOn && c.posts.length ? postSpec(c) : null, pl = ps && chk('plateOn') ? plateSpec(ps.od) : null;
-  const posts = ps ? c.posts.map((q, i) => ({ id: 'S' + (i + 1), x_ft: r3(q.x), z_ft: r3(q.z), top_y_ft: r3(q.yTop), od_in: r3(ps.od), id_in: r3(ps.id), note: ps.id > 0 ? undefined : 'drawn solid in LineWorks; the real wall thickness and material of the post are not set here', base_plate: pl ? { dia_in: pl.D, thick_in: pl.t, bolts: pl.n, bolt_dia_in: pl.bd, bolt_circle_radius_in: r3(pl.bcR), gussets: pl.ng, gusset_thick_in: pl.gT, gusset_height_in: pl.gH } : null })) : [];
+  const tops = ps ? postTops(c, A) : null;
+  const posts = ps ? c.posts.map((q, i) => ({ id: 'S' + (i + 1), x_ft: r3(q.x), z_ft: r3(q.z), top_y_ft: r3(tops && tops[i] ? tops[i].yBody : q.yTop), top_detail: tops && tops[i] ? { type: 'saddle', truss_underside_y_ft: r3(tops[i].yUnder), cap_plate_thick_in: 0.75, fin_plates: '2 x 3/8 in', saddle_plate: '3/8 in curved, 16 in long, about 110 degrees of wrap', post_rings: '2 x 3/8 x 2 in, at the saddle ends', note: 'concept detail; connection design by the engineer of record' } : 'post runs to the centerline (concept)', od_in: r3(ps.od), id_in: r3(ps.id), note: ps.id > 0 ? undefined : 'drawn solid in LineWorks; the real wall thickness and material of the post are not set here', base_plate: pl ? { dia_in: pl.D, thick_in: pl.t, bolts: pl.n, bolt_dia_in: pl.bd, bolt_circle_radius_in: r3(pl.bcR), gussets: pl.ng, gusset_thick_in: pl.gT, gusset_height_in: pl.gH } : null })) : [];
   // skin: each strip as a weight at its center, its length, width, and the area it presents to wind from the x, y and z directions (no shielding between strips)
   const SS = A.stripStats, strips = []; let aX = 0, aY = 0, aZ = 0, areaTot = 0, skinLb = 0;
   if (SS) A.stripPieces.forEach((pc, i) => { const S = pc.secs; if (!S || S.length < 2) return; let cx = 0, cy = 0, cz = 0, n = 0, px = 0, py = 0, pz = 0, ar = 0;
@@ -5104,7 +5289,8 @@ function exportStruct() {
     pipe_section: pipeSec, pipe_count: members.length, path_length_ft: r3(A.length || 0), bounding_box_ft: { min: mn.map(r3), max: mx.map(r3) },
     totals: { pipes_lb: r3(pipeLb), ribs_lb: r3(ribLb), skin_lb: r3(skinLb), total_lb: r3(pipeLb + ribLb + skinLb), skin_surface_area_sf: r3(areaTot), skin_projected_area_sf: { normal_to_x: r3(aX), normal_to_y: r3(aY), normal_to_z: r3(aZ) }, note: 'skin areas are one face of every strip with no shielding between strips or openings; wind exposure, shape factors and the weight of rivets and fasteners are for the engineer' },
     skin: SS ? { strip_width_in: SS.opts.w, thickness_in: SS.opts.t, material: SS.opts.mat, count: strips.length, weight_psf: r4(SS.psf) } : null,
-    posts, ribs, pipes: members, strips
+    posts, ribs, pipes: members, strips,
+    braces: (A.braces || []).map((b, i) => ({ id: 'B' + (i + 1), a: pt(b.a), b: pt(b.b), dia_in: b.dia, note: 'round bar, tension only when slender' }))
   };
   saveBlob(new Blob([JSON.stringify(out)], { type: 'application/json' }), slug() + '_structural_model.json');
   setStatus(`Structural model saved: ${members.length} pipes, ${ribs.length} ribs, ${posts.length} posts, ${strips.length} strips; about ${Math.round(pipeLb + ribLb + skinLb)} lb. No loads applied.`);
